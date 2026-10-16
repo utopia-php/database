@@ -4760,7 +4760,8 @@ trait Documents
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
-     * @throws LimitException When the sum overflows the range of a double
+     * @throws LimitException When the sum overflows the range of a double, or an integer sum the range of a 64-bit
+     *                         integer
      * @throws QueryException When $max is not greater than 0, the adapter cannot read the queries, or the attribute is
      *                        not a column of the grouped or distinct rows
      */
@@ -5088,15 +5089,17 @@ trait Documents
      * Run aggregation queries (count, sum, avg, min, max, groupBy) and return one row per group. An aggregate without
      * an alias comes back under `<method>_<attribute>`, or `<method>` for count('*').
      *
-     * Counts and bitwise aggregates are integers, averages, deviations and variances floats, and a sum an integer over
-     * an integer attribute and a float otherwise; min() and max() are typed as their attribute. Each group is named as
+     * Counts and bitwise aggregates are integers, a bitwise one the signed 64-bit result on every engine, averages,
+     * deviations and variances floats, and a sum an integer over an integer attribute and a float otherwise; min() and
+     * max() are typed as their attribute. Each group is named as
      * a read names its attribute, a joined one qualified by its join alias, and typed and decoded as a read returns it.
      *
      * @param  array<Query>  $queries  At least one aggregate or groupBy query
      * @return list<array<string, mixed>>
      *
      * @throws DatabaseException
-     * @throws LimitException When a sum, average, deviation or variance overflows the range of a double
+     * @throws LimitException When a sum, average, deviation or variance overflows the range of a double, or an integer
+     *                         sum the range of a 64-bit integer
      * @throws QueryException When the queries hold no aggregate or groupBy
      */
     public function aggregate(string $collection, array $queries): array

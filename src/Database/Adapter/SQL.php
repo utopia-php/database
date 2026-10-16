@@ -36,6 +36,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -2335,13 +2336,21 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * The sum in a row, with SQLite's `INF`, `-INF` and `NAN` read as the doubles they name for Database::sum() to
-     * refuse.
+     * refuse. MariaDB, MySQL and PostgreSQL sum integers exactly past the range of a 64-bit integer, which is refused
+     * rather than read as an inexact double.
      *
      * @param  array<string, mixed>  $row
+     *
+     * @throws LimitException When an integer sum does not fit a 64-bit integer
      */
     private function sumOf(array $row): int|float
     {
         $sum = $row['sum'] ?? 0;
+
+        $whole = \is_string($sum) ? BigInt::whole($sum) : null;
+        if ($whole !== null && ! BigInt::fitsPhpInt($whole)) {
+            throw new LimitException('Value out of range');
+        }
 
         if (\is_numeric($sum)) {
             return $sum + 0;

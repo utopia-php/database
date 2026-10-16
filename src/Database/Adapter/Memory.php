@@ -1867,7 +1867,8 @@ class Memory extends Adapter implements Feature\Relationships
             $rows = \array_slice($rows, 0, $max);
         }
 
-        $sum = 0;
+        $integers = 0;
+        $floats = 0.0;
         $isFloat = false;
         $column = $this->filter($attribute);
         foreach ($rows as $row) {
@@ -1875,13 +1876,23 @@ class Memory extends Adapter implements Feature\Relationships
             if ($value === null || ! \is_numeric($value)) {
                 continue;
             }
-            if (\is_float($value)) {
+            if (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value))) {
+                $integers = BigInt::add($integers, $value);
+            } else {
                 $isFloat = true;
+                $floats += (float) $value;
             }
-            $sum += $value;
         }
 
-        return $isFloat ? (float) $sum : (int) $sum;
+        if ($isFloat) {
+            return $floats + (float) $integers;
+        }
+
+        if (\is_string($integers)) {
+            throw new LimitException('Value out of range');
+        }
+
+        return $integers;
     }
 
     #[\Override]

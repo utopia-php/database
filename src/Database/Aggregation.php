@@ -3,7 +3,9 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Schema;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
@@ -20,6 +22,8 @@ final readonly class Aggregation
         Method::BitOr,
         Method::BitXor,
     ];
+
+    private const float INTEGER_LIMIT = 9223372036854775808.0;
 
     private const array STATISTICS = [
         Method::Avg,
@@ -356,6 +360,7 @@ final readonly class Aggregation
         return match (true) {
             $type === ColumnType::Boolean => \is_bool($value) ? $value : \filter_var($value, FILTER_VALIDATE_BOOLEAN),
             $type === ColumnType::Id => \is_scalar($value) ? (string) $value : $value,
+            $type === ColumnType::BigInteger && \is_string($value) && BigInt::isIntegerString($value) && ! BigInt::fitsPhpInt($value) => $value,
             \in_array($type, self::INTEGERS, true) => self::integer($value),
             \in_array($type, self::FLOATS, true) => self::float($value),
             \in_array($type, self::DATETIMES, true) => \is_string($value) ? DateTime::formatTz($value) : $value,
@@ -364,8 +369,11 @@ final readonly class Aggregation
     }
 
     /**
-     * MariaDB sums integers into DECIMAL, so a whole value can arrive as "7.0000"; one past the platform's integers
-     * stays a float rather than wrap.
+     * An integer aggregate, or a group or bound of an integer attribute, as the integer it is. MariaDB sums integers
+     * into DECIMAL, so a whole value can arrive as "7.0000"; it and MySQL and PostgreSQL sum integers exactly past
+     * the range of a 64-bit integer, and a value that does not fit one is refused rather than answered inexactly.
+     *
+     * @throws LimitException When the value is a whole number past the range of a 64-bit integer
      */
     private static function integer(mixed $value): int|float
     {
@@ -373,14 +381,25 @@ final readonly class Aggregation
             return $value;
         }
 
-        $integer = \filter_var($value, FILTER_VALIDATE_INT);
-        if ($integer !== false) {
-            return $integer;
+        $whole = \is_string($value) ? BigInt::whole($value) : null;
+        if ($whole !== null) {
+            if (! BigInt::fitsPhpInt($whole)) {
+                throw new LimitException('Value out of range');
+            }
+
+            return (int) $whole;
         }
 
         $float = self::float($value);
+        if (\floor($float) !== $float) {
+            return $float;
+        }
 
-        return \floor($float) === $float && \abs($float) < PHP_INT_MAX ? (int) $float : $float;
+        if ($float < -self::INTEGER_LIMIT || $float >= self::INTEGER_LIMIT) {
+            throw new LimitException('Value out of range');
+        }
+
+        return (int) $float;
     }
 
     private static function float(mixed $value): float

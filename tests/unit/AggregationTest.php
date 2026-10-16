@@ -14,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Filter\Callback;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
@@ -97,6 +98,50 @@ final class AggregationTest extends TestCase
         ]);
 
         $this->assertSame(['units' => 7, 'rows' => 3], $aggregation->decode(['units' => '7.0000', 'rows' => '3']));
+    }
+
+    /**
+     * @return Iterator<string, array{mixed}>
+     */
+    public static function integerSumsPastTheRangeOfAnInteger(): Iterator
+    {
+        yield 'above, as MySQL and PostgreSQL sum it' => ['18446744073709551614'];
+        yield 'above, as MariaDB sums it' => ['18446744073709551614.0000'];
+        yield 'one above' => ['9223372036854775808'];
+        yield 'one below' => ['-9223372036854775809'];
+        yield 'above, as a double' => [1.8446744073709552E+19];
+        yield 'below, as a double' => [-1.8446744073709552E+19];
+    }
+
+    #[DataProvider('integerSumsPastTheRangeOfAnInteger')]
+    public function testIntegerSumPastTheRangeOfAnIntegerIsRefused(mixed $sum): void
+    {
+        $database = $this->database(true);
+        $aggregation = Aggregation::from($database, $database->getCollection(self::ITEMS), [], [Query::sum('quantity', 'units')]);
+
+        $this->expectException(LimitException::class);
+        $aggregation->decode(['units' => $sum]);
+    }
+
+    public function testIntegerSumAtTheEdgesOfTheRangeOfAnIntegerIsExact(): void
+    {
+        $database = $this->database(true);
+        $aggregation = Aggregation::from($database, $database->getCollection(self::ITEMS), [], [Query::sum('quantity', 'units')]);
+
+        $this->assertSame(['units' => PHP_INT_MAX], $aggregation->decode(['units' => '9223372036854775807']));
+        $this->assertSame(['units' => PHP_INT_MIN], $aggregation->decode(['units' => '-9223372036854775808.0000']));
+        $this->assertSame(['units' => PHP_INT_MIN], $aggregation->decode(['units' => PHP_INT_MIN]));
+    }
+
+    public function testBoundOfAnUnsignedBigIntegerPastTheRangeOfAnIntegerKeepsItsDigitsAsAReadDoes(): void
+    {
+        $collection = new Document(['attributes' => [Attribute::bigInteger('total', signed: false)->toDocument()]]);
+        $aggregation = Aggregation::from($this->database(true), $collection, [], [Query::max('total', 'largest'), Query::min('total', 'smallest')]);
+
+        $this->assertSame(
+            ['largest' => '18446744073709551615', 'smallest' => 7],
+            $aggregation->decode(['largest' => '18446744073709551615', 'smallest' => '7']),
+        );
     }
 
     #[DataProvider('fetches')]

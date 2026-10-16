@@ -1715,6 +1715,10 @@ class SQLite extends SQL
             return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'integer overflow') !== false) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
         // Duplicate - SQLite uses various error codes for constraint violations:
         // - Error code 19 is SQLITE_CONSTRAINT (includes UNIQUE violations)
         // - Error code 1 is also used for some duplicate cases

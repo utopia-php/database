@@ -326,7 +326,7 @@ class Filter extends Base
                     continue 2;
 
                 case ColumnType::Vector:
-                    if (! is_array($value)) {
+                    if (! is_array($value) || ! \array_is_list($value)) {
                         $this->message = 'Vector query value must be an array';
 
                         return false;
@@ -429,15 +429,42 @@ class Filter extends Base
      */
     protected function isEmpty(array $values): bool
     {
-        if (count($values) === 0) {
+        if ($values === []) {
             return true;
         }
 
-        if (is_array($values[0]) && count($values[0]) === 0) {
-            return true;
+        return \reset($values) === [];
+    }
+
+    /**
+     * A distance query holds one `[geometry, distance, meters]` tuple: a finite distance and whether it is in meters.
+     *
+     * @param  array<mixed>  $values
+     */
+    private function isValidDistance(array $values): bool
+    {
+        $tuple = $values[0] ?? null;
+        if (\count($values) !== 1 || ! \is_array($tuple) || ! \array_is_list($tuple) || \count($tuple) !== 3) {
+            $this->message = 'Distance query requires [[geometry, distance]] parameters';
+
+            return false;
         }
 
-        return false;
+        [, $distance, $meters] = $tuple;
+
+        if (! \is_numeric($distance) || ! \is_finite((float) $distance)) {
+            $this->message = 'Distance query requires a finite distance';
+
+            return false;
+        }
+
+        if (! \is_bool($meters)) {
+            $this->message = 'Distance query requires a boolean meters flag';
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -489,6 +516,13 @@ class Filter extends Base
     {
         $method = $value->getMethod();
         $attribute = $value->getAttribute();
+
+        if (! \array_is_list($value->getValues())) {
+            $this->message = \ucfirst($method->value).' query values must be a list';
+
+            return false;
+        }
+
         switch ($method) {
             case Method::Equal:
             case Method::Contains:
@@ -517,16 +551,7 @@ class Filter extends Base
             case Method::DistanceNotEqual:
             case Method::DistanceGreaterThan:
             case Method::DistanceLessThan:
-                if (count($value->getValues()) !== 1 || ! is_array($value->getValues()[0]) || count($value->getValues()[0]) !== 3) {
-                    $this->message = 'Distance query requires [[geometry, distance]] parameters';
-
-                    return false;
-                }
-
-                $distance = $value->getValues()[0][1];
-                if (! \is_numeric($distance) || ! \is_finite((float) $distance)) {
-                    $this->message = 'Distance query requires a finite distance';
-
+                if (! $this->isValidDistance($value->getValues())) {
                     return false;
                 }
 
@@ -593,7 +618,7 @@ class Filter extends Base
                 }
 
                 /** @var array<string, mixed> $attributeSchema */
-                $attributeSchema = $this->schema[$attributeKey];
+                $attributeSchema = $this->schema[$attributeKey] ?? [];
                 /** @var ColumnType|null $vectorAttrType */
                 $vectorAttrType = $attributeSchema['type'] ?? null;
                 if ($vectorAttrType !== ColumnType::Vector) {

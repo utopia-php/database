@@ -122,22 +122,44 @@ class Join extends Base
     /**
      * Why a join alias cannot be used, or null when it can. The reserved alias is matched without
      * case: SQLite, and MySQL on case-insensitive file systems, treat `x` and `X` as one alias.
+     * A defaulted alias is the table ID the join names, so the reason says that ID cannot serve as
+     * the alias and asks for one.
      */
-    public static function describeInvalidAlias(string $alias): ?string
+    public static function describeInvalidAlias(string $alias, bool $defaulted = false): ?string
     {
         if ($alias === '') {
             return 'Join alias is required';
         }
 
         if (\preg_match(self::ALIAS_PATTERN, $alias) !== 1) {
-            return 'Join alias must start with a letter or an underscore and contain only letters, digits and underscores';
+            return $defaulted
+                ? self::describeUnusableTable($alias, 'an alias must start with a letter or an underscore and contain only letters, digits and underscores')
+                : 'Join alias must start with a letter or an underscore and contain only letters, digits and underscores';
         }
 
         if (\strcasecmp($alias, Query::DEFAULT_ALIAS) === 0) {
-            return "Join alias \"{$alias}\" is reserved for the main collection";
+            return $defaulted
+                ? self::describeUnusableTable($alias, 'it is reserved for the main collection')
+                : "Join alias \"{$alias}\" is reserved for the main collection";
         }
 
         return null;
+    }
+
+    /**
+     * Why a join alias another join of the same query set already declared cannot be used. The
+     * adapters check it, as they read `x` and `X` as one alias.
+     */
+    public static function describeDuplicateAlias(string $alias, bool $defaulted = false): string
+    {
+        return $defaulted
+            ? self::describeUnusableTable($alias, 'another join of the query already uses it as its alias')
+            : "Join alias \"{$alias}\" is declared more than once";
+    }
+
+    private static function describeUnusableTable(string $table, string $reason): string
+    {
+        return "Table ID \"{$table}\" cannot be used as the join alias: {$reason}. Pass an alias for the join";
     }
 
     /**
@@ -187,7 +209,8 @@ class Join extends Base
         }
 
         $alias = $query->getAlias();
-        $invalidAlias = self::describeInvalidAlias($alias);
+        $defaulted = $query->isAliasDefaulted();
+        $invalidAlias = self::describeInvalidAlias($alias, $defaulted);
         if ($invalidAlias !== null) {
             $this->message = $invalidAlias;
 
@@ -195,7 +218,9 @@ class Join extends Base
         }
 
         if (isset($this->relationships[$alias])) {
-            $this->message = "Join alias \"{$alias}\" is the key of the relationship attribute \"{$alias}\": give the join another alias";
+            $this->message = $defaulted
+                ? self::describeUnusableTable($alias, "it is the key of the relationship attribute \"{$alias}\"")
+                : "Join alias \"{$alias}\" is the key of the relationship attribute \"{$alias}\": give the join another alias";
 
             return false;
         }

@@ -12,6 +12,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
@@ -2966,8 +2967,7 @@ trait DocumentTests
             $id = \str_replace(' ', '_', $id);
             $document = $database->getDocument($collection, $id);
             $this->assertSame($value, $document->getAttribute('f'), $id.' read');
-            if ($database->getAdapter() instanceof MySQL) {
-                // MySQL parses a JSON number only to within one unit in the last place.
+            if ($this->parsesJsonNumbersToWithinAnUlp($database)) {
                 $this->assertEqualsWithDelta([$value, -$value], $document->getAttribute('fa'), \abs($value) * PHP_FLOAT_EPSILON, $id.' array read');
             } else {
                 $this->assertSame([$value, -$value], $document->getAttribute('fa'), $id.' array read');
@@ -3057,6 +3057,28 @@ trait DocumentTests
         $database->createAttribute($collection, Attribute::double(key: 'f'));
 
         return $collection;
+    }
+
+    /**
+     * MySQL, pooled or not, parses a number in a JSON column only to within one unit in the last place.
+     */
+    private function parsesJsonNumbersToWithinAnUlp(Database $database): bool
+    {
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof MySQL) {
+            return true;
+        }
+        if (! $adapter instanceof Pool) {
+            return false;
+        }
+
+        $driver = $adapter->getDriver();
+        if (! $driver instanceof PDO && ! $driver instanceof DatabasePDO) {
+            return false;
+        }
+        $version = $driver->getAttribute(PDO::ATTR_SERVER_VERSION);
+
+        return $driver->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' && \is_string($version) && ! \str_contains($version, 'MariaDB');
     }
 
     private function assertStoredFloat(Database $database, string $collection, string $id, float $value): void

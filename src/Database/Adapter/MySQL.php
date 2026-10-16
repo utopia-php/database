@@ -117,6 +117,11 @@ class MySQL extends MariaDB
         return parent::processException($e);
     }
 
+    /**
+     * ER_GIS_INVALID_DATA, ER_LONGITUDE_OUT_OF_RANGE and ER_LATITUDE_OUT_OF_RANGE.
+     */
+    protected const array INVALID_GEOMETRY_ERRORS = [3037, 3616, 3617];
+
     #[\Override]
     protected function dialectBuilder(): SQLBuilder&Scoping
     {

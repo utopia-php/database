@@ -106,6 +106,33 @@ final class EngineErrorMappingTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{0: Closure(PDOException): Throwable, 1: PDOException, 2: string}>
+     */
+    public static function invalidInputProvider(): iterable
+    {
+        $invalidGeometry = self::engineError('22023', 3037, 'SQLSTATE[22023]: Invalid parameter value: 3037 Invalid GIS data provided to function st_geomfromtext.');
+        yield 'MariaDB invalid geometry' => [self::mariaDB(), $invalidGeometry, 'Invalid spatial value'];
+
+        $geometries = [
+            'invalid geometry' => $invalidGeometry,
+            'longitude out of range' => self::engineError('22S02', 3616, 'SQLSTATE[22S02]: <<Unknown error>>: 3616 Longitude 999.000000 is out of range in function st_geomfromtext. It must be within (-180.000000, 180.000000].'),
+            'latitude out of range' => self::engineError('22S03', 3617, 'SQLSTATE[22S03]: <<Unknown error>>: 3617 Latitude 999.000000 is out of range in function st_geomfromtext. It must be within [-90.000000, 90.000000].'),
+        ];
+        foreach ($geometries as $name => $error) {
+            yield "MySQL {$name}" => [self::mySQL(), $error, 'Invalid spatial value'];
+        }
+    }
+
+    /**
+     * @param  Closure(PDOException): Throwable  $map
+     */
+    #[DataProvider('invalidInputProvider')]
+    public function testInvalidInputTheEngineRefusesIsAQueryError(Closure $map, PDOException $error, string $message): void
+    {
+        $this->assertMapped($map, $error, QueryException::class, $message);
+    }
+
+    /**
      * @return array<string, array{0: string, 1: class-string<Throwable>, 2: string}>
      */
     public static function undefinedTableProvider(): array

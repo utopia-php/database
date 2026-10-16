@@ -3887,6 +3887,10 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             return new TypeException('Invalid operation', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === 51091) {
+            return new QueryException('Invalid regular expression', $e->getCode(), $e);
+        }
+
         if ($e->getCode() === 28764) {
             return new LimitException('Value out of range', $e->getCode(), $e);
         }

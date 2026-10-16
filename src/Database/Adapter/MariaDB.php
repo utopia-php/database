@@ -1050,6 +1050,11 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     protected const array INVALID_GEOMETRY_ERRORS = [3037];
 
+    /**
+     * ER_REGEXP_ERROR, for a pattern PCRE cannot compile or run.
+     */
+    protected const array INVALID_REGEX_ERRORS = [1139];
+
     /** The session timeout last set, in milliseconds. */
     private int $appliedTimeout = 0;
 
@@ -1612,6 +1617,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1690) {
             return new LimitException('Value is out of range', $e->getCode(), $e);
+        }
+
+        if (isset($e->errorInfo[1]) && \in_array($e->errorInfo[1], static::INVALID_REGEX_ERRORS, true)) {
+            return new QueryException('Invalid regular expression', $e->getCode(), $e);
         }
 
         if (isset($e->errorInfo[1]) && \in_array($e->errorInfo[1], static::INVALID_GEOMETRY_ERRORS, true)) {

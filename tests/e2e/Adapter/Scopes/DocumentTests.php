@@ -4908,6 +4908,40 @@ trait DocumentTests
         $database->deleteCollection('moviesRegex');
     }
 
+    /**
+     * A pattern the engine cannot compile failed as an unmapped PDOException on the SQL engines and a raw driver
+     * error on MongoDB, and matched nothing on SQLite, Memory and Redis. Every adapter refuses it as a query error.
+     */
+    public function testInvalidRegexIsAQueryError(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'invalid_regex_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'text', size: 100, required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createDocument($collection, new Document([
+            'text' => 'target',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        foreach (['((', '[', 'a{2,1}', ')', '*a'] as $pattern) {
+            foreach (['find' => fn () => $database->find($collection, [Query::regex('text', $pattern)]), 'count' => fn () => $database->count($collection, [Query::regex('text', $pattern)])] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail("{$read}() refuses the pattern {$pattern}");
+                } catch (QueryException $e) {
+                    $this->assertSame('Invalid regular expression', $e->getMessage(), "{$read}() of {$pattern}");
+                }
+            }
+        }
+
+        $this->assertCount(1, $database->find($collection, [Query::regex('text', '^tar')]));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testRegexInjection(): void
     {
         /** @var Database $database */

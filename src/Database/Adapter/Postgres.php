@@ -1946,6 +1946,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             return new LimitException('Numeric value out of range', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '2201B' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new QueryException('Invalid regular expression', $e->getCode(), $e);
+        }
+
         if ($e->getCode() === '2201F' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Invalid argument for power function', $e->getCode(), $e);
         }

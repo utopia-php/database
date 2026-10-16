@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -2783,11 +2784,16 @@ class Memory extends Adapter implements Feature\Relationships
      * Apply the supplied regex against $value. Pattern is the raw expression
      * — wrap it in delimiters before passing to preg_match, mirroring how
      * MariaDB's REGEXP operator accepts the pattern verbatim.
+     *
+     * @throws QueryException When the pattern does not compile
      */
     protected function matchesRegex(string $value, string $pattern): bool
     {
         $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
         $matched = @\preg_match($delimited, $value);
+        if ($matched === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+            throw new QueryException('Invalid regular expression');
+        }
 
         return $matched === 1;
     }

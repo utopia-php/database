@@ -271,19 +271,22 @@ class SQLite extends SQL
             }
 
             if (!isset($delimitedCache[$pattern])) {
-                if (\count($delimitedCache) >= self::REGEXP_PATTERN_CACHE_LIMIT) {
-                    \array_shift($delimitedCache);
-                }
                 // Use a delimiter unlikely to appear in user input (chr(1))
                 // so we don't have to escape forward-slashes the user wrote
                 // intentionally and risk double-escaping backslashes.
-                $delimitedCache[$pattern] = "\x01" . $pattern . "\x01u";
+                $delimited = "\x01" . $pattern . "\x01u";
+                if (@\preg_match($delimited, '') === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+                    throw new QueryException('Invalid regular expression');
+                }
+                if (\count($delimitedCache) >= self::REGEXP_PATTERN_CACHE_LIMIT) {
+                    \array_shift($delimitedCache);
+                }
+                $delimitedCache[$pattern] = $delimited;
             }
             $delimited = $delimitedCache[$pattern];
 
-            // preg_match returns false on bad pattern / runtime error
-            // (e.g. PREG_BACKTRACK_LIMIT_ERROR). Silently treat those as
-            // no-match — REGEXP is a query predicate, not a validator.
+            // preg_match returns false on a runtime error such as
+            // PREG_BACKTRACK_LIMIT_ERROR, which reads as no match.
             $result = @\preg_match($delimited, $value);
 
             return $result === 1 ? 1 : 0;

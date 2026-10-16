@@ -3109,8 +3109,12 @@ class Redis extends Adapter implements
                 }
                 $pattern = $this->stringOrEmpty($values[0] ?? '');
                 $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
+                $matched = @\preg_match($delimited, $value);
+                if ($matched === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+                    throw new QueryException('Invalid regular expression');
+                }
 
-                return @\preg_match($delimited, $value) === 1;
+                return $matched === 1;
         }
 
         throw new QueryException('Query method not supported by Redis adapter: '.$method->value);

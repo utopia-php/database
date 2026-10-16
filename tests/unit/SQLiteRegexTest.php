@@ -12,6 +12,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
@@ -41,6 +42,20 @@ final class SQLiteRegexTest extends TestCase
 
         $this->assertSame(['abc', 'axc', 'a.c'], $names);
         $this->assertSame(3, $database->count(self::COLLECTION, [Query::regex('name', self::PATTERN)]));
+    }
+
+    public function testAPatternThatDoesNotCompileIsAQueryError(): void
+    {
+        $database = $this->database();
+
+        foreach (['((', '[', 'a{2,1}'] as $pattern) {
+            try {
+                $database->find(self::COLLECTION, [Query::regex('name', $pattern)]);
+                $this->fail("The pattern {$pattern} is refused");
+            } catch (QueryException $e) {
+                $this->assertSame('Invalid regular expression', $e->getMessage());
+            }
+        }
     }
 
     public function testRegexNeedsTheUserFunction(): void

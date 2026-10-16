@@ -46,6 +46,8 @@ class Query extends BaseQuery
     public const int SHAPE_MAX_NODES = 10000;
 
     /**
+     * A join given no alias is read under the collection it joins.
+     *
      * @param  array<mixed>  $values
      */
     public function __construct(Method|string $method, string $attribute = '', array $values = [], string $alias = '')
@@ -54,6 +56,10 @@ class Query extends BaseQuery
 
         if ($attribute === '' && \in_array($methodEnum, [Method::OrderAsc, Method::OrderDesc])) {
             $attribute = Document::SEQUENCE;
+        }
+
+        if ($alias === '' && $methodEnum->isJoin()) {
+            $alias = $attribute;
         }
 
         parent::__construct($methodEnum, $attribute, $values, $alias);

@@ -15,6 +15,7 @@ use Tests\E2E\Adapter\Scopes\FeatureTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\IntegerRoundingTests;
+use Tests\E2E\Adapter\Scopes\JoinAliasTests;
 use Tests\E2E\Adapter\Scopes\JoinComboTests;
 use Tests\E2E\Adapter\Scopes\JoinReadRuleTests;
 use Tests\E2E\Adapter\Scopes\JoinRelationshipTests;
@@ -58,6 +59,7 @@ abstract class Base extends TestCase
     use GeneralTests;
     use IndexTests;
     use IntegerRoundingTests;
+    use JoinAliasTests;
     use JoinComboTests;
     use JoinReadRuleTests;
     use JoinRelationshipTests;

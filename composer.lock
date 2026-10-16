@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "45b5cf01aef6a3cd2ad9b296d965edfb",
+    "content-hash": "166a6243504fe68982cde7684c933e3d",
     "packages": [
         {
             "name": "brick/math",
@@ -2278,16 +2278,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "0.7.1",
+            "version": "0.7.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "291ec903812f6b752991c02ee4ea50e835c23b9b"
+                "reference": "945ef1c9f1c863b0e6e8bbac4c81c1b667dbfc9c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/291ec903812f6b752991c02ee4ea50e835c23b9b",
-                "reference": "291ec903812f6b752991c02ee4ea50e835c23b9b",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/945ef1c9f1c863b0e6e8bbac4c81c1b667dbfc9c",
+                "reference": "945ef1c9f1c863b0e6e8bbac4c81c1b667dbfc9c",
                 "shasum": ""
             },
             "require": {
@@ -2316,9 +2316,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/query/issues",
-                "source": "https://github.com/utopia-php/query/tree/0.7.1"
+                "source": "https://github.com/utopia-php/query/tree/0.7.2"
             },
-            "time": "2026-10-15T06:11:20+00:00"
+            "time": "2026-10-16T10:52:31+00:00"
         },
         {
             "name": "utopia-php/telemetry",

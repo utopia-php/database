@@ -4507,14 +4507,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             $alias = $query->getAlias();
-            $invalid = JoinValidator::describeInvalidAlias($alias);
+            $invalid = JoinValidator::describeInvalidAlias($alias, $query->isAliasDefaulted());
             if ($invalid !== null) {
                 throw new QueryException($invalid);
             }
 
             $key = \strtolower($alias);
             if (isset($declared[$key])) {
-                throw new QueryException("Join alias \"{$alias}\" is declared more than once");
+                throw new QueryException(JoinValidator::describeDuplicateAlias($alias, $query->isAliasDefaulted()));
             }
             $declared[$key] = true;
         }

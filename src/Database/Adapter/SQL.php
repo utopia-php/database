@@ -124,12 +124,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private const int UNPAIRED_JOINED_ROWS = 4;
 
-    protected object $pdo;
+    private const array SHORT_FLOAT_FORMATS = ['%.15H', '%.16H'];
 
-    /**
-     * Controls how many fractional digits are used when binding float parameters.
-     */
-    protected int $floatPrecision = 17;
+    private const string ROUND_TRIP_PRECISION = '-1';
+
+    protected object $pdo;
 
     /**
      * Lazily constructed AttributeMap shared by every builder's scope.
@@ -209,11 +208,57 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Helper to format a float value according to configured precision for binding/logging.
+     * The shortest decimal that reads back as exactly this double. `%H` ignores the locale, and a double needs at
+     * most 17 significant digits to round-trip.
      */
-    protected function getFloatPrecision(float $value): string
+    protected function formatFloat(float $value): string
     {
-        return sprintf('%.'.$this->floatPrecision.'F', $value);
+        foreach (self::SHORT_FLOAT_FORMATS as $format) {
+            $formatted = \sprintf($format, $value);
+            if ((float) $formatted === $value) {
+                return $formatted;
+            }
+        }
+
+        return \sprintf('%.17H', $value);
+    }
+
+    /**
+     * Binds a value as its PDO type, and a double as its exact decimal: PDO would write it at the `precision` ini.
+     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     */
+    protected function bind(object $statement, int|string $parameter, mixed $value): void
+    {
+        if (\is_float($value)) {
+            $statement->bindValue($parameter, $this->formatFloat($value), PDO::PARAM_STR);
+
+            return;
+        }
+
+        $statement->bindValue($parameter, $value, $this->getPdoType($value));
+    }
+
+    /**
+     * Runs a fetch at the precision that round-trips every double. PDO stringifies a double it fetches at the
+     * `precision` ini, 14 significant digits by default.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $fetch
+     * @return T
+     */
+    protected function fetchExactly(callable $fetch): mixed
+    {
+        $precision = \ini_set('precision', self::ROUND_TRIP_PRECISION);
+
+        try {
+            return $fetch();
+        } finally {
+            if ($precision !== false) {
+                \ini_set('precision', $precision);
+            }
+        }
     }
 
     #[\Override]
@@ -621,12 +666,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             try {
                 $statement = $this->prepareStatement($sql, Event::DocumentRead);
                 foreach ($bindings as $parameter => $value) {
-                    $statement->bindValue($parameter, $value, $this->getPdoType($value));
+                    $this->bind($statement, $parameter, $value);
                 }
                 $this->describeStatement($statement, $bindings, $name);
                 $this->execute($statement);
                 /** @var array<string, mixed>|false $row */
-                $row = $statement->fetch(PDO::FETCH_ASSOC);
+                $row = $this->fetchExactly(static fn (): mixed => $statement->fetch(PDO::FETCH_ASSOC));
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
@@ -984,7 +1029,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $statement = $this->executeResult($builder->build(), Event::DocumentRead);
         $this->execute($statement);
         /** @var list<list<mixed>> $rows */
-        $rows = $statement->fetchAll(PDO::FETCH_NUM);
+        $rows = $this->fetchExactly(static fn (): array => $statement->fetchAll(PDO::FETCH_NUM));
         $statement->closeCursor();
 
         return $rows;
@@ -1536,7 +1581,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $this->describeStatement($statement, [], $name);
                 $this->execute($statement);
                 /** @var array<int, array<string, mixed>> $rows */
-                $rows = $statement->fetchAll();
+                $rows = $this->fetchExactly(static fn (): array => $statement->fetchAll());
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
@@ -1837,14 +1882,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         try {
             $statement = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
-                $statement->bindValue($i + 1, $value, $this->getPdoType($value));
+                $this->bind($statement, $i + 1, $value);
             }
             $this->execute($statement);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        $results = $statement->fetchAll();
+        $results = $this->fetchExactly(static fn (): array => $statement->fetchAll());
         $statement->closeCursor();
 
         $documents = [];
@@ -3552,7 +3597,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         try {
             $statement = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
-                $statement->bindValue($i + 1, $value, $this->getPdoType($value));
+                $this->bind($statement, $i + 1, $value);
             }
             $this->execute($statement);
         } catch (PDOException $e) {
@@ -3661,10 +3706,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Prepares the SQL statement and binds positional parameters from the Statement.
      * Does NOT call execute() - the caller is responsible for that.
      *
-     * Floats are bound as 7.x bound them: a find() binds them in fixed-point notation, every other statement as
-     * PHP writes them, so a write keeps a magnitude fixed point would round to zero. A bulk delete binds them as a
-     * find() does, so its filters match the rows the find() of the documents it deletes matched.
-     *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
@@ -3676,13 +3717,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
-            if (\is_float($value) && ($event === Event::DocumentFind || $event === Event::DocumentsDelete)) {
-                $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-            } elseif (\is_float($value)) {
-                $prepared->bindValue($i + 1, $value, PDO::PARAM_STR);
-            } else {
-                $prepared->bindValue($i + 1, $value, $this->getPdoType($value));
-            }
+            $this->bind($prepared, $i + 1, $value);
         }
 
         return $prepared;
@@ -6266,7 +6301,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $statement = $this->executeResult($result, $event, $collection);
             $this->execute($statement);
             /** @var array<int, array<string, mixed>> $results */
-            $results = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $results = $this->fetchExactly(static fn (): array => $statement->fetchAll(PDO::FETCH_ASSOC));
         } catch (PDOException $e) {
             $exception = $e;
         } finally {
@@ -6520,13 +6555,13 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             case OperatorType::Divide:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
 
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
-                    $statement->bindValue(':'.$limitKey, $limit, $this->getPdoType($limit));
+                    $this->bind($statement, ':'.$limitKey, $limit);
                     $bindIndex++;
                 }
                 break;
@@ -6534,20 +6569,20 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             case OperatorType::Modulo:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
                 break;
 
             case OperatorType::Power:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
 
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
-                    $statement->bindValue(':'.$maxKey, $limit, $this->getPdoType($limit));
+                    $this->bind($statement, ':'.$maxKey, $limit);
                     $bindIndex++;
                 }
                 break;
@@ -6596,7 +6631,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if (is_array($value)) {
                     $value = json_encode($value);
                 }
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
                 break;
 

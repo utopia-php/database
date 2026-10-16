@@ -9,9 +9,9 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
@@ -39,6 +39,7 @@ use Utopia\Database\Filter;
 use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
+use Utopia\Database\Operator;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
@@ -2240,18 +2241,6 @@ trait DocumentTests
         return $collection;
     }
 
-    private function engineFamily(Database $database): ?string
-    {
-        $adapter = $database->getAdapter();
-
-        return match (true) {
-            $adapter instanceof MariaDB => 'mariadb',
-            $adapter instanceof Postgres => 'postgres',
-            $adapter instanceof Mongo => 'mongo',
-            default => null,
-        };
-    }
-
     /**
      * @return list<string>
      */
@@ -2863,52 +2852,230 @@ trait DocumentTests
         }
     }
 
-    public function testFloatsAreStoredAs7xBoundThem(): void
+    public function testAFloatFilterMatchesTheSameRowsInFindCountSumAndDelete(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $family = $this->engineFamily($database);
-        if ($family === null) {
-            $this->expectNotToPerformAssertions();
 
-            return;
+        $collection = $this->createFloatCollection($database, 'float_filters');
+        $documents = [];
+        foreach (['sum' => [0.1 + 0.2, 20], 'zero' => [0.0, 20], 'denormal' => [5e-324, 10]] as $name => [$value, $rows]) {
+            for ($i = 0; $i < $rows; $i++) {
+                $documents[] = new Document(['$id' => $name.$i, 'f' => $value]);
+            }
+        }
+        $database->createDocuments($collection, $documents);
+
+        $filters = [
+            'equal sum' => [[Query::equal('f', [0.1 + 0.2])], 20],
+            'equal denormal' => [[Query::equal('f', [5e-324])], 10],
+            'equal zero' => [[Query::equal('f', [0.0])], 20],
+            'not equal denormal' => [[Query::notEqual('f', 5e-324)], 40],
+            'above the short decimal' => [[Query::greaterThan('f', 0.3)], 20],
+            'below the long decimal' => [[Query::lessThan('f', 0.1 + 0.2)], 30],
+            'between zero and a denormal' => [[Query::greaterThan('f', 0.0), Query::lessThanEqual('f', 5e-324)], 10],
+            'between the decimals' => [[Query::between('f', 0.3, 0.1 + 0.2)], 20],
+        ];
+        foreach ($filters as $name => [$queries, $rows]) {
+            $this->assertCount($rows, $database->find($collection, [...$queries, Query::limit(100)]), 'find '.$name);
+            $this->assertSame($rows, $database->count($collection, $queries), 'count '.$name);
         }
 
-        $collection = 'float_binding';
+        $this->assertEqualsWithDelta(20 * (0.1 + 0.2), $database->sum($collection, 'f', [Query::equal('f', [0.1 + 0.2])]), 1e-12);
+        $this->assertSame(5e-324 * 10, $database->sum($collection, 'f', [Query::equal('f', [5e-324])]));
+
+        $this->assertSame(10, $database->deleteDocuments($collection, [Query::equal('f', [5e-324])]));
+        $this->assertSame(20, $database->count($collection, [Query::equal('f', [0.0])]));
+        $this->assertSame(20, $database->count($collection, [Query::equal('f', [0.1 + 0.2])]));
+        $this->assertSame(40, $database->count($collection));
+    }
+
+    public function testACursorAlongAFloatOrderVisitsEveryRowOnce(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $this->createFloatCollection($database, 'float_cursor');
+        $values = [-5e-324, 0.0, 5e-324, 1e-300, 0.3, 0.1 + 0.2, M_PI];
+        $documents = [];
+        foreach ($values as $rank => $value) {
+            for ($copy = 0; $copy < 3; $copy++) {
+                $documents[] = new Document(['$id' => 'r'.$rank.'c'.$copy, 'f' => $value]);
+            }
+        }
+        $database->createDocuments($collection, $documents);
+
+        foreach ([1, 2, 4] as $pageSize) {
+            foreach ([OrderDirection::Asc, OrderDirection::Desc] as $direction) {
+                $order = $direction === OrderDirection::Asc ? Query::orderAsc('f') : Query::orderDesc('f');
+                $visited = [];
+                $cursor = null;
+                for ($page = 0; $page <= \count($documents); $page++) {
+                    $queries = [$order, Query::limit($pageSize)];
+                    if ($cursor !== null) {
+                        $queries[] = Query::cursorAfter($cursor);
+                    }
+                    $rows = $database->find($collection, $queries);
+                    if ($rows === []) {
+                        break;
+                    }
+                    foreach ($rows as $row) {
+                        $visited[] = $row->getId();
+                    }
+                    $cursor = \end($rows);
+                }
+
+                $label = $direction->value.' by '.$pageSize;
+                $this->assertSame(\count($documents), \count($visited), $label.' visits every row once');
+                $this->assertSame(\count($visited), \count(\array_unique($visited)), $label.' repeats no row');
+                $ranks = \array_map(static fn (string $id): int => (int) \substr($id, 1, \strpos($id, 'c') - 1), $visited);
+                $sorted = $ranks;
+                $direction === OrderDirection::Asc ? \sort($sorted) : \rsort($sorted);
+                $this->assertSame($sorted, $ranks, $label.' follows the order');
+            }
+        }
+    }
+
+    public function testFloatsKeepEveryDigit(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $this->createFloatCollection($database, 'float_digits');
+        $database->createAttribute($collection, Attribute::double(key: 'fa', array: true));
+
+        $values = [
+            'sum' => 0.1 + 0.2,
+            'pi' => M_PI,
+            'seventeen' => 123456789.12345679,
+            'small' => 1.2345678901234567e-10,
+            'tiny' => 1e-300,
+            'normal' => 2.2250738585072014e-308,
+            'denormal' => 5e-324,
+            'negative denormal' => -5e-324,
+            'negative' => -2.5e-20,
+            'avogadro' => 6.02214076e23,
+            'max' => 1.7976931348623157e308,
+            'min' => -1.7976931348623157e308,
+        ];
+        foreach ($values as $id => $value) {
+            $database->createDocument($collection, new Document(['$id' => \str_replace(' ', '_', $id), 'f' => $value, 'fa' => [$value, -$value]]));
+        }
+
+        foreach ($values as $id => $value) {
+            $id = \str_replace(' ', '_', $id);
+            $document = $database->getDocument($collection, $id);
+            $this->assertSame($value, $document->getAttribute('f'), $id.' read');
+            if ($database->getAdapter() instanceof MySQL) {
+                // MySQL parses a JSON number only to within one unit in the last place.
+                $this->assertEqualsWithDelta([$value, -$value], $document->getAttribute('fa'), \abs($value) * PHP_FLOAT_EPSILON, $id.' array read');
+            } else {
+                $this->assertSame([$value, -$value], $document->getAttribute('fa'), $id.' array read');
+            }
+            $this->assertSame([$id], $this->floatIds($database, $collection, [Query::equal('f', [$value])]), $id.' equal');
+        }
+
+        $database->updateDocument($collection, 'tiny', new Document(['f' => 0.1 + 0.2]));
+        $this->assertStoredFloat($database, $collection, 'tiny', 0.1 + 0.2);
+
+        $database->updateDocuments($collection, new Document(['f' => M_PI]), [Query::equal('f', [5e-324])]);
+        $this->assertStoredFloat($database, $collection, 'denormal', M_PI);
+
+        $database->createDocuments($collection, [new Document(['$id' => 'bulk', 'f' => 123456789.12345679])]);
+        $this->assertStoredFloat($database, $collection, 'bulk', 123456789.12345679);
+
+        $database->increaseDocumentAttribute($collection, 'avogadro', 'f', 0.1);
+        $this->assertStoredFloat($database, $collection, 'avogadro', 6.02214076e23 + 0.1);
+
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'f' => 0.0]));
+        $database->increaseDocumentAttribute($collection, 'counter', 'f', 0.1 + 0.2);
+        $this->assertStoredFloat($database, $collection, 'counter', 0.1 + 0.2);
+        $database->decreaseDocumentAttribute($collection, 'counter', 'f', 5e-324);
+        $this->assertStoredFloat($database, $collection, 'counter', (0.1 + 0.2) - 5e-324);
+
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $database->upsertDocuments($collection, [new Document(['$id' => 'bulk', 'f' => 5e-324])]);
+            $this->assertStoredFloat($database, $collection, 'bulk', 5e-324);
+        }
+
+        if ($database->getAdapter()->supports(Capability::Operators)) {
+            $database->updateDocument($collection, 'pi', new Document(['f' => Operator::increment(5e-324)]));
+            $this->assertStoredFloat($database, $collection, 'pi', M_PI + 5e-324);
+            $database->updateDocument($collection, 'small', new Document(['f' => Operator::multiply(0.1 + 0.2)]));
+            $this->assertStoredFloat($database, $collection, 'small', 1.2345678901234567e-10 * (0.1 + 0.2));
+        }
+    }
+
+    public function testANonFiniteFloatIsRefused(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $this->createFloatCollection($database, 'float_non_finite');
+        $database->createDocument($collection, new Document(['$id' => 'zero', 'f' => 0.0]));
+
+        $nonFinite = ['infinity' => INF, 'negative infinity' => -INF, 'overflow' => \json_decode('1e400'), 'not a number' => NAN];
+        foreach ($nonFinite as $name => $value) {
+            $this->assertIsFloat($value);
+            foreach ([
+                'find equal' => fn () => $database->find($collection, [Query::equal('f', [$value])]),
+                'find less than' => fn () => $database->find($collection, [Query::lessThan('f', $value)]),
+                'count between' => fn () => $database->count($collection, [Query::between('f', 0, $value)]),
+                'sum greater than' => fn () => $database->sum($collection, 'f', [Query::greaterThan('f', $value)]),
+                'delete not equal' => fn () => $database->deleteDocuments($collection, [Query::notEqual('f', $value)]),
+            ] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail($read.' on '.$name.' was accepted');
+                } catch (QueryException) {
+                }
+            }
+
+            foreach ([
+                'create' => fn () => $database->createDocument($collection, new Document(['f' => $value])),
+                'update' => fn () => $database->updateDocument($collection, 'zero', new Document(['f' => $value])),
+            ] as $write => $call) {
+                try {
+                    $call();
+                    $this->fail($write.' of '.$name.' was accepted');
+                } catch (StructureException) {
+                }
+            }
+        }
+
+        $this->assertSame(1, $database->count($collection));
+        $this->assertSame(0.0, $database->getDocument($collection, 'zero')->getAttribute('f'));
+    }
+
+    private function createFloatCollection(Database $database, string $collection): string
+    {
         $database->createCollection(Collection::create(id: $collection, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
+            Permission::delete(Role::any()),
         ], documentSecurity: false));
         $database->createAttribute($collection, Attribute::double(key: 'f'));
-        $database->createAttribute($collection, Attribute::double(key: 'fa', array: true));
 
-        $values = [
-            'tiny' => [1e-300, 1e-300],
-            'negative' => [-2.5e-20, -2.5e-20],
-            'digits' => [1.2345678901234567e-10, $family === 'mongo' ? 1.2345678901234567e-10 : 1.2345678901235e-10],
-            'avogadro' => [6.02214076e23, 6.02214076e23],
-            'sum' => [0.1 + 0.2, $family === 'mongo' ? 0.1 + 0.2 : 0.3],
-            'max' => [1.7976931348623157e308, $family === 'mongo' ? 1.7976931348623157e308 : 1.7976931348623e308],
-        ];
-        foreach ($values as $id => [$written]) {
-            $database->createDocument($collection, new Document(['$id' => $id, 'f' => $written, 'fa' => [$written]]));
-        }
+        return $collection;
+    }
 
-        foreach ($values as $id => [$written, $stored]) {
-            $document = $database->getDocument($collection, $id);
-            $this->assertSame($stored, $document->getAttribute('f'), $id);
-            $this->assertSame([$written], $document->getAttribute('fa'), $id);
-        }
+    private function assertStoredFloat(Database $database, string $collection, string $id, float $value): void
+    {
+        $this->assertSame($value, $database->getDocument($collection, $id)->getAttribute('f'), $id.' read');
+        $this->assertContains($id, $this->floatIds($database, $collection, [Query::equal('f', [$value])]), $id.' equal');
+    }
 
-        $database->updateDocument($collection, 'tiny', new Document(['f' => -1e-300]));
-        $this->assertSame(-1e-300, $database->getDocument($collection, 'tiny')->getAttribute('f'));
+    /**
+     * @param  list<Query>  $queries
+     * @return list<string>
+     */
+    private function floatIds(Database $database, string $collection, array $queries): array
+    {
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collection, [...$queries, Query::limit(100)]));
+        \sort($ids);
 
-        $small = \array_map(
-            static fn (Document $document): string => $document->getId(),
-            $database->find($collection, [Query::lessThan('f', 1e-5), Query::greaterThan('f', -1), Query::orderAsc('$id')]),
-        );
-        $this->assertSame(['digits', 'negative', 'tiny'], $small);
+        return $ids;
     }
 
     public function testFindOrderRandomIgnoresACursorAs7xDid(): void

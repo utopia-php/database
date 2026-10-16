@@ -80,6 +80,18 @@ class QueryShapeHavingTest extends TestCase
                 [Query::sum('price', 'total'), Query::groupBy(['name']), Query::having([Query::greaterThan('total', 'abc')])],
                 'Query value is invalid for aggregate alias "total"',
             ],
+            'numeric alias compared with infinity' => [
+                [Query::sum('price', 'total'), Query::groupBy(['name']), Query::having([Query::greaterThan('total', INF)])],
+                'Query value is invalid for aggregate alias "total"',
+            ],
+            'numeric alias compared with not a number' => [
+                [Query::avg('rating', 'mean'), Query::groupBy(['name']), Query::having([Query::equal('mean', [NAN])])],
+                'Query value is invalid for aggregate alias "mean"',
+            ],
+            'grouped double compared with infinity' => [
+                [Query::count('*', 'rows'), Query::groupBy(['rating']), Query::having([Query::lessThan('rating', -INF)])],
+                'Query value is invalid for attribute "rating"',
+            ],
             'numeric alias compared with a boolean' => [
                 [Query::count('*', 'rows'), Query::groupBy(['name']), Query::having([Query::equal('rows', [true])])],
                 'Query value is invalid for aggregate alias "rows"',

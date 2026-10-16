@@ -1805,7 +1805,7 @@ class SQLite extends SQL
                 if (in_array($filterType, $comparisonTypes)) {
                     $bindKey = "op_{$bindIndex}";
                     $value = (is_bool($filterValue)) ? (int) $filterValue : $filterValue;
-                    $statement->bindValue(":{$bindKey}", $value, $this->getPdoType($value));
+                    $this->bind($statement, ":{$bindKey}", $value);
                     $bindIndex++;
                 }
             }
@@ -2408,7 +2408,7 @@ class SQLite extends SQL
         );
 
         foreach ($bindValues as $key => $binding) {
-            $statement->bindValue($key, $binding, $this->getPdoType($binding));
+            $this->bind($statement, $key, $binding);
         }
 
         $opIndexForBinding = 0;

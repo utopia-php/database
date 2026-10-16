@@ -240,7 +240,7 @@ final class DeleteDocumentsRaceTest extends TestCase
     public static function floatFinds(): iterable
     {
         yield 'memory compares exactly' => [static fn (): Memory => new Memory(), ['large']];
-        yield 'sqlite binds fixed point' => [static fn (): SQLite => SQLite::inMemory(), ['large', 'tiny']];
+        yield 'sqlite compares exactly' => [static fn (): SQLite => SQLite::inMemory(), ['large']];
     }
 
     /**

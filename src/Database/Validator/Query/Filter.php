@@ -465,8 +465,10 @@ class Filter extends Base
 
         [$geometry, $distance, $meters] = $tuple;
 
-        $validator = new Geometry();
-        if (\is_string($geometry) ? ! Spatial::isWktString($geometry) : ! $validator->isValid($geometry)) {
+        $validator = \is_string($geometry)
+            ? new Spatial((Spatial::parseWkt($geometry)[0] ?? ColumnType::Point)->value)
+            : new Geometry();
+        if (! $validator->isValid($geometry)) {
             $this->message = 'Distance query requires a geometry as coordinates or WKT: '.$validator->getDescription();
 
             return false;

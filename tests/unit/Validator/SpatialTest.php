@@ -82,6 +82,73 @@ class SpatialTest extends TestCase
         $this->assertFalse(Spatial::isWktString('POINT1(1 2)'));
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function malformedWkt(): iterable
+    {
+        yield 'unclosed point' => ['POINT(1 2'];
+        yield 'point of one coordinate' => ['POINT(1)'];
+        yield 'point of three coordinates' => ['POINT(1 2 3)'];
+        yield 'point of a word' => ['POINT(a 2)'];
+        yield 'empty point' => ['POINT EMPTY'];
+        yield 'empty parentheses' => ['POINT()'];
+        yield 'trailing text' => ['POINT(1 2) junk'];
+        yield 'nested point' => ['POINT((1 2))'];
+        yield 'linestring with an empty point' => ['LINESTRING(0 0,,1 1)'];
+        yield 'polygon without ring parentheses' => ['POLYGON(0 0,1 0,1 1,0 0)'];
+        yield 'polygon missing its closing parenthesis' => ['POLYGON((0 0,1 0,1 1,0 0)'];
+        yield 'polygon with a dangling comma' => ['POLYGON((0 0,1 0,1 1,0 0),)'];
+        yield 'polygon with rings not separated' => ['POLYGON((0 0,1 0,1 1,0 0)(0 0,1 0,1 1,0 0))'];
+        yield 'unknown type' => ['CIRCLE(0 0,1)'];
+        yield 'prefixed type' => ['POINT1(1 2)'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('malformedWkt')]
+    public function test_malformed_wkt_is_refused(string $wkt): void
+    {
+        $this->assertFalse(Spatial::isWktString($wkt));
+        $this->assertNull(Spatial::parseWkt($wkt));
+        foreach ([ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon] as $type) {
+            $this->assertFalse((new Spatial($type->value))->isValid($wkt), $type->value);
+        }
+    }
+
+    public function test_wkt_is_parsed_into_the_coordinates_of_its_type(): void
+    {
+        $this->assertSame([ColumnType::Point, [1.0, -2.5]], Spatial::parseWkt(" point ( 1\t-2.5 ) "));
+        $this->assertSame([ColumnType::Linestring, [[0.0, 0.0], [1.0, 1.0]]], Spatial::parseWkt('LINESTRING(0 0, 1 1)'));
+        $this->assertSame(
+            [ColumnType::Polygon, [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]], [[0.1, 0.1], [0.2, 0.1], [0.2, 0.2], [0.1, 0.1]]]],
+            Spatial::parseWkt('POLYGON((0 0, 1 0, 1 1, 0 0), (0.1 0.1, 0.2 0.1, 0.2 0.2, 0.1 0.1))'),
+        );
+    }
+
+    public function test_wkt_is_held_to_the_rules_of_its_type(): void
+    {
+        $point = new Spatial(ColumnType::Point->value);
+        $this->assertTrue($point->isValid('POINT(180 -90)'));
+        $this->assertTrue($point->isValid('POINT(-180 90)'));
+        $this->assertFalse($point->isValid('POINT(180.0001 0)'));
+        $this->assertFalse($point->isValid('POINT(0 -90.0001)'));
+        $this->assertFalse($point->isValid('POINT(1e308 0)'));
+        $this->assertFalse($point->isValid('LINESTRING(0 0, 1 1)'));
+        $this->assertStringContainsString('WKT must be a POINT, got a LINESTRING', $point->getDescription());
+
+        $this->assertFalse((new Spatial(ColumnType::Linestring->value))->isValid('LINESTRING(0 0)'));
+        $this->assertFalse((new Spatial(ColumnType::Polygon->value))->isValid('POLYGON((0 0, 1 0, 1 1, 1 0))'));
+        $this->assertFalse((new Spatial(ColumnType::Polygon->value))->isValid('POLYGON((0 0, 1 0, 0 0))'));
+    }
+
+    public function test_coordinates_that_are_not_finite_are_refused(): void
+    {
+        $point = new Spatial(ColumnType::Point->value);
+        foreach ([[\INF, 0], [0, -\INF], [\NAN, 0], [0, \NAN]] as $coordinates) {
+            $this->assertFalse($point->isValid($coordinates));
+            $this->assertStringContainsString('finite', $point->getDescription());
+        }
+    }
+
     public function test_invalid_coordinate(): void
     {
         // Point with invalid longitude

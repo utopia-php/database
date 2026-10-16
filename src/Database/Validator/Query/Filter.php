@@ -8,6 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Finite;
 use Utopia\Database\Validator\Geometry;
 use Utopia\Database\Validator\ObjectPath;
 use Utopia\Database\Validator\Query\Joined\Attributes;
@@ -18,7 +19,6 @@ use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Validator\Boolean;
-use Utopia\Validator\FloatValidator;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
@@ -263,7 +263,7 @@ class Filter extends Base
 
                 case ColumnType::Float:
                 case ColumnType::Double:
-                    $validator = new FloatValidator();
+                    $validator = new Finite();
                     break;
 
                 case ColumnType::Boolean:

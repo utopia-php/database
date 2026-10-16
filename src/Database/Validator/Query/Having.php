@@ -3,9 +3,9 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Finite;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
-use Utopia\Validator\FloatValidator;
 
 /**
  * Validates having query methods: each condition compares an aggregate alias declared in the same
@@ -196,7 +196,7 @@ class Having extends Base
             return false;
         }
 
-        $number = new FloatValidator();
+        $number = new Finite();
         foreach ($values as $value) {
             if (! $number->isValid($value)) {
                 $this->message = 'Query value is invalid for aggregate alias "'.$alias.'"';

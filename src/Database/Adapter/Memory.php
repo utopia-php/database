@@ -1912,30 +1912,24 @@ class Memory extends Adapter implements Feature\Relationships
         $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
             && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
 
-        // MariaDB encodes the bound check as part of the WHERE clause against
-        // the current column value (`attr <= :max` / `attr >= :min`); when the
-        // bound is violated the UPDATE simply matches zero rows and the call
-        // still returns true. Mirror that — silent no-op on bound violation.
-        // The Database layer pre-subtracts $value from $max (and adds it to
-        // $min), so the comparison stays against the pre-update value.
         if ($exact) {
             $current = BigInt::toNative($current);
             $value = BigInt::toNative($value);
             if (! is_null($min) && BigInt::compare($current, $min) < 0) {
-                return true;
+                return false;
             }
             if (! is_null($max) && BigInt::compare($current, $max) > 0) {
-                return true;
+                return false;
             }
             $result = BigInt::add($current, $value);
         } else {
             $current = $this->numericValue($current, 0) ?? 0;
             $value = $this->numericValue($value, 0) ?? 0;
             if (! is_null($min) && $current < $min) {
-                return true;
+                return false;
             }
             if (! is_null($max) && $current > $max) {
-                return true;
+                return false;
             }
             $result = $current + $value;
         }

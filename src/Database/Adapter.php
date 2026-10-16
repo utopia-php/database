@@ -757,7 +757,10 @@ abstract class Adapter
     abstract public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int;
 
     /**
-     * Increase or decrease attribute value
+     * Increase or decrease attribute value, in one atomic write that changes nothing when the stored value is
+     * above $max or below $min
+     *
+     * @return bool False when the stored value was outside $min or $max, so nothing changed
      *
      * @throws Exception
      */

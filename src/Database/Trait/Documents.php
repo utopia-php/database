@@ -70,6 +70,7 @@ use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Validator\Range;
 use WeakMap;
 
 trait Documents
@@ -285,6 +286,60 @@ trait Documents
         }
 
         return $attribute;
+    }
+
+    /**
+     * The lower of the maximum an increase is given and the maximum the attribute's format holds it to.
+     */
+    private function tighterMaximum(int|float|string|null $max, ?Attribute $attribute): int|float|string|null
+    {
+        $limit = $this->formatRange($attribute)?->getMax();
+        if ($limit === null || (\is_float($limit) && ! \is_finite($limit))) {
+            return $max;
+        }
+
+        if ($this->isDeclaredInteger($attribute)) {
+            $limit = $this->integerBound(Rounding::Floor->round($limit), 'Max');
+
+            return $max === null || BigInt::compare($limit, $max) < 0 ? $limit : $max;
+        }
+
+        return $max === null || $limit < $this->getNativeNumber($max) ? $limit : $max;
+    }
+
+    /**
+     * The higher of the minimum a decrease is given and the minimum the attribute's format holds it to.
+     */
+    private function tighterMinimum(int|float|string|null $min, ?Attribute $attribute): int|float|string|null
+    {
+        $limit = $this->formatRange($attribute)?->getMin();
+        if ($limit === null || (\is_float($limit) && ! \is_finite($limit))) {
+            return $min;
+        }
+
+        if ($this->isDeclaredInteger($attribute)) {
+            $limit = $this->integerBound(Rounding::Ceil->round($limit), 'Min');
+
+            return $min === null || BigInt::compare($limit, $min) > 0 ? $limit : $min;
+        }
+
+        return $min === null || $limit > $this->getNativeNumber($min) ? $limit : $min;
+    }
+
+    /**
+     * The range an attribute's format holds its values to, when its format validator is a Range, as the
+     * `intRange`, `bigintRange` and `floatRange` formats Appwrite registers are.
+     */
+    private function formatRange(?Attribute $attribute): ?Range
+    {
+        $format = $attribute?->format;
+        if ($attribute === null || $format === null || ! Structure::hasFormat($format->name, $attribute->type)) {
+            return null;
+        }
+
+        $validator = Structure::getFormat($format->name, $attribute->type)['callback']($attribute->toDocument()->getArrayCopy());
+
+        return $validator instanceof Range ? $validator : null;
     }
 
     private function isDeclaredInteger(?Attribute $attribute): bool
@@ -2742,14 +2797,16 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $declared = $numericAttribute ?? $this->declaredAttribute($collection, $attribute);
 
-        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+        if ($this->isDeclaredInteger($declared)) {
             $value = Rounding::HalfAwayFromZero->round($value);
             $this->assertIntegerChange($value);
             if ($max !== null) {
                 $max = $this->integerBound(Rounding::Floor->round($max), 'Max');
             }
         }
+        $max = $this->tighterMaximum($max, $declared);
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
@@ -2802,13 +2859,14 @@ trait Documents
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
+            $storedMaximum = null;
             if ($max !== null) {
-                $max = $numericAttribute?->isInteger() === true
+                $storedMaximum = $numericAttribute?->isInteger() === true
                     ? BigInt::subtract($max, $value)
                     : $this->getNativeNumber($max) - $this->getNativeNumber($value);
             }
 
-            $this->adapter->increaseDocumentAttribute(
+            $increased = $this->adapter->increaseDocumentAttribute(
                 $collection,
                 $id,
                 $attribute,
@@ -2816,8 +2874,11 @@ trait Documents
                     ? BigInt::toNative($value)
                     : $this->getNativeNumber($value),
                 $updatedAt,
-                max: $max
+                max: $storedMaximum
             );
+            if (! $increased && $storedMaximum !== null) {
+                throw new LimitException('Attribute value exceeds maximum limit: '.$max);
+            }
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
@@ -2873,14 +2934,16 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $declared = $numericAttribute ?? $this->declaredAttribute($collection, $attribute);
 
-        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+        if ($this->isDeclaredInteger($declared)) {
             $value = Rounding::HalfAwayFromZero->round($value);
             $this->assertIntegerChange($value);
             if ($min !== null) {
                 $min = $this->integerBound(Rounding::Ceil->round($min), 'Min');
             }
         }
+        $min = $this->tighterMinimum($min, $declared);
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
@@ -2933,13 +2996,14 @@ trait Documents
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
+            $storedMinimum = null;
             if ($min !== null) {
-                $min = $numericAttribute?->isInteger() === true
+                $storedMinimum = $numericAttribute?->isInteger() === true
                     ? BigInt::add($min, $value)
                     : $this->getNativeNumber($min) + $this->getNativeNumber($value);
             }
 
-            $this->adapter->increaseDocumentAttribute(
+            $decreased = $this->adapter->increaseDocumentAttribute(
                 $collection,
                 $id,
                 $attribute,
@@ -2947,8 +3011,11 @@ trait Documents
                     ? BigInt::negate($value)
                     : $this->getNativeNumber($value) * -1,
                 $updatedAt,
-                min: $min
+                min: $storedMinimum
             );
+            if (! $decreased && $storedMinimum !== null) {
+                throw new LimitException('Attribute value exceeds minimum limit: '.$min);
+            }
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);

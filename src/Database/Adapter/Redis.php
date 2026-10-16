@@ -1618,20 +1618,20 @@ class Redis extends Adapter implements
                 $current = BigInt::toNative($current);
                 $value = BigInt::toNative($value);
                 if (! \is_null($min) && BigInt::compare($current, $min) < 0) {
-                    return true;
+                    return false;
                 }
                 if (! \is_null($max) && BigInt::compare($current, $max) > 0) {
-                    return true;
+                    return false;
                 }
                 $result = BigInt::add($current, $value);
             } else {
                 $current = $this->numericOr($current, 0);
                 $value = $this->numericOr($value, 0);
                 if (! \is_null($min) && $current < $min) {
-                    return true;
+                    return false;
                 }
                 if (! \is_null($max) && $current > $max) {
-                    return true;
+                    return false;
                 }
                 $result = $current + $value;
             }

@@ -1495,7 +1495,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             throw $this->processException($e);
         }
 
-        return true;
+        return $statement->rowCount() > 0;
     }
 
     #[\Override]

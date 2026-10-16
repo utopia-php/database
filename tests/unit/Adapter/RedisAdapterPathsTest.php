@@ -344,8 +344,8 @@ final class RedisAdapterPathsTest extends TestCase
         $adapter->createDocument($this->notes(), new Document(['$id' => 'fraction', '$permissions' => [], 'count' => 10.5]));
 
         foreach (['whole' => 10, 'fraction' => 10.5] as $id => $stored) {
-            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), $id, 'count', 1, '2026-01-01 00:00:00.000', max: 5));
-            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), $id, 'count', -1, '2026-01-01 00:00:00.000', min: 20));
+            $this->assertFalse($adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), $id, 'count', 1, '2026-01-01 00:00:00.000', max: 5));
+            $this->assertFalse($adapter->increaseDocumentAttribute(new Document(['$id' => self::NOTES]), $id, 'count', -1, '2026-01-01 00:00:00.000', min: 20));
             $this->assertSame($stored, $adapter->getDocument($this->notes(), $id)->getAttribute('count'), $id);
         }
 

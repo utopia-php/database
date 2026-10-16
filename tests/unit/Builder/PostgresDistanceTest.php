@@ -6,6 +6,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Builder\Postgres;
 use Utopia\Database\Query;
+use Utopia\Query\Exception\ValidationException;
 use Utopia\Query\Schema\ColumnType;
 
 final class PostgresDistanceTest extends TestCase
@@ -46,9 +47,6 @@ final class PostgresDistanceTest extends TestCase
             'a polygon value' => [self::typed(Query::distanceLessThan('location', [[[0, 0], [0, 1], [1, 1], [0, 0]]], 1000, true), ColumnType::Point)],
             'a box reaching a pole' => [self::typed(Query::distanceLessThan('location', [10, 89.99], 5000, true), ColumnType::Point)],
             'a box reaching the antimeridian' => [self::typed(Query::distanceLessThan('location', [179.99, 0], 5000, true), ColumnType::Point)],
-            'a distance that is not a number' => [self::typed(Query::distanceLessThan('location', [10, 20], NAN, true), ColumnType::Point)],
-            'an infinite distance' => [self::typed(Query::distanceLessThan('location', [10, 20], INF, true), ColumnType::Point)],
-            'a negatively infinite distance' => [self::typed(Query::distanceLessThan('location', [10, 20], -INF, true), ColumnType::Point)],
         ];
     }
 
@@ -59,6 +57,27 @@ final class PostgresDistanceTest extends TestCase
 
         $this->assertSame('ST_Distance(("location"::geography), ST_SetSRID(ST_GeomFromText(?), 4326)::geography) < ?', $condition->expression);
         $this->assertCount(2, $condition->bindings);
+    }
+
+    /**
+     * @return array<string, array{Query}>
+     */
+    public static function nonFiniteDistances(): array
+    {
+        return [
+            'a distance that is not a number' => [self::typed(Query::distanceLessThan('location', [10, 20], NAN, true), ColumnType::Point)],
+            'an infinite distance' => [self::typed(Query::distanceLessThan('location', [10, 20], INF, true), ColumnType::Point)],
+            'a negatively infinite distance' => [self::typed(Query::distanceLessThan('location', [10, 20], -INF, true), ColumnType::Point)],
+        ];
+    }
+
+    #[DataProvider('nonFiniteDistances')]
+    public function testDistanceLessThanInMetersRefusesADistanceThatIsNotFinite(Query $query): void
+    {
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Invalid distance query: the distance must be a finite number');
+
+        (new Postgres())->compileFilters([$query]);
     }
 
     public function testDistanceGreaterThanIsUnchanged(): void

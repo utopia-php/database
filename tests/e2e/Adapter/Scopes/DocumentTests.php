@@ -36,6 +36,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Filter;
+use Utopia\Database\Format;
 use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
@@ -46,14 +47,22 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 use Utopia\Database\SetType;
+use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Validator\Range;
 
 trait DocumentTests
 {
+    private const string COUNTER_INTEGER_RANGE = 'counterIntegerRange';
+
+    private const string COUNTER_BIG_INTEGER_RANGE = 'counterBigIntegerRange';
+
+    private const string COUNTER_DOUBLE_RANGE = 'counterDoubleRange';
+
     private static string $moviesCollection = '';
 
     private static string $documentsCollection = '';
@@ -11361,6 +11370,135 @@ trait DocumentTests
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    public function testIncreaseAndDecreaseKeepACounterWithinItsColumnRange(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = $this->createCounterRangeCollection($database);
+
+        $refusals = [
+            'an increase past the column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'b', 6), 'maximum limit: 10'],
+            'an increase with a maximum above the column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'b', 6, 20), 'maximum limit: 10'],
+            'an increase with a maximum below the column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'b', 4, 8), 'maximum limit: 8'],
+            'a decrease past the column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'b', 8), 'minimum limit: 0'],
+            'a decrease with a minimum below the column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'b', 8, -10), 'minimum limit: 0'],
+            'a decrease with a minimum above the column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'b', 4, 2), 'minimum limit: 2'],
+            'an increase of a 64-bit integer past its column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'wide', 2), 'maximum limit: '.(PHP_INT_MAX - 1)],
+            'a decrease of a 64-bit integer past its column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'low', 'wide', 2), 'minimum limit: '.(PHP_INT_MIN + 1)],
+            'an increase of a big integer past its column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'big', 2), 'maximum limit: '.(PHP_INT_MAX - 1)],
+            'a decrease of a big integer past its column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'low', 'big', 2), 'minimum limit: '.(PHP_INT_MIN + 1)],
+            'an increase of a double past its column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'f', 0.75), 'maximum limit: 2.5'],
+            'a decrease of a double past its column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'f', 3.75), 'minimum limit: -1.5'],
+        ];
+        foreach ($refusals as $name => [$change, $message]) {
+            try {
+                $change();
+                $this->fail($name.' was accepted');
+            } catch (LimitException $error) {
+                $this->assertSame('Attribute value exceeds '.$message, $error->getMessage(), $name);
+            }
+        }
+
+        $stored = $database->getDocument($collection, 'row');
+        $this->assertSame(5, $stored->getAttribute('b'));
+        $this->assertSame(PHP_INT_MAX - 2, $stored->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MAX - 2, $this->storedNumber($stored->getAttribute('big')));
+        $this->assertSame(2.0, $stored->getAttribute('f'));
+        $low = $database->getDocument($collection, 'low');
+        $this->assertSame(PHP_INT_MIN + 2, $low->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MIN + 2, $this->storedNumber($low->getAttribute('big')));
+
+        $this->assertSame(10, $database->increaseDocumentAttribute($collection, 'row', 'b', 5)->getAttribute('b'));
+        $this->assertSame(0, $database->decreaseDocumentAttribute($collection, 'row', 'b', 10, -5)->getAttribute('b'));
+        $this->assertSame(PHP_INT_MAX - 1, $database->increaseDocumentAttribute($collection, 'row', 'wide', 1)->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MAX - 1, $this->storedNumber($database->increaseDocumentAttribute($collection, 'row', 'big', 1)->getAttribute('big')));
+        $this->assertSame(PHP_INT_MIN + 1, $database->decreaseDocumentAttribute($collection, 'low', 'wide', 1)->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MIN + 1, $this->storedNumber($database->decreaseDocumentAttribute($collection, 'low', 'big', 1)->getAttribute('big')));
+        $this->assertSame(2.5, $database->increaseDocumentAttribute($collection, 'row', 'f', 0.5, 100)->getAttribute('f'));
+        $this->assertSame(-1.5, $database->decreaseDocumentAttribute($collection, 'row', 'f', 4.0)->getAttribute('f'));
+
+        $stored = $database->getDocument($collection, 'row');
+        $this->assertSame(0, $stored->getAttribute('b'));
+        $this->assertSame(PHP_INT_MAX - 1, $stored->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MAX - 1, $this->storedNumber($stored->getAttribute('big')));
+        $this->assertSame(-1.5, $stored->getAttribute('f'));
+        $low = $database->getDocument($collection, 'low');
+        $this->assertSame(PHP_INT_MIN + 1, $low->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MIN + 1, $this->storedNumber($low->getAttribute('big')));
+    }
+
+    public function testAnIncreaseTheStoredValueAlreadyPassedTheBoundOfChangesNothing(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = $this->createCounterRangeCollection($database);
+        $definition = $database->getCollection($collection);
+        $adapter = $database->getAdapter();
+        $stored = static fn (string $attribute): mixed => $adapter->getDocument($definition, 'row')->getAttribute($attribute);
+
+        $database->updateDocument($collection, 'row', new Document(['b' => 9]));
+        $now = DateTime::now();
+
+        $this->assertTrue($adapter->increaseDocumentAttribute($definition, 'row', 'b', 1, $now, max: 9), 'the first of two increases read at 9 reaches the maximum');
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'b', 1, $now, max: 9), 'the second of two increases read at 9 passes the maximum');
+        $this->assertSame(10, $this->storedNumber($stored('b')));
+
+        $this->assertTrue($adapter->increaseDocumentAttribute($definition, 'row', 'b', -10, $now, min: 10));
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'b', -10, $now, min: 10));
+        $this->assertSame(0, $this->storedNumber($stored('b')));
+
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'f', 1.0, $now, max: 1.5));
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'f', -4.0, $now, min: 2.5));
+        $this->assertSame(2.0, (float) $this->storedNumber($stored('f')));
+    }
+
+    /**
+     * A number as an adapter or a big integer attribute hands it back: an integer string as its integer.
+     */
+    private function storedNumber(mixed $value): int|float
+    {
+        if (! \is_numeric($value)) {
+            $this->fail('Expected a stored number, got '.\get_debug_type($value));
+        }
+
+        return $value + 0;
+    }
+
+    private function createCounterRangeCollection(Database $database): string
+    {
+        Structure::addFormat(self::COUNTER_INTEGER_RANGE, static fn (array $attribute): Range => self::counterRange($attribute, Range::TYPE_INTEGER), ColumnType::Integer);
+        Structure::addFormat(self::COUNTER_BIG_INTEGER_RANGE, static fn (array $attribute): Range => self::counterRange($attribute, Range::TYPE_INTEGER), ColumnType::BigInteger);
+        Structure::addFormat(self::COUNTER_DOUBLE_RANGE, static fn (array $attribute): Range => self::counterRange($attribute, Range::TYPE_FLOAT), ColumnType::Double);
+
+        $collection = 'counter_range_'.uniqid();
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'b', format: new Format(self::COUNTER_INTEGER_RANGE, ['min' => 0, 'max' => 10])));
+        $database->createAttribute($collection, Attribute::integer(key: 'wide', width: IntegerWidth::Bits64, format: new Format(self::COUNTER_INTEGER_RANGE, ['min' => PHP_INT_MIN + 1, 'max' => PHP_INT_MAX - 1])));
+        $database->createAttribute($collection, Attribute::bigInteger(key: 'big', format: new Format(self::COUNTER_BIG_INTEGER_RANGE, ['min' => PHP_INT_MIN + 1, 'max' => PHP_INT_MAX - 1])));
+        $database->createAttribute($collection, Attribute::double(key: 'f', format: new Format(self::COUNTER_DOUBLE_RANGE, ['min' => -1.5, 'max' => 2.5])));
+        $database->createDocument($collection, new Document(['$id' => 'row', 'b' => 5, 'wide' => PHP_INT_MAX - 2, 'big' => PHP_INT_MAX - 2, 'f' => 2.0]));
+        $database->createDocument($collection, new Document(['$id' => 'low', 'b' => 0, 'wide' => PHP_INT_MIN + 2, 'big' => PHP_INT_MIN + 2, 'f' => 0.0]));
+
+        return $collection;
+    }
+
+    /**
+     * The range Appwrite's intRange, bigintRange and floatRange formats hold a column to.
+     *
+     * @param  array<string, mixed>  $attribute
+     */
+    private static function counterRange(array $attribute, string $type): Range
+    {
+        /** @var array{min?: int|float, max?: int|float} $options */
+        $options = $attribute['formatOptions'] ?? [];
+
+        return new Range($options['min'] ?? -INF, $options['max'] ?? INF, $type);
     }
 
     public function testIncreaseAndDecreaseRoundTheChangeValueOnAnInteger(): void

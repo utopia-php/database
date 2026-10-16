@@ -2365,17 +2365,15 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         ]]];
 
         try {
-            $this->updateWithPipeline(
+            return $this->updateWithPipeline(
                 $this->getNamespace().'_'.$this->filter($collectionId),
                 $filters,
                 $pipeline,
                 $this->getTransactionOptions(),
-            );
+            ) > 0;
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-
-        return true;
     }
 
     private function normalizeAtomicNumber(int|float|string $value, string $name): int|float

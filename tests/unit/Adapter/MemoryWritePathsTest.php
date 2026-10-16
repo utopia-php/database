@@ -188,15 +188,15 @@ final class MemoryWritePathsTest extends TestCase
         $this->assertSame(['first'], $ids($adapter->find($this->collection(), cursor: $cursor, cursorDirection: CursorDirection::Before)));
     }
 
-    public function testIncrementIsANoOpWhenTheStoredValueAlreadyViolatesTheBound(): void
+    public function testIncrementChangesNothingAndSaysSoWhenTheStoredValueAlreadyViolatesTheBound(): void
     {
         $adapter = $this->adapter();
         $this->storeAddress($adapter, 'whole', 'x', 10);
         $this->storeAddress($adapter, 'fraction', 'y', 10.5);
 
         foreach (['whole' => 10, 'fraction' => 10.5] as $id => $stored) {
-            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), $id, 'visits', 1, self::UPDATED_AT, max: 5));
-            $this->assertTrue($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), $id, 'visits', -1, self::UPDATED_AT, min: 20));
+            $this->assertFalse($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), $id, 'visits', 1, self::UPDATED_AT, max: 5));
+            $this->assertFalse($adapter->increaseDocumentAttribute(new Document(['$id' => self::COLLECTION]), $id, 'visits', -1, self::UPDATED_AT, min: 20));
             $this->assertSame($stored, $adapter->getDocument($this->collection(), $id)->getAttribute('visits'), $id);
         }
     }

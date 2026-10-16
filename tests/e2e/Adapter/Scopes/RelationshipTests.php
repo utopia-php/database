@@ -12,6 +12,7 @@ use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\NestedPreparationTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
+use Tests\E2E\Adapter\Scopes\Relationships\OrphanedTests;
 use Tests\E2E\Adapter\Support\EventRecorder;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
@@ -46,6 +47,7 @@ trait RelationshipTests
     use NestedPreparationTests;
     use OneToManyTests;
     use OneToOneTests;
+    use OrphanedTests;
 
     /**
      * @return array<string, array{RelationshipType, string, int}>

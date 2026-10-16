@@ -5517,7 +5517,11 @@ trait Documents
                 continue;
             }
 
-            $related = $this->silent(fn () => $this->getCollection($relatedCollectionId));
+            $related = $this->silent(fn () => $this->findCollection($relatedCollectionId));
+            if ($related === null) {
+                continue;
+            }
+
             $validator = new SelectValidator(
                 [...$related->attributes(), ...DocumentsValidator::internalAttributes()],
                 $this->adapter->supports(Capability::DefinedAttributes),

@@ -4350,7 +4350,7 @@ trait Documents
 
         $queries = $this->readQueries($collection, $parsed, $joinedByAlias, $outerJoinIds);
 
-        $selections = $this->validateSelections($collection, $selects);
+        $selections = $this->validateSelections($collection, $selects, $distinct);
 
         if ($isAggregation) {
             $nestedSelections = [];
@@ -5994,10 +5994,13 @@ trait Documents
     }
 
     /**
+     * The attributes a read returns: those its selects name and, unless it is distinct, the internal attributes every
+     * document carries. A distinct row is not a stored document, so it carries only the attributes it selects.
+     *
      * @param  array<Query>  $queries
      * @return array<string>
      */
-    private function validateSelections(Document $collection, array $queries): array
+    private function validateSelections(Document $collection, array $queries, bool $distinct = false): array
     {
         if (empty($queries)) {
             return [];
@@ -6046,6 +6049,10 @@ trait Documents
         }
 
         $selections = \array_merge($selections, $relationshipSelections);
+
+        if ($distinct) {
+            return \array_values(\array_unique($selections));
+        }
 
         $selections[] = Document::ID;
         $selections[] = Document::SEQUENCE;

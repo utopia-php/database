@@ -11388,6 +11388,100 @@ trait DocumentTests
         }
     }
 
+    /**
+     * A distinct row carried `$id`, `$sequence`, `$createdAt` and `$updatedAt` as null whenever the read did not
+     * select them, so `new Document($row->getArrayCopy())` refused it: "$id must be of type string". A distinct row
+     * carries only what it selects, and every row a read returns rebuilds into an equal Document.
+     */
+    public function testDistinctRowsCarryOnlyWhatTheySelectAndRebuildIntoADocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'distinct_rows_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'k', size: 32),
+                Attribute::integer(key: 'n'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([['a', 1], ['a', 1], ['b', 2], [null, null]] as [$k, $n]) {
+            $database->createDocument($collection, new Document(['k' => $k, 'n' => $n, '$permissions' => [Permission::read(Role::any())]]));
+        }
+
+        $roundTrip = function (array $rows, string $case): void {
+            foreach ($rows as $row) {
+                $this->assertInstanceOf(Document::class, $row);
+                $this->assertEquals($row->getArrayCopy(), (new Document($row->getArrayCopy()))->getArrayCopy(), $case);
+            }
+        };
+
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            try {
+                $database->find($collection, [Query::distinct(), Query::select(['k'])]);
+                $this->fail('A distinct() read is refused where the adapter cannot deduplicate rows');
+            } catch (QueryException) {
+                $this->addToAssertionCount(1);
+            }
+
+            $roundTrip($database->find($collection, [Query::select(['k'])]), 'a read of selected attributes');
+            $database->deleteCollection($collection);
+
+            return;
+        }
+
+        $values = $database->find($collection, [Query::distinct(), Query::select(['k'])]);
+        $roundTrip($values, 'distinct without $id');
+        $copies = \array_map(static fn (Document $row): array => $row->getArrayCopy(), $values);
+        \usort($copies, static fn (array $a, array $b): int => [$a['k'] !== null, $a['k']] <=> [$b['k'] !== null, $b['k']]);
+        $this->assertSame(
+            [['k' => null, '$collection' => $collection], ['k' => 'a', '$collection' => $collection], ['k' => 'b', '$collection' => $collection]],
+            $copies,
+        );
+
+        $pairs = $database->find($collection, [Query::distinct(), Query::select(['k', 'n']), Query::orderAsc('k'), Query::orderAsc('n')]);
+        $this->assertCount(3, $pairs);
+        foreach ($pairs as $row) {
+            $this->assertFalse($row->offsetExists('$id'));
+            $this->assertFalse($row->offsetExists('$sequence'));
+        }
+        $roundTrip($pairs, 'distinct of two attributes');
+
+        $stamped = $database->find($collection, [Query::distinct(), Query::select(['k', '$createdAt'])]);
+        $this->assertCount(4, $stamped);
+        foreach ($stamped as $row) {
+            $this->assertFalse($row->offsetExists('$id'));
+            $this->assertIsString($row->getAttribute('$createdAt'));
+        }
+        $roundTrip($stamped, 'distinct of an internal attribute but $id');
+
+        $identified = $database->find($collection, [Query::distinct(), Query::select(['k', '$id'])]);
+        $this->assertCount(4, $identified);
+        foreach ($identified as $row) {
+            $this->assertIsString($row->getAttribute('$id'));
+            $this->assertNotSame('', $row->getAttribute('$id'));
+        }
+        $roundTrip($identified, 'distinct with $id');
+
+        $paged = [Query::distinct(), Query::select(['k']), Query::isNotNull('k'), Query::orderAsc('k'), Query::limit(1)];
+        $first = $database->find($collection, $paged);
+        $next = $database->find($collection, [...$paged, Query::cursorAfter($first[0])]);
+        $this->assertSame(['a'], \array_map(static fn (Document $row): mixed => $row->getAttribute('k'), $first));
+        $this->assertSame(['b'], \array_map(static fn (Document $row): mixed => $row->getAttribute('k'), $next));
+        $roundTrip([...$first, ...$next], 'distinct pages');
+
+        $documents = $database->find($collection, [Query::select(['k'])]);
+        $this->assertCount(4, $documents);
+        foreach ($documents as $document) {
+            $this->assertIsString($document->getAttribute('$id'));
+        }
+        $roundTrip($documents, 'a read of selected attributes');
+
+        $database->deleteCollection($collection);
+    }
+
     public function testDistinctIsRefusedWhereTheAdapterCannotDeduplicate(): void
     {
         /** @var Database $database */

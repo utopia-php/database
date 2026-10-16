@@ -1069,7 +1069,7 @@ trait SpatialTests
             // Test failure case: rectangle should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPoint = $database->find($collectionName, [
-                    Query::covers('rectangle', [[100, 100]]), // Point far outside rectangle
+                    Query::covers('rectangle', [[100, 80]]), // Point far outside rectangle
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPoint);
             }
@@ -1171,7 +1171,7 @@ trait SpatialTests
             // Test failure case: square should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointSquare = $database->find($collectionName, [
-                    Query::covers('square', [[100, 100]]), // Point far outside square
+                    Query::covers('square', [[100, 80]]), // Point far outside square
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointSquare);
             }
@@ -1223,7 +1223,7 @@ trait SpatialTests
             // Test failure case: triangle should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointTriangle = $database->find($collectionName, [
-                    Query::covers('triangle', [[100, 100]]), // Point far outside triangle
+                    Query::covers('triangle', [[100, 80]]), // Point far outside triangle
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointTriangle);
             }
@@ -1268,7 +1268,7 @@ trait SpatialTests
             // Test failure case: L-shaped polygon should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointLShape = $database->find($collectionName, [
-                    Query::covers('complex_polygon', [[100, 100]]), // Point far outside L-shape
+                    Query::covers('complex_polygon', [[100, 80]]), // Point far outside L-shape
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointLShape);
             }
@@ -1293,7 +1293,7 @@ trait SpatialTests
             // Test failure case: T-shaped polygon should NOT contain distant point
             if ($this->spatialIncludesBoundaries()) {
                 $distantPointTShape = $database->find($collectionName, [
-                    Query::covers('complex_polygon', [[100, 100]]), // Point far outside T-shape
+                    Query::covers('complex_polygon', [[100, 80]]), // Point far outside T-shape
                 ], PermissionType::Read);
                 $this->assertEmpty($distantPointTShape);
             }
@@ -2214,6 +2214,160 @@ trait SpatialTests
         } finally {
             $database->deleteCollection($collectionName);
         }
+    }
+
+    /**
+     * A spatial filter's coordinates were checked for shape only, so a longitude or latitude out of range, a
+     * non-finite coordinate or malformed WKT reached the engine, which MySQL raised as error 3037, 3616 or 3617, a
+     * server error. Each is refused as an invalid query on find() and count() before the engine sees it, and the
+     * edges of the ranges keep working.
+     */
+    public function testSpatialFilterOutOfRangeOrMalformedIsAnInvalidQuery(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'spatial_ranges_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::point(key: 'pt'),
+                Attribute::lineString(key: 'ln'),
+                Attribute::polygon(key: 'poly'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+        ));
+        $database->createDocument($collection, new Document([
+            '$id' => 'origin',
+            'pt' => [0.0, 0.0],
+            'ln' => [[0.0, 0.0], [1.0, 1.0]],
+            'poly' => [[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 0.0]]],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $filters = [
+            'point past both ranges' => Query::parse('{"method":"intersects","attribute":"pt","values":[[200,100]]}'),
+            'longitude just past 180' => Query::parse('{"method":"intersects","attribute":"pt","values":[[180.0001,0]]}'),
+            'longitude just past -180' => Query::parse('{"method":"intersects","attribute":"pt","values":[[-180.0001,0]]}'),
+            'latitude just past 90' => Query::parse('{"method":"intersects","attribute":"pt","values":[[0,90.0001]]}'),
+            'latitude just past -90' => Query::parse('{"method":"intersects","attribute":"pt","values":[[0,-90.0001]]}'),
+            'point at the largest double' => Query::parse('{"method":"intersects","attribute":"pt","values":[[1e308,1e308]]}'),
+            'infinite longitude' => Query::intersects('pt', [\INF, 0.0]),
+            'undefined latitude' => Query::intersects('pt', [0.0, \NAN]),
+            'polygon at latitude 91' => Query::parse('{"method":"intersects","attribute":"poly","values":[[[[0,0],[0,91],[1,91],[0,0]]]]}'),
+            'line at longitude 181' => Query::parse('{"method":"crosses","attribute":"ln","values":[[[0,0],[181,0]]]}'),
+            'equal point out of range' => Query::parse('{"method":"equal","attribute":"pt","values":[[200,100]]}'),
+            'distance from a point out of range' => Query::parse('{"method":"distanceLessThan","attribute":"pt","values":[[[200,100],10,false]]}'),
+            'distance from WKT out of range' => Query::parse('{"method":"distanceLessThan","attribute":"pt","values":[["POINT(200 100)",10,false]]}'),
+            'distance from malformed WKT' => Query::parse('{"method":"distanceLessThan","attribute":"pt","values":[["POINT(1 2",10,false]]}'),
+        ];
+        foreach ($filters as $case => $query) {
+            foreach (['find' => fn () => $database->find($collection, [$query]), 'count' => fn () => $database->count($collection, [$query])] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail("{$read}() refuses a filter with a {$case}");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(QueryException::class, $exception, "{$read}() of a {$case}: ".$exception->getMessage());
+                }
+            }
+        }
+
+        $edges = [
+            Query::intersects('pt', [180.0, 90.0]),
+            Query::intersects('pt', [-180.0, -90.0]),
+            Query::distanceLessThan('pt', [180.0, 0.0], 1),
+            Query::parse('{"method":"distanceLessThan","attribute":"pt","values":[["POINT(0.5 0.5)",1,false]]}'),
+            Query::intersects('poly', [[[0.0, 0.0], [0.0, 90.0], [180.0, 90.0], [0.0, 0.0]]]),
+        ];
+        foreach ($edges as $query) {
+            $database->find($collection, [$query]);
+            $database->count($collection, [$query]);
+        }
+        $this->assertSame(['origin'], \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::parse('{"method":"distanceLessThan","attribute":"pt","values":[["POINT(0.5 0.5)",1,false]]}')]),
+        ));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * A WKT value written to a spatial attribute was checked by its prefix only, so `POINT(1 2` or a point out of range
+     * reached the engine, which MySQL raised as error 3037, a server error. A written value of malformed WKT, WKT of
+     * another type, or coordinates out of range or not finite is refused as an invalid structure on create and update.
+     */
+    public function testSpatialWriteOfMalformedOrOutOfRangeValueIsAnInvalidStructure(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'spatial_ranges_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::point(key: 'pt'),
+                Attribute::lineString(key: 'ln'),
+                Attribute::polygon(key: 'poly'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+        ));
+        $database->createDocument($collection, new Document([
+            '$id' => 'origin',
+            'pt' => [0.0, 0.0],
+            'ln' => [[0.0, 0.0], [1.0, 1.0]],
+            'poly' => [[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.0, 0.0]]],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+
+        $writes = [
+            'unclosed WKT point' => ['pt' => 'POINT(1 2'],
+            'WKT point out of range' => ['pt' => 'POINT(200 0)'],
+            'WKT point at an undefined latitude' => ['pt' => 'POINT(0 NAN)'],
+            'WKT point of three coordinates' => ['pt' => 'POINT(1 2 3)'],
+            'WKT of another type' => ['pt' => 'LINESTRING(0 0, 1 1)'],
+            'WKT with trailing text' => ['pt' => 'POINT(1 2) junk'],
+            'point past both ranges' => ['pt' => [200.0, 100.0]],
+            'longitude just past 180' => ['pt' => [180.0001, 0.0]],
+            'latitude just past -90' => ['pt' => [0.0, -90.0001]],
+            'infinite longitude' => ['pt' => [\INF, 0.0]],
+            'undefined latitude' => ['pt' => [0.0, \NAN]],
+            'WKT line at longitude 181' => ['ln' => 'LINESTRING(0 0, 181 0)'],
+            'WKT polygon at latitude 91' => ['poly' => 'POLYGON((0 0, 0 91, 1 91, 0 0))'],
+            'WKT polygon missing its closing parenthesis' => ['poly' => 'POLYGON((0 0, 0 1, 1 1, 0 0)'],
+            'WKT polygon ring that is not closed' => ['poly' => 'POLYGON((0 0, 0 1, 1 1, 1 0))'],
+        ];
+        foreach ($writes as $case => $attributes) {
+            foreach (['create' => fn () => $database->createDocument($collection, new Document([...$attributes, '$permissions' => [Permission::read(Role::any())]])), 'update' => fn () => $database->updateDocument($collection, 'origin', new Document($attributes))] as $write => $call) {
+                try {
+                    $call();
+                    $this->fail("{$write} refuses a {$case}");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(StructureException::class, $exception, "{$write} of a {$case}: ".$exception->getMessage());
+                }
+            }
+        }
+
+        $written = $database->createDocument($collection, new Document([
+            'pt' => 'POINT(-180 -90)',
+            'ln' => 'LINESTRING(-180 -90, 180 90)',
+            'poly' => 'POLYGON((0 0, 0 10, 10 10, 0 0), (1 1, 1 2, 2 2, 1 1))',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $read = $database->getDocument($collection, $written->getId());
+        $this->assertEquals([-180.0, -90.0], $read->getAttribute('pt'));
+        $this->assertEquals([[-180.0, -90.0], [180.0, 90.0]], $read->getAttribute('ln'));
+
+        $database->deleteCollection($collection);
     }
 
     public function testSpatialDistanceInMeter(): void

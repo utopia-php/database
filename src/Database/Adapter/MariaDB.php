@@ -1046,6 +1046,11 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     private const string TIMEOUT_SETTING = 'timeout';
 
     /**
+     * ER_GIS_INVALID_DATA. MariaDB reads most invalid geometries as NULL instead.
+     */
+    protected const array INVALID_GEOMETRY_ERRORS = [3037];
+
+    /**
      * ER_REGEXP_ERROR, for a pattern PCRE cannot compile or run.
      */
     protected const array INVALID_REGEX_ERRORS = [1139];
@@ -1616,6 +1621,10 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
         if (isset($e->errorInfo[1]) && \in_array($e->errorInfo[1], static::INVALID_REGEX_ERRORS, true)) {
             return new QueryException('Invalid regular expression', $e->getCode(), $e);
+        }
+
+        if (isset($e->errorInfo[1]) && \in_array($e->errorInfo[1], static::INVALID_GEOMETRY_ERRORS, true)) {
+            return new QueryException('Invalid spatial value', $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {

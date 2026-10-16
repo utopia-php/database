@@ -118,6 +118,11 @@ class MySQL extends MariaDB
     }
 
     /**
+     * ER_GIS_INVALID_DATA, ER_LONGITUDE_OUT_OF_RANGE and ER_LATITUDE_OUT_OF_RANGE.
+     */
+    protected const array INVALID_GEOMETRY_ERRORS = [3037, 3616, 3617];
+
+    /**
      * ER_REGEXP_ERROR, which MySQL raises for an error ICU only names, and the errors for a pattern ICU cannot compile
      * or run: illegal argument, rule syntax, bad escape sequence, unimplemented, mismatched parenthesis, bad interval,
      * max below min, invalid back reference, look-behind limit, missing close bracket, invalid range, stack overflow,

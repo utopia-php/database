@@ -8,10 +8,12 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
+use Utopia\Database\Validator\Geometry;
 use Utopia\Database\Validator\ObjectPath;
 use Utopia\Database\Validator\Query\Joined\Attributes;
 use Utopia\Database\Validator\Query\Joined\Collection;
 use Utopia\Database\Validator\Sequence;
+use Utopia\Database\Validator\Spatial;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
@@ -28,6 +30,8 @@ class Filter extends Base
      * @var array<int|string, mixed>
      */
     protected array $schema = [];
+
+    private const array DISTANCE_METHODS = [Method::DistanceEqual, Method::DistanceNotEqual, Method::DistanceGreaterThan, Method::DistanceLessThan];
 
     /**
      * @param  array<Attribute|Document>  $attributes
@@ -297,6 +301,8 @@ class Filter extends Base
             }
         }
 
+        $geometry = new Geometry();
+
         foreach ($values as $value) {
             switch ($attributeType) {
                 case ColumnType::Object:
@@ -319,6 +325,12 @@ class Filter extends Base
                 case ColumnType::Polygon:
                     if (! is_array($value)) {
                         $this->message = 'Spatial data must be an array';
+
+                        return false;
+                    }
+
+                    if (! \in_array($method, self::DISTANCE_METHODS, true) && ! $geometry->isValid($value)) {
+                        $this->message = 'Invalid spatial data for attribute "'.$attribute.'": '.$geometry->getDescription();
 
                         return false;
                     }
@@ -437,7 +449,8 @@ class Filter extends Base
     }
 
     /**
-     * A distance query holds one `[geometry, distance, meters]` tuple: a finite distance and whether it is in meters.
+     * A distance query holds one `[geometry, distance, meters]` tuple: the geometry as coordinates or WKT, a finite
+     * distance and whether it is in meters.
      *
      * @param  array<mixed>  $values
      */
@@ -450,7 +463,16 @@ class Filter extends Base
             return false;
         }
 
-        [, $distance, $meters] = $tuple;
+        [$geometry, $distance, $meters] = $tuple;
+
+        $validator = \is_string($geometry)
+            ? new Spatial((Spatial::parseWkt($geometry)[0] ?? ColumnType::Point)->value)
+            : new Geometry();
+        if (! $validator->isValid($geometry)) {
+            $this->message = 'Distance query requires a geometry as coordinates or WKT: '.$validator->getDescription();
+
+            return false;
+        }
 
         if (! \is_numeric($distance) || ! \is_finite((float) $distance)) {
             $this->message = 'Distance query requires a finite distance';

@@ -1677,6 +1677,75 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    /**
+     * A cursor on a read ordered by an array or spatial attribute reached the engine: the array cursor value failed
+     * Query::greaterThan() with a TypeError and MySQL refused a geometry comparison with error 1210, both server
+     * errors. Such an order has no value a cursor can compare, so the cursor is refused as an invalid query on every
+     * adapter, while the same order without a cursor, and a cursor along a scalar order, keep working.
+     */
+    public function testCursorAlongAnOrderWithoutComparableValuesIsAnInvalidQuery(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $spatial = $adapter->hasFeature(Feature\Spatial::class);
+        $objects = $adapter->supports(Capability::Objects);
+        $vectors = $adapter->supports(Capability::Vectors);
+        $collection = 'cursor_orders_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::integer(key: 'n', required: true),
+                Attribute::string(key: 'sa', size: 20, array: true),
+                Attribute::integer(key: 'ia', array: true),
+                ...($spatial ? [Attribute::point(key: 'pt'), Attribute::lineString(key: 'ln')] : []),
+                ...($objects ? [Attribute::object(key: 'obj')] : []),
+                ...($vectors ? [Attribute::vector(key: 'vec', dimensions: 2)] : []),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([1, 2, 3] as $n) {
+            $database->createDocument($collection, new Document([
+                '$id' => 'row'.$n,
+                'n' => $n,
+                'sa' => ['s'.$n],
+                'ia' => [$n],
+                ...($spatial ? ['pt' => [(float) $n, (float) $n], 'ln' => [[0.0, 0.0], [(float) $n, (float) $n]]] : []),
+                ...($objects ? ['obj' => ['n' => $n]] : []),
+                ...($vectors ? ['vec' => [(float) $n, 1.0]] : []),
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $cursor = $database->getDocument($collection, 'row1');
+        $orders = ['sa', 'ia', ...($spatial ? ['pt', 'ln'] : []), ...($objects ? ['obj'] : []), ...($vectors ? ['vec'] : [])];
+        foreach ($orders as $order) {
+            $pages = [
+                'asc after' => [Query::orderAsc($order), Query::cursorAfter($cursor)],
+                'desc after' => [Query::orderDesc($order), Query::cursorAfter($cursor)],
+                'asc before' => [Query::orderAsc($order), Query::cursorBefore($cursor)],
+                'behind a scalar order' => [Query::orderAsc('n'), Query::orderAsc($order), Query::cursorAfter($cursor)],
+            ];
+            foreach ($pages as $case => $queries) {
+                try {
+                    $database->find($collection, $queries);
+                    $this->fail("A cursor along {$order}, {$case}, is refused");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(QueryException::class, $exception, "{$order}, {$case}: ".$exception::class.': '.$exception->getMessage());
+                    $this->assertSame("Cannot page with a cursor along the order of '{$order}': an array, object, spatial or vector attribute has no value a cursor can compare", $exception->getMessage());
+                }
+            }
+
+            if ($order !== 'vec') {
+                $this->assertCount(3, $database->find($collection, [Query::orderAsc($order)]), "an order by {$order} without a cursor");
+            }
+        }
+
+        $next = $database->find($collection, [Query::orderAsc('n'), Query::cursorAfter($cursor)]);
+        $this->assertSame(['row2', 'row3'], \array_map(static fn (Document $document): string => $document->getId(), $next));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testFind(): void
     {
         $this->initMoviesFixture();

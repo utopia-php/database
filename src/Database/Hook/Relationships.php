@@ -592,7 +592,10 @@ class Relationships implements Attachable, Hook
                 continue;
             }
 
-            $relatedCollection = $this->collection($prepared, $relationship->relatedCollection);
+            $relatedCollection = $this->relatedCollection($relationship, $prepared);
+            if ($relatedCollection === null) {
+                continue;
+            }
 
             if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
                 continue;
@@ -699,6 +702,57 @@ class Relationships implements Attachable, Hook
     private function collection(PreparedCreate $prepared, string $id): Document
     {
         return $prepared->collections[$id] ??= $this->database->getCollection($id);
+    }
+
+    /**
+     * The collection a relationship relates to, or null when it was deleted while the relationship was left behind,
+     * as 7.x could leave it: such a relationship is not related, populated or cascaded, and keeps its stored value.
+     */
+    private function relatedCollection(Relationship $relationship, ?PreparedCreate $prepared = null): ?Document
+    {
+        $id = $relationship->relatedCollection;
+        if ($prepared !== null && isset($prepared->collections[$id])) {
+            return $prepared->collections[$id];
+        }
+
+        $collection = $this->database->findCollection($id);
+        if ($prepared !== null && $collection !== null) {
+            $prepared->collections[$id] = $collection;
+        }
+
+        return $collection;
+    }
+
+    /**
+     * Keep the value written to a relationship whose related collection was deleted as the side holding its key
+     * stores it, by ID, and drop it from a side that stores nothing.
+     */
+    private static function detach(Attribute $attribute, Document $document): void
+    {
+        $key = $attribute->key;
+        $relationship = $attribute->relationship;
+        if ($relationship === null) {
+            return;
+        }
+
+        $parent = $attribute->side === RelationshipSide::Parent;
+        $storesKey = match ($relationship->type) {
+            RelationshipType::OneToOne => $parent || $relationship->twoWay,
+            RelationshipType::OneToMany => ! $parent,
+            RelationshipType::ManyToOne => $parent,
+            RelationshipType::ManyToMany => false,
+        };
+
+        if (! $storesKey) {
+            $document->removeAttribute($key);
+
+            return;
+        }
+
+        $value = $document->getAttribute($key);
+        if ($value instanceof Document) {
+            $document->setAttribute($key, $value->getId());
+        }
     }
 
     /**
@@ -865,9 +919,12 @@ class Relationships implements Attachable, Hook
             if ($copies !== null && $stackCount === 0 && (\is_array($value) || $value instanceof Document)) {
                 $this->copy($document, $copies);
             }
-            $relatedCollection = $prepared === null
-                ? $this->database->getCollection($relationship->relatedCollection)
-                : $this->collection($prepared, $relationship->relatedCollection);
+            $relatedCollection = $this->relatedCollection($relationship, $prepared);
+            if ($relatedCollection === null) {
+                self::detach($attribute, $document);
+
+                continue;
+            }
             $relationType = $relationship->type;
             $twoWay = $relationship->twoWay;
             $twoWayKey = $relationship->twoWayKey ?? '';
@@ -1032,7 +1089,6 @@ class Relationships implements Attachable, Hook
 
             $oldValue = $old->getAttribute($key);
             $oldId = $oldValue instanceof Document ? $oldValue->getId() : (\is_string($oldValue) ? $oldValue : null);
-            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
             $relationType = $relationship->type;
             $twoWay = $relationship->twoWay;
             $twoWayKey = $relationship->twoWayKey ?? '';
@@ -1063,6 +1119,13 @@ class Relationships implements Attachable, Hook
                     continue;
                 }
                 $document->removeAttribute($key);
+
+                continue;
+            }
+
+            $relatedCollection = $this->relatedCollection($relationship);
+            if ($relatedCollection === null) {
+                self::detach($attribute, $document);
 
                 continue;
             }
@@ -1539,9 +1602,13 @@ class Relationships implements Attachable, Hook
                 continue;
             }
 
+            $relatedCollection = $this->relatedCollection($relationship);
+            if ($relatedCollection === null) {
+                continue;
+            }
+
             $key = $attribute->key;
             $value = $document->getAttribute($key);
-            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
             $relationType = $relationship->type;
             $twoWay = $relationship->twoWay;
             $twoWayKey = $relationship->twoWayKey ?? '';
@@ -1730,9 +1797,15 @@ class Relationships implements Attachable, Hook
                             continue;
                         }
 
+                        $relatedCollection = $this->relatedCollection($relationship);
+                        if ($relatedCollection === null) {
+                            continue;
+                        }
+
                         $relatedDocuments = $this->populateSingleRelationshipBatch(
                             $batchDocuments,
                             $batchCollection,
+                            $relatedCollection,
                             $key,
                             $relationship,
                             $side,
@@ -1747,25 +1820,20 @@ class Relationships implements Attachable, Hook
                             ($hasNestedSelects || ! $parentHasExplicitSelects);
 
                         if ($shouldQueue) {
-                            $relatedCollectionId = $relationship->relatedCollection;
-                            $relatedCollection = $this->database->silent(fn () => $this->database->findCollection($relatedCollectionId));
+                            $relationshipQueries = $hasNestedSelects ? $batchSelects[$key] : [];
 
-                            if ($relatedCollection !== null) {
-                                $relationshipQueries = $hasNestedSelects ? $batchSelects[$key] : [];
+                            $nextSelects = $this->processQueries(self::relationships($relatedCollection), $relationshipQueries);
 
-                                $nextSelects = $this->processQueries(self::relationships($relatedCollection), $relationshipQueries);
+                            $childHasExplicitSelects = $parentHasExplicitSelects || self::selects($relationshipQueries);
 
-                                $childHasExplicitSelects = $parentHasExplicitSelects || self::selects($relationshipQueries);
-
-                                $nextQueue[] = [
-                                    'documents' => $relatedDocuments,
-                                    'collection' => $relatedCollection,
-                                    'depth' => $currentDepth + 1,
-                                    'selects' => $nextSelects,
-                                    'skipKey' => $twoWay ? $twoWayKey : null,
-                                    'hasExplicitSelects' => $childHasExplicitSelects,
-                                ];
-                            }
+                            $nextQueue[] = [
+                                'documents' => $relatedDocuments,
+                                'collection' => $relatedCollection,
+                                'depth' => $currentDepth + 1,
+                                'selects' => $nextSelects,
+                                'skipKey' => $twoWay ? $twoWayKey : null,
+                                'hasExplicitSelects' => $childHasExplicitSelects,
+                            ];
                         }
 
                         if ($twoWay && ! empty($relatedDocuments)) {
@@ -2413,13 +2481,13 @@ class Relationships implements Attachable, Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateSingleRelationshipBatch(array $documents, Document $collection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
+    private function populateSingleRelationshipBatch(array $documents, Document $collection, Document $relatedCollection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
         return match ($relationship->type) {
-            RelationshipType::OneToOne => $this->populateOneToOneRelationshipsBatch($documents, $key, $relationship, $queries),
-            RelationshipType::OneToMany => $this->populateOneToManyRelationshipsBatch($documents, $key, $relationship, $side, $queries),
-            RelationshipType::ManyToOne => $this->populateManyToOneRelationshipsBatch($documents, $key, $relationship, $side, $queries),
-            RelationshipType::ManyToMany => $this->populateManyToManyRelationshipsBatch($documents, $collection, $key, $relationship, $side, $queries),
+            RelationshipType::OneToOne => $this->populateOneToOneRelationshipsBatch($documents, $relatedCollection, $key, $relationship, $queries),
+            RelationshipType::OneToMany => $this->populateOneToManyRelationshipsBatch($documents, $relatedCollection, $key, $relationship, $side, $queries),
+            RelationshipType::ManyToOne => $this->populateManyToOneRelationshipsBatch($documents, $relatedCollection, $key, $relationship, $side, $queries),
+            RelationshipType::ManyToMany => $this->populateManyToManyRelationshipsBatch($documents, $collection, $relatedCollection, $key, $relationship, $side, $queries),
         };
     }
 
@@ -2428,10 +2496,8 @@ class Relationships implements Attachable, Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateOneToOneRelationshipsBatch(array $documents, string $key, Relationship $relationship, array $queries): array
+    private function populateOneToOneRelationshipsBatch(array $documents, Document $relatedCollection, string $key, Relationship $relationship, array $queries): array
     {
-        $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
-
         $relatedIds = [];
         $documentsByRelatedId = [];
 
@@ -2505,10 +2571,9 @@ class Relationships implements Attachable, Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateOneToManyRelationshipsBatch(array $documents, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
+    private function populateOneToManyRelationshipsBatch(array $documents, Document $relatedCollection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
         $twoWayKey = $relationship->twoWayKey ?? '';
-        $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
 
         if ($side === RelationshipSide::Child) {
             if (! $relationship->twoWay) {
@@ -2519,7 +2584,7 @@ class Relationships implements Attachable, Hook
                 return [];
             }
 
-            return $this->populateOneToOneRelationshipsBatch($documents, $key, $relationship, $queries);
+            return $this->populateOneToOneRelationshipsBatch($documents, $relatedCollection, $key, $relationship, $queries);
         }
 
         $parentIds = [];
@@ -2583,13 +2648,12 @@ class Relationships implements Attachable, Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateManyToOneRelationshipsBatch(array $documents, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
+    private function populateManyToOneRelationshipsBatch(array $documents, Document $relatedCollection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
         $twoWayKey = $relationship->twoWayKey ?? '';
-        $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
 
         if ($side === RelationshipSide::Parent) {
-            return $this->populateOneToOneRelationshipsBatch($documents, $key, $relationship, $queries);
+            return $this->populateOneToOneRelationshipsBatch($documents, $relatedCollection, $key, $relationship, $queries);
         }
 
         if (! $relationship->twoWay) {
@@ -2661,10 +2725,9 @@ class Relationships implements Attachable, Hook
      * @param  array<Query>  $queries
      * @return array<Document>
      */
-    private function populateManyToManyRelationshipsBatch(array $documents, Document $collection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
+    private function populateManyToManyRelationshipsBatch(array $documents, Document $collection, Document $relatedCollection, string $key, Relationship $relationship, RelationshipSide $side, array $queries): array
     {
         $twoWayKey = $relationship->twoWayKey ?? '';
-        $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
 
         if (! $relationship->twoWay && $side === RelationshipSide::Child) {
             return [];
@@ -3389,7 +3452,10 @@ class Relationships implements Attachable, Hook
                 continue;
             }
 
-            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
+            $relatedCollection = $this->relatedCollection($relationship);
+            if ($relatedCollection === null) {
+                continue;
+            }
             if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
                 continue;
             }
@@ -3537,7 +3603,10 @@ class Relationships implements Attachable, Hook
                 continue;
             }
 
-            $relatedCollection = $this->database->getCollection($relationship->relatedCollection);
+            $relatedCollection = $this->relatedCollection($relationship);
+            if ($relatedCollection === null) {
+                continue;
+            }
             if ($depth >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$depth - 1] !== $relatedCollection->getId()) {
                 continue;
             }

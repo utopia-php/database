@@ -147,8 +147,10 @@ trait MongoReadFilterTests
         try {
             $database->getAdapter()->count($database->getCollection($collection), [Query::regex('name', '(')]);
             $this->fail('count() must report the driver error for an invalid regular expression instead of 0');
-        } catch (MongoException $e) {
-            $this->assertNotSame(0, $e->getCode());
+        } catch (QueryException $e) {
+            $this->assertSame('Invalid regular expression', $e->getMessage());
+            $this->assertInstanceOf(MongoException::class, $e->getPrevious());
+            $this->assertNotSame(0, $e->getPrevious()->getCode());
         } finally {
             $database->deleteCollection($collection);
         }

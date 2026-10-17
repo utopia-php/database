@@ -33,6 +33,13 @@ final class JoinAliasTest extends TestCase
         yield 'a cross join alias' => [Query::crossJoin('orders', 'ord')];
         yield 'a nested join alias' => [Query::rightJoin('orders', 'ord', [Query::on('$id', 'customerId')])];
         yield 'no alias' => [Query::join('orders', '', [Query::on('$id', 'customerId')])];
+        yield 'no alias on a unique ID that starts with a digit' => [Query::join('6ad1e9ed691819ab52ee', '', [Query::on('$id', '6ad1e9ed691819ab52ee.customerId')])];
+        yield 'no alias on an ID with a hyphen' => [Query::leftJoin('order-items', '', [Query::on('$id', 'order-items.customerId')])];
+        yield 'no alias on a 36 character ID' => [Query::crossJoin('a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8', '')];
+        yield 'an alias that starts with a digit' => [Query::join('orders', '6ad1e9ed691819ab52ef', [Query::on('$id', '6ad1e9ed691819ab52ef.customerId')])];
+        yield 'an alias with a hyphen' => [Query::join('orders', 'order-lines', [Query::on('$id', 'customerId')])];
+        yield 'a digit alias' => [Query::crossJoin('orders', '0')];
+        yield 'an alias of 63 characters' => [Query::join('orders', \str_repeat('a', 63), [Query::on('$id', 'customerId')])];
         yield 'no alias on a left join' => [Query::leftJoin('orders', '', [Query::on('$id', 'orders.customerId')])];
         yield 'no alias on a cross join' => [Query::crossJoin('orders', '')];
         yield 'no alias on a join built without one' => [new Query(Method::Join, 'orders', [Query::on('$id', 'customerId')])];
@@ -55,14 +62,17 @@ final class JoinAliasTest extends TestCase
     {
         $main = Query::DEFAULT_ALIAS;
         $upper = \strtoupper(Query::DEFAULT_ALIAS);
-        $invalid = 'Join alias must start with a letter or an underscore and contain only letters, digits and underscores';
+        $invalid = 'Join alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens';
 
         yield 'the main collection alias' => [Query::join('orders', $main, [Query::on('$id', 'customerId')]), "Join alias \"{$main}\" is reserved for the main collection"];
         yield 'the main collection alias in upper case' => [Query::join('orders', $upper, [Query::on('$id', 'customerId')]), "Join alias \"{$upper}\" is reserved for the main collection"];
         yield 'the main collection alias on a cross join' => [Query::crossJoin('orders', $main), "Join alias \"{$main}\" is reserved for the main collection"];
         yield 'the main collection alias on a nested join' => [Query::fullOuterJoin('orders', $main, [Query::on('$id', 'customerId')]), "Join alias \"{$main}\" is reserved for the main collection"];
-        yield 'a hyphen' => [Query::join('orders', 'my-alias', [Query::on('$id', 'customerId')]), $invalid];
-        yield 'a leading digit' => [Query::leftJoin('orders', '1st', [Query::on('$id', 'customerId')]), $invalid];
+        yield 'a leading hyphen' => [Query::join('orders', '-alias', [Query::on('$id', 'customerId')]), $invalid];
+        yield 'a space' => [Query::leftJoin('orders', 'my alias', [Query::on('$id', 'customerId')]), $invalid];
+        yield 'a double quote' => [Query::leftJoin('orders', 'x"y', [Query::on('$id', 'customerId')]), $invalid];
+        yield 'a dollar' => [Query::leftJoin('orders', '$id', [Query::on('$id', 'customerId')]), $invalid];
+        yield 'past 63 characters' => [Query::join('orders', \str_repeat('a', 64), [Query::on('$id', 'customerId')]), 'Join alias must be at most 63 characters'];
         yield 'a dot' => [Query::join('orders', 'a.b', [Query::on('$id', 'customerId')]), $invalid];
         yield 'a quote' => [Query::crossJoin('orders', 'x`y'), $invalid];
     }
@@ -84,15 +94,15 @@ final class JoinAliasTest extends TestCase
     {
         $main = Query::DEFAULT_ALIAS;
         $upper = \strtoupper(Query::DEFAULT_ALIAS);
-        $pattern = static fn (string $table): string => "Table ID \"{$table}\" cannot be used as the join alias: an alias must start with a letter or an underscore and contain only letters, digits and underscores. Pass an alias for the join";
+        $pattern = static fn (string $table): string => "Table ID \"{$table}\" cannot be used as the join alias: an alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens. Pass an alias for the join";
         $reserved = static fn (string $table): string => "Table ID \"{$table}\" cannot be used as the join alias: it is reserved for the main collection. Pass an alias for the join";
 
-        yield 'a hyphen' => [Query::join('my-orders', '', [Query::on('$id', 'customerId')]), $pattern('my-orders')];
         yield 'a dot' => [Query::leftJoin('orders.v2', '', [Query::on('$id', 'customerId')]), $pattern('orders.v2')];
-        yield 'a leading digit' => [Query::rightJoin('2024orders', '', [Query::on('$id', 'customerId')]), $pattern('2024orders')];
-        yield 'a hyphen on a cross join' => [Query::crossJoin('my-orders', ''), $pattern('my-orders')];
-        yield 'a hyphen on a join built without an alias' => [new Query(Method::FullOuterJoin, 'my-orders', [Query::on('$id', 'customerId')]), $pattern('my-orders')];
-        yield 'a hyphen on a parsed join' => [Query::parseQuery(['method' => 'join', 'attribute' => 'my-orders', 'values' => ['$id', '=', 'customerId']]), $pattern('my-orders')];
+        yield 'a leading hyphen' => [Query::rightJoin('-orders', '', [Query::on('$id', 'customerId')]), $pattern('-orders')];
+        yield 'a dot on a cross join' => [Query::crossJoin('orders.v2', ''), $pattern('orders.v2')];
+        yield 'a dot on a join built without an alias' => [new Query(Method::FullOuterJoin, 'orders.v2', [Query::on('$id', 'customerId')]), $pattern('orders.v2')];
+        yield 'a dot on a parsed join' => [Query::parseQuery(['method' => 'join', 'attribute' => 'orders.v2', 'values' => ['$id', '=', 'customerId']]), $pattern('orders.v2')];
+        yield 'past 63 characters' => [Query::join(\str_repeat('a', 64), '', [Query::on('$id', 'customerId')]), 'Table ID "'.\str_repeat('a', 64).'" cannot be used as the join alias: an alias must be at most 63 characters. Pass an alias for the join'];
         yield 'the main collection alias' => [Query::join($main, '', [Query::on('$id', 'customerId')]), $reserved($main)];
         yield 'the main collection alias in upper case' => [Query::crossJoin($upper, ''), $reserved($upper)];
     }

@@ -15,7 +15,15 @@ use Utopia\Query\Query as BaseQuery;
  */
 class Join extends Base
 {
-    public const string ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
+    /**
+     * The characters of an Appwrite ID but `.`, which separates an alias from its column.
+     */
+    public const string ALIAS_PATTERN = '/^[A-Za-z0-9_][A-Za-z0-9_-]*$/';
+
+    /**
+     * PostgreSQL folds an identifier past 63 bytes, so two longer aliases could read as one.
+     */
+    public const int MAX_ALIAS_LENGTH = 63;
 
     private const array OPERATORS = ['=', '!=', '<', '>', '<=', '>=', '<>'];
 
@@ -133,8 +141,14 @@ class Join extends Base
 
         if (\preg_match(self::ALIAS_PATTERN, $alias) !== 1) {
             return $defaulted
-                ? self::describeUnusableTable($alias, 'an alias must start with a letter or an underscore and contain only letters, digits and underscores')
-                : 'Join alias must start with a letter or an underscore and contain only letters, digits and underscores';
+                ? self::describeUnusableTable($alias, 'an alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens')
+                : 'Join alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens';
+        }
+
+        if (\strlen($alias) > self::MAX_ALIAS_LENGTH) {
+            return $defaulted
+                ? self::describeUnusableTable($alias, 'an alias must be at most '.self::MAX_ALIAS_LENGTH.' characters')
+                : 'Join alias must be at most '.self::MAX_ALIAS_LENGTH.' characters';
         }
 
         if (\strcasecmp($alias, Query::DEFAULT_ALIAS) === 0) {

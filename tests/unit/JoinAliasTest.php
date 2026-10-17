@@ -166,7 +166,10 @@ final class JoinAliasTest extends TestCase
             Query::crossJoin('c', 'x'),
         ]];
         yield 'an alias that is not an identifier' => [[
-            Query::join('b', 'my-alias', [Query::on('$id', 'mainId')]),
+            Query::join('b', '-alias', [Query::on('$id', 'mainId')]),
+        ]];
+        yield 'an alias with a dot' => [[
+            Query::join('b', 'my.alias', [Query::on('$id', 'mainId')]),
         ]];
         yield 'a collection joined twice without aliases' => [[
             Query::join('b', '', [Query::on('$id', 'mainId')]),

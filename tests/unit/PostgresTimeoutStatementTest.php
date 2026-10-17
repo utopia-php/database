@@ -224,10 +224,7 @@ final class PostgresTimeoutStatementTest extends TestCase
             $statement = $this->createStub(\PDOStatement::class);
             $statement->method('bindValue')->willReturn(true);
             $statement->method('execute')->willReturnCallback(function () use ($sql): bool {
-                $keyword = \strtoupper(\strtok(\ltrim($sql), " \n") ?: '');
-                if ($keyword !== 'ROLLBACK') {
-                    $this->log[] = $keyword;
-                }
+                $this->log[] = \strtoupper(\strtok(\ltrim($sql), " \n") ?: '');
 
                 return true;
             });

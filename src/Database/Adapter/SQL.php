@@ -91,10 +91,18 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * A joined column whose `alias.column` label is longer than the engine keeps is labelled with
-     * this prefix and the alias's position instead, and remapRow() reads it back under the alias. A
-     * join alias cannot hold `$`.
+     * this prefix and a digest of the label instead, and remapRow() reads it back. A join alias
+     * cannot hold `$`.
      */
-    private const string JOIN_LABEL_PREFIX = '$';
+    private const string JOIN_LABEL_PREFIX = '$join_';
+
+    /**
+     * The `alias.column` label each digest label stands for. A digest names one label for good, so
+     * the map only grows with the joined columns a process reads.
+     *
+     * @var array<string, string>
+     */
+    private static array $joinLabels = [];
 
     /**
      * MariaDB and MySQL keep a column label of up to 256 characters.
@@ -707,7 +715,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return Document::fromRow($row);
         }
 
-        $joinAliases = [];
         if ($this->queriesHaveJoins($queries)) {
             if ($forUpdate) {
                 throw new QueryException('Cannot lock a document for update when join queries are present');
@@ -762,7 +769,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         /** @var array<string, mixed> $document */
         $document = $rows[0];
 
-        $this->remapRow($document, $joinAliases);
+        $this->remapRow($document);
 
         return Document::fromRow($document);
     }
@@ -1774,7 +1781,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         foreach ($results as $row) {
             /** @var array<string, mixed> $row */
-            $this->remapRow($row, \array_column($joinTablePrefixes, 'alias'));
+            $this->remapRow($row);
             $documents[] = Document::fromRow($row);
         }
 
@@ -2122,7 +2129,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 return $this->qualifiedGroupNames($values)[$index] ?? $column;
             }
 
-            return $dot === false ? $column : \substr($attribute, 0, $dot).'.'.$column;
+            return $dot === false ? $column : $this->joinLabel(\substr($attribute, 0, $dot), $column);
         }
 
         throw new QueryException('Invalid query: sum() over '.($grouped ? 'grouped' : 'distinct').' rows adds up one of their '.($grouped ? 'groupBy' : 'selected').' attributes, and '.$attribute.' is not one of them');
@@ -4215,7 +4222,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if (isset($aliasSet[$prefix])) {
                     $name = \substr($selection, $dot + 1);
                     $internal = $this->filter($this->getInternalKeyForAttribute($name));
-                    $columns[] = $this->quote($prefix).'.'.$this->quote($internal).' AS '.$this->quote($this->joinLabel($prefix, $internal, $joinAliases));
+                    $columns[] = $this->quote($prefix).'.'.$this->quote($internal).' AS '.$this->quote($this->joinLabel($prefix, $internal));
 
                     continue;
                 }
@@ -4227,21 +4234,20 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * The label a joined column is read under: `alias.column`, or the alias's position in its place
-     * when that is longer than the engine keeps a label, so the engine cannot cut it short.
-     *
-     * @param  array<string>  $joinAliases
+     * The label a joined column is read under: `alias.column`, or a digest of it when that is longer
+     * than the engine keeps a label, so the engine cannot cut it short.
      */
-    private function joinLabel(string $alias, string $column, array $joinAliases): string
+    private function joinLabel(string $alias, string $column): string
     {
         $label = $alias.'.'.$column;
         if (\strlen($label) <= static::MAX_LABEL_LENGTH) {
             return $label;
         }
 
-        $position = \array_search($alias, \array_values($joinAliases), true);
+        $digest = self::JOIN_LABEL_PREFIX.\md5($label);
+        self::$joinLabels[$digest] = $label;
 
-        return self::JOIN_LABEL_PREFIX.(\is_int($position) ? $position : 0).'.'.$column;
+        return $digest;
     }
 
     /**
@@ -6430,15 +6436,18 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * @param  array<int|string, mixed>  $row
-     * @param  array<string>  $joinAliases  The read's join aliases, in the order joinLabel() numbers them
      */
-    private function remapRow(array &$row, array $joinAliases = []): void
+    private function remapRow(array &$row): void
     {
-        $joinAliases = \array_values($joinAliases);
         foreach (\array_keys($row) as $key) {
             if (\is_int($key)) {
                 unset($row[$key]);
                 continue;
+            }
+            if (isset(self::$joinLabels[$key])) {
+                $row[self::$joinLabels[$key]] = $row[$key];
+                unset($row[$key]);
+                $key = self::$joinLabels[$key];
             }
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);
@@ -6453,9 +6462,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 continue;
             }
             $prefix = \substr($key, 0, $separator);
-            if (\str_starts_with($prefix, self::JOIN_LABEL_PREFIX)) {
-                $prefix = $joinAliases[(int) \substr($prefix, \strlen(self::JOIN_LABEL_PREFIX))] ?? $prefix;
-            }
             $bare = \trim(\substr($key, $separator + 1), '`"');
             $public = Storage::attribute($bare);
             $dotted = $prefix.'.'.$public;

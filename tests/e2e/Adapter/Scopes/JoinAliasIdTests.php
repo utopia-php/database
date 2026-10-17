@@ -33,6 +33,10 @@ trait JoinAliasIdTests
 
     private const string KEY_LONG = 'label_of_the_item_kept_for_ordering_';
 
+    private const string KEY_LONG_NUMBER = 'quantity_of_the_item_kept_for_totals';
+
+    private const string KEY_SIXTY = 'a_sixty_two_character_attribute_key_whose_name_nearly_fills_63';
+
     private const string BASELINE = 'plain';
 
     public function testJoinWithoutAliasReadsAnAppwriteTableId(): void
@@ -145,6 +149,20 @@ trait JoinAliasIdTests
                 Query::select(['total', $key]),
             ]);
             $this->assertSame('second', $document->getAttribute($key), 'getDocument()');
+
+            $quantity = self::ID_LONG.'.'.self::KEY_LONG_NUMBER;
+            $this->assertSame(5, $database->sum(self::ID_ORDERS, $quantity, [
+                Query::join(self::ID_LONG, '', [Query::on('customerId', 'customerId')]),
+                Query::distinct(),
+                Query::select([$quantity]),
+            ]), 'a distinct sum of a joined column');
+
+            $sixty = $database->find(self::ID_ORDERS, [
+                Query::join(self::ID_ITEMS, 'i', [Query::on('customerId', 'customerId')]),
+                Query::select(['total', 'i.'.self::KEY_SIXTY]),
+                Query::orderAsc('total'),
+            ]);
+            $this->assertSame(['first', 'second'], \array_map(static fn (Document $row): mixed => $row->getAttribute('i.'.self::KEY_SIXTY), $sixty), 'a column whose own name nearly fills the label');
 
             $groups = $database->aggregate(self::ID_ORDERS, [
                 Query::join(self::ID_LONG, '', [Query::on('customerId', 'customerId')]),
@@ -328,7 +346,12 @@ trait JoinAliasIdTests
         foreach ([self::ID_ITEMS => 'label', self::ID_UNIQUE => 'label', self::ID_HYPHEN => 'label', self::ID_LONG => self::KEY_LONG] as $table => $key) {
             $database->createCollection(Collection::create(
                 id: $table,
-                attributes: [Attribute::string(key: 'customerId', size: 32), Attribute::string(key: $key, size: 32)],
+                attributes: [
+                    Attribute::string(key: 'customerId', size: 32),
+                    Attribute::string(key: $key, size: 32),
+                    Attribute::integer(key: self::KEY_LONG_NUMBER, required: false),
+                    Attribute::string(key: self::KEY_SIXTY, size: 32, required: false),
+                ],
                 permissions: [Permission::create(Role::any())],
                 documentSecurity: true,
             ));
@@ -337,6 +360,8 @@ trait JoinAliasIdTests
                     '$id' => $id,
                     'customerId' => $customer,
                     $key => $value,
+                    self::KEY_LONG_NUMBER => $value === 'second' ? 3 : 2,
+                    self::KEY_SIXTY => $value,
                     '$permissions' => [Permission::read($reader)],
                 ]));
             }

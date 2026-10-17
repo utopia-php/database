@@ -97,12 +97,16 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     private const string JOIN_LABEL_PREFIX = '$join_';
 
     /**
-     * The `alias.column` label each digest label stands for. A digest names one label for good, so
-     * the map only grows with the joined columns a process reads.
+     * The `alias.column` label each digest label stands for, oldest first. Join aliases are the
+     * caller's, so the map keeps only the newest JOIN_LABELS_KEPT labels instead of every label a
+     * long-lived worker was ever asked for. A read's labels are the newest when its rows are
+     * remapped, and an adapter runs one statement at a time, so none of them is evicted first.
      *
      * @var array<string, string>
      */
-    private static array $joinLabels = [];
+    private array $joinLabels = [];
+
+    private const int JOIN_LABELS_KEPT = 1024;
 
     /**
      * MariaDB and MySQL keep a column label of up to 256 characters.
@@ -4245,7 +4249,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $digest = self::JOIN_LABEL_PREFIX.\md5($label);
-        self::$joinLabels[$digest] = $label;
+        unset($this->joinLabels[$digest]);
+        $this->joinLabels[$digest] = $label;
+        if (\count($this->joinLabels) > self::JOIN_LABELS_KEPT) {
+            unset($this->joinLabels[\array_key_first($this->joinLabels)]);
+        }
 
         return $digest;
     }
@@ -6444,10 +6452,10 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 unset($row[$key]);
                 continue;
             }
-            if (isset(self::$joinLabels[$key])) {
-                $row[self::$joinLabels[$key]] = $row[$key];
+            if (isset($this->joinLabels[$key])) {
+                $row[$this->joinLabels[$key]] = $row[$key];
                 unset($row[$key]);
-                $key = self::$joinLabels[$key];
+                $key = $this->joinLabels[$key];
             }
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);

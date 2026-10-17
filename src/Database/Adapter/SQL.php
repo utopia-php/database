@@ -89,6 +89,26 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
+    /**
+     * A joined column whose `alias.column` label is longer than the engine keeps is labelled with
+     * this prefix and a digest of the label instead, and remapRow() reads it back. A join alias
+     * cannot hold `$`.
+     */
+    private const string JOIN_LABEL_PREFIX = '$join_';
+
+    /**
+     * The `alias.column` label each digest label stands for. A digest names one label for good, so
+     * the map only grows with the joined columns a process reads.
+     *
+     * @var array<string, string>
+     */
+    private static array $joinLabels = [];
+
+    /**
+     * MariaDB and MySQL keep a column label of up to 256 characters.
+     */
+    protected const int MAX_LABEL_LENGTH = 256;
+
     protected const string MIN_DATETIME = '1000-01-01 00:00:00';
 
     /**
@@ -2109,7 +2129,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 return $this->qualifiedGroupNames($values)[$index] ?? $column;
             }
 
-            return $dot === false ? $column : \substr($attribute, 0, $dot).'.'.$column;
+            return $dot === false ? $column : $this->joinLabel(\substr($attribute, 0, $dot), $column);
         }
 
         throw new QueryException('Invalid query: sum() over '.($grouped ? 'grouped' : 'distinct').' rows adds up one of their '.($grouped ? 'groupBy' : 'selected').' attributes, and '.$attribute.' is not one of them');
@@ -4194,7 +4214,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $aliasSet = \array_fill_keys($joinAliases, true);
-        $quote = $this->getIdentifierQuote();
         $columns = [];
         foreach ($selections as $selection) {
             $dot = \strpos($selection, '.');
@@ -4203,9 +4222,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if (isset($aliasSet[$prefix])) {
                     $name = \substr($selection, $dot + 1);
                     $internal = $this->filter($this->getInternalKeyForAttribute($name));
-                    $qualified = $quote.$this->filter($prefix).$quote.'.'.$quote.$internal.$quote;
-                    $output = $prefix.'.'.$internal;
-                    $columns[] = $qualified.' AS '.$quote.$output.$quote;
+                    $columns[] = $this->quote($prefix).'.'.$this->quote($internal).' AS '.$this->quote($this->joinLabel($prefix, $internal));
 
                     continue;
                 }
@@ -4214,6 +4231,23 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         return $columns;
+    }
+
+    /**
+     * The label a joined column is read under: `alias.column`, or a digest of it when that is longer
+     * than the engine keeps a label, so the engine cannot cut it short.
+     */
+    private function joinLabel(string $alias, string $column): string
+    {
+        $label = $alias.'.'.$column;
+        if (\strlen($label) <= static::MAX_LABEL_LENGTH) {
+            return $label;
+        }
+
+        $digest = self::JOIN_LABEL_PREFIX.\md5($label);
+        self::$joinLabels[$digest] = $label;
+
+        return $digest;
     }
 
     /**
@@ -6401,7 +6435,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * @param array<int|string, mixed> $row
+     * @param  array<int|string, mixed>  $row
      */
     private function remapRow(array &$row): void
     {
@@ -6409,6 +6443,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_int($key)) {
                 unset($row[$key]);
                 continue;
+            }
+            if (isset(self::$joinLabels[$key])) {
+                $row[self::$joinLabels[$key]] = $row[$key];
+                unset($row[$key]);
+                $key = self::$joinLabels[$key];
             }
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);

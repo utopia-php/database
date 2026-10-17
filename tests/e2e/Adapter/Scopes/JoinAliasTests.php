@@ -180,14 +180,14 @@ trait JoinAliasTests
         $this->createAliasFixtures($database);
 
         try {
-            foreach ([self::ALIAS_HYPHEN, self::ALIAS_DOT] as $table) {
+            foreach ([self::ALIAS_DOT] as $table) {
                 $this->assertRejectedJoin(
-                    "Table ID \"{$table}\" cannot be used as the join alias: an alias must start with a letter or an underscore and contain only letters, digits and underscores. Pass an alias for the join",
+                    "Table ID \"{$table}\" cannot be used as the join alias: an alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens. Pass an alias for the join",
                     fn (): mixed => $database->find(self::ALIAS_ORDERS, [Query::join($table, '', [Query::on('customerId', '$id')])]),
                     $table,
                 );
                 $this->assertRejectedJoin(
-                    "Table ID \"{$table}\" cannot be used as the join alias: an alias must start with a letter or an underscore and contain only letters, digits and underscores. Pass an alias for the join",
+                    "Table ID \"{$table}\" cannot be used as the join alias: an alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens. Pass an alias for the join",
                     fn (): mixed => $database->find(self::ALIAS_ORDERS, [Query::crossJoin($table, '')]),
                     $table.' cross join',
                 );
@@ -199,9 +199,15 @@ trait JoinAliasTests
                 $this->assertSame(['first'], \array_map(static fn (Document $row): mixed => $row->getAttribute('item.label'), $rows), $table.' with an alias');
             }
 
+            $rows = $database->find(self::ALIAS_ORDERS, [
+                Query::join(self::ALIAS_HYPHEN, '', [Query::on('customerId', 'customerId')]),
+                Query::select(['total', self::ALIAS_HYPHEN.'.label']),
+            ]);
+            $this->assertSame(['first'], \array_map(static fn (Document $row): mixed => $row->getAttribute(self::ALIAS_HYPHEN.'.label'), $rows), 'a hyphenated table ID is an alias');
+
             $this->assertRejectedJoin(
-                'Join alias must start with a letter or an underscore and contain only letters, digits and underscores',
-                fn (): mixed => $database->find(self::ALIAS_ORDERS, [Query::join(self::ALIAS_CUSTOMERS, 'my-alias', [Query::on('customerId', '$id')])]),
+                'Join alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens',
+                fn (): mixed => $database->find(self::ALIAS_ORDERS, [Query::join(self::ALIAS_CUSTOMERS, 'my.alias', [Query::on('customerId', '$id')])]),
                 'an explicit alias keeps its message',
             );
         } finally {
@@ -325,7 +331,7 @@ trait JoinAliasTests
         }
 
         $this->createAliasFixtures($database);
-        $hook = new JoinTables(['customers' => self::ALIAS_CUSTOMERS, 'public-customers' => self::ALIAS_CUSTOMERS]);
+        $hook = new JoinTables(['customers' => self::ALIAS_CUSTOMERS, 'public.customers' => self::ALIAS_CUSTOMERS]);
         $database->addHook($hook);
 
         try {
@@ -339,8 +345,8 @@ trait JoinAliasTests
             $this->assertArrayNotHasKey(self::ALIAS_CUSTOMERS.'.name', $rows[0]->getArrayCopy(), 'rows are not keyed by the internal table');
 
             $this->assertRejectedJoin(
-                'Table ID "public-customers" cannot be used as the join alias: an alias must start with a letter or an underscore and contain only letters, digits and underscores. Pass an alias for the join',
-                fn (): mixed => $database->find(self::ALIAS_ORDERS, [Query::join('public-customers', '', [Query::on('customerId', '$id')])]),
+                'Table ID "public.customers" cannot be used as the join alias: an alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens. Pass an alias for the join',
+                fn (): mixed => $database->find(self::ALIAS_ORDERS, [Query::join('public.customers', '', [Query::on('customerId', '$id')])]),
             );
         } finally {
             $database->removeHook($hook);

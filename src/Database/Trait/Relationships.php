@@ -788,6 +788,14 @@ trait Relationships
         }
 
         $definition->setAttribute(self::COLLECTION_ATTRIBUTES, \array_map(static fn (Attribute $stored): Document => $stored->toDocument(), $attributes));
+
+        // The one place a relationship's key changes on either side, so the one place a grant
+        // naming it has to follow. Left alone it would name a key nothing has -- unreachable,
+        // and a grant createCollection() refuses. deleteRelationship() drops them the same way
+        // when the key goes entirely.
+        if ($attribute->key !== $key) {
+            $definition->setPermissions(Permission::renameColumn($definition->declaredPermissions() ?? [], $key, $attribute->key));
+        }
         $this->updateMetadata(
             collection: $definition,
             rollbackOperation: null,

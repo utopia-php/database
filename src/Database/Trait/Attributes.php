@@ -234,6 +234,11 @@ trait Attributes
         $this->writeAttributes($definition, $attributes);
         if ($renaming) {
             $this->writeIndexes($definition, $indexes);
+
+            // A grant names its column by key, so it follows the rename as the indexes above
+            // do. Left alone it would name a key nothing has: it would reach nothing, and the
+            // collection would hold a grant createCollection() refuses.
+            $definition->setPermissions(Permission::renameColumn($definition->declaredPermissions() ?? [], $key, $newKey));
         }
 
         if (

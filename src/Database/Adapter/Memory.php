@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -1867,7 +1868,8 @@ class Memory extends Adapter implements Feature\Relationships
             $rows = \array_slice($rows, 0, $max);
         }
 
-        $sum = 0;
+        $integers = 0;
+        $floats = 0.0;
         $isFloat = false;
         $column = $this->filter($attribute);
         foreach ($rows as $row) {
@@ -1875,13 +1877,23 @@ class Memory extends Adapter implements Feature\Relationships
             if ($value === null || ! \is_numeric($value)) {
                 continue;
             }
-            if (\is_float($value)) {
+            if (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value))) {
+                $integers = BigInt::add($integers, $value);
+            } else {
                 $isFloat = true;
+                $floats += (float) $value;
             }
-            $sum += $value;
         }
 
-        return $isFloat ? (float) $sum : (int) $sum;
+        if ($isFloat) {
+            return $floats + (float) $integers;
+        }
+
+        if (\is_string($integers)) {
+            throw new LimitException('Value out of range');
+        }
+
+        return $integers;
     }
 
     #[\Override]
@@ -1900,30 +1912,24 @@ class Memory extends Adapter implements Feature\Relationships
         $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
             && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
 
-        // MariaDB encodes the bound check as part of the WHERE clause against
-        // the current column value (`attr <= :max` / `attr >= :min`); when the
-        // bound is violated the UPDATE simply matches zero rows and the call
-        // still returns true. Mirror that — silent no-op on bound violation.
-        // The Database layer pre-subtracts $value from $max (and adds it to
-        // $min), so the comparison stays against the pre-update value.
         if ($exact) {
             $current = BigInt::toNative($current);
             $value = BigInt::toNative($value);
             if (! is_null($min) && BigInt::compare($current, $min) < 0) {
-                return true;
+                return false;
             }
             if (! is_null($max) && BigInt::compare($current, $max) > 0) {
-                return true;
+                return false;
             }
             $result = BigInt::add($current, $value);
         } else {
             $current = $this->numericValue($current, 0) ?? 0;
             $value = $this->numericValue($value, 0) ?? 0;
             if (! is_null($min) && $current < $min) {
-                return true;
+                return false;
             }
             if (! is_null($max) && $current > $max) {
-                return true;
+                return false;
             }
             $result = $current + $value;
         }
@@ -2772,11 +2778,16 @@ class Memory extends Adapter implements Feature\Relationships
      * Apply the supplied regex against $value. Pattern is the raw expression
      * — wrap it in delimiters before passing to preg_match, mirroring how
      * MariaDB's REGEXP operator accepts the pattern verbatim.
+     *
+     * @throws QueryException When the pattern does not compile
      */
     protected function matchesRegex(string $value, string $pattern): bool
     {
         $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
         $matched = @\preg_match($delimited, $value);
+        if ($matched === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+            throw new QueryException('Invalid regular expression');
+        }
 
         return $matched === 1;
     }

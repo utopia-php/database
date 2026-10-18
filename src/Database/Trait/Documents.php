@@ -72,6 +72,7 @@ use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Validator\Range;
 use WeakMap;
 
 trait Documents
@@ -85,6 +86,15 @@ trait Documents
         Method::Variance,
         Method::VarPop,
         Method::VarSamp,
+    ];
+
+    private const array UNCOMPARABLE_TYPES = [
+        ColumnType::Json,
+        ColumnType::Object,
+        ColumnType::Point,
+        ColumnType::Linestring,
+        ColumnType::Polygon,
+        ColumnType::Vector,
     ];
 
     private const string DOCUMENT_CACHE_ACTIVE_PREFIX = 'active:';
@@ -278,6 +288,60 @@ trait Documents
         }
 
         return $attribute;
+    }
+
+    /**
+     * The lower of the maximum an increase is given and the maximum the attribute's format holds it to.
+     */
+    private function tighterMaximum(int|float|string|null $max, ?Attribute $attribute): int|float|string|null
+    {
+        $limit = $this->formatRange($attribute)?->getMax();
+        if ($limit === null || (\is_float($limit) && ! \is_finite($limit))) {
+            return $max;
+        }
+
+        if ($this->isDeclaredInteger($attribute)) {
+            $limit = $this->integerBound(Rounding::Floor->round($limit), 'Max');
+
+            return $max === null || BigInt::compare($limit, $max) < 0 ? $limit : $max;
+        }
+
+        return $max === null || $limit < $this->getNativeNumber($max) ? $limit : $max;
+    }
+
+    /**
+     * The higher of the minimum a decrease is given and the minimum the attribute's format holds it to.
+     */
+    private function tighterMinimum(int|float|string|null $min, ?Attribute $attribute): int|float|string|null
+    {
+        $limit = $this->formatRange($attribute)?->getMin();
+        if ($limit === null || (\is_float($limit) && ! \is_finite($limit))) {
+            return $min;
+        }
+
+        if ($this->isDeclaredInteger($attribute)) {
+            $limit = $this->integerBound(Rounding::Ceil->round($limit), 'Min');
+
+            return $min === null || BigInt::compare($limit, $min) > 0 ? $limit : $min;
+        }
+
+        return $min === null || $limit > $this->getNativeNumber($min) ? $limit : $min;
+    }
+
+    /**
+     * The range an attribute's format holds its values to, when its format validator is a Range, as the
+     * `intRange`, `bigintRange` and `floatRange` formats Appwrite registers are.
+     */
+    private function formatRange(?Attribute $attribute): ?Range
+    {
+        $format = $attribute?->format;
+        if ($attribute === null || $format === null || ! Structure::hasFormat($format->name, $attribute->type)) {
+            return null;
+        }
+
+        $validator = Structure::getFormat($format->name, $attribute->type)['callback']($attribute->toDocument()->getArrayCopy());
+
+        return $validator instanceof Range ? $validator : null;
     }
 
     private function isDeclaredInteger(?Attribute $attribute): bool
@@ -3115,14 +3179,16 @@ trait Documents
         // The one column the counter changes, judged as any other write of it would be.
         $this->assertWritableColumns($collection, new Document([$attribute => null]));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $declared = $numericAttribute ?? $this->declaredAttribute($collection, $attribute);
 
-        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+        if ($this->isDeclaredInteger($declared)) {
             $value = Rounding::HalfAwayFromZero->round($value);
             $this->assertIntegerChange($value);
             if ($max !== null) {
                 $max = $this->integerBound(Rounding::Floor->round($max), 'Max');
             }
         }
+        $max = $this->tighterMaximum($max, $declared);
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
@@ -3175,13 +3241,14 @@ trait Documents
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
+            $storedMaximum = null;
             if ($max !== null) {
-                $max = $numericAttribute?->isInteger() === true
+                $storedMaximum = $numericAttribute?->isInteger() === true
                     ? BigInt::subtract($max, $value)
                     : $this->getNativeNumber($max) - $this->getNativeNumber($value);
             }
 
-            $this->adapter->increaseDocumentAttribute(
+            $increased = $this->adapter->increaseDocumentAttribute(
                 $collection,
                 $id,
                 $attribute,
@@ -3189,8 +3256,11 @@ trait Documents
                     ? BigInt::toNative($value)
                     : $this->getNativeNumber($value),
                 $updatedAt,
-                max: $max
+                max: $storedMaximum
             );
+            if (! $increased && $storedMaximum !== null) {
+                throw new LimitException('Attribute value exceeds maximum limit: '.$max);
+            }
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
@@ -3251,14 +3321,16 @@ trait Documents
         $this->assertWritableColumns($collection, new Document([$attribute => null]));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
+        $declared = $numericAttribute ?? $this->declaredAttribute($collection, $attribute);
 
-        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+        if ($this->isDeclaredInteger($declared)) {
             $value = Rounding::HalfAwayFromZero->round($value);
             $this->assertIntegerChange($value);
             if ($min !== null) {
                 $min = $this->integerBound(Rounding::Ceil->round($min), 'Min');
             }
         }
+        $min = $this->tighterMinimum($min, $declared);
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
@@ -3311,13 +3383,14 @@ trait Documents
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->datePreservation()->get()) ? $time : DateTime::setTimezone($updatedAt);
+            $storedMinimum = null;
             if ($min !== null) {
-                $min = $numericAttribute?->isInteger() === true
+                $storedMinimum = $numericAttribute?->isInteger() === true
                     ? BigInt::add($min, $value)
                     : $this->getNativeNumber($min) + $this->getNativeNumber($value);
             }
 
-            $this->adapter->increaseDocumentAttribute(
+            $decreased = $this->adapter->increaseDocumentAttribute(
                 $collection,
                 $id,
                 $attribute,
@@ -3325,8 +3398,11 @@ trait Documents
                     ? BigInt::negate($value)
                     : $this->getNativeNumber($value) * -1,
                 $updatedAt,
-                min: $min
+                min: $storedMinimum
             );
+            if (! $decreased && $storedMinimum !== null) {
+                throw new LimitException('Attribute value exceeds minimum limit: '.$min);
+            }
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->queueDocumentPurge($collection->getId(), $id);
@@ -4700,6 +4776,8 @@ trait Documents
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
             }
 
+            $this->assertCursorOrdersAreComparable($collection, $orderAttributes, $joinedCollections);
+
             if ($joins === [] && ! $distinct && $this->validation()->get() && $cursor->getId() === '') {
                 throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->limits()->uidLength))->getDescription());
             }
@@ -4741,7 +4819,7 @@ trait Documents
 
         $queries = $this->readQueries($collection, $parsed, $joinedByAlias, $outerJoinIds);
 
-        $selections = $this->validateSelections($collection, $selects);
+        $selections = $this->validateSelections($collection, $selects, $distinct);
 
         if ($isAggregation) {
             $nestedSelections = [];
@@ -5165,7 +5243,8 @@ trait Documents
      * @return float|int The sum of the attribute values
      *
      * @throws DatabaseException
-     * @throws LimitException When the sum overflows the range of a double
+     * @throws LimitException When the sum overflows the range of a double, or an integer sum the range of a 64-bit
+     *                         integer
      * @throws QueryException When $max is not greater than 0, the adapter cannot read the queries, or the attribute is
      *                        not a column of the grouped or distinct rows
      */
@@ -5497,15 +5576,17 @@ trait Documents
      * Run aggregation queries (count, sum, avg, min, max, groupBy) and return one row per group. An aggregate without
      * an alias comes back under `<method>_<attribute>`, or `<method>` for count('*').
      *
-     * Counts and bitwise aggregates are integers, averages, deviations and variances floats, and a sum an integer over
-     * an integer attribute and a float otherwise; min() and max() are typed as their attribute. Each group is named as
+     * Counts and bitwise aggregates are integers, a bitwise one the signed 64-bit result on every engine, averages,
+     * deviations and variances floats, and a sum an integer over an integer attribute and a float otherwise; min() and
+     * max() are typed as their attribute. Each group is named as
      * a read names its attribute, a joined one qualified by its join alias, and typed and decoded as a read returns it.
      *
      * @param  array<Query>  $queries  At least one aggregate or groupBy query
      * @return list<array<string, mixed>>
      *
      * @throws DatabaseException
-     * @throws LimitException When a sum, average, deviation or variance overflows the range of a double
+     * @throws LimitException When a sum, average, deviation or variance overflows the range of a double, or an integer
+     *                         sum the range of a 64-bit integer
      * @throws QueryException When the queries hold no aggregate or groupBy
      */
     public function aggregate(string $collection, array $queries): array
@@ -5840,6 +5921,31 @@ trait Documents
     }
 
     /**
+     * A cursor pages along the values of a read's order, which the engine compares with the cursor's: an array, object,
+     * spatial or vector attribute holds no value it can compare, so a read ordered by one cannot be paged by a cursor.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<string, Document>  $joinedCollections  The collection each join reads, by its alias
+     *
+     * @throws QueryException
+     */
+    private function assertCursorOrdersAreComparable(Document $collection, array $orderAttributes, array $joinedCollections): void
+    {
+        foreach ($orderAttributes as $order) {
+            $dot = \strpos($order, '.');
+            $alias = $dot === false ? null : \substr($order, 0, $dot);
+            $owner = $alias === null ? $collection : ($joinedCollections[$alias] ?? null);
+            $key = $alias === null ? $order : \substr($order, $dot + 1);
+
+            foreach ($owner === null ? [] : Collection::fromDocument($owner)->attributes() as $attribute) {
+                if ($attribute->key === $key && ($attribute->array || \in_array($attribute->type, self::UNCOMPARABLE_TYPES, true))) {
+                    throw new QueryException("Cannot page with a cursor along the order of '{$order}': an array, object, spatial or vector attribute has no value a cursor can compare");
+                }
+            }
+        }
+    }
+
+    /**
      * A cursor names the row it was read from by the values of the read's order, each under the name the read orders
      * by. A value it lacks is never taken from an attribute of the same name elsewhere in the document.
      *
@@ -5888,7 +5994,11 @@ trait Documents
                 continue;
             }
 
-            $related = $this->silent(fn () => $this->getCollection($relatedCollectionId));
+            $related = $this->silent(fn () => $this->findCollection($relatedCollectionId));
+            if ($related === null) {
+                continue;
+            }
+
             $validator = new SelectValidator(
                 [...$related->attributes(), ...DocumentsValidator::internalAttributes()],
                 $this->adapter->supports(Capability::DefinedAttributes),
@@ -6365,10 +6475,13 @@ trait Documents
     }
 
     /**
+     * The attributes a read returns: those its selects name and, unless it is distinct, the internal attributes every
+     * document carries. A distinct row is not a stored document, so it carries only the attributes it selects.
+     *
      * @param  array<Query>  $queries
      * @return array<string>
      */
-    private function validateSelections(Document $collection, array $queries): array
+    private function validateSelections(Document $collection, array $queries, bool $distinct = false): array
     {
         if (empty($queries)) {
             return [];
@@ -6417,6 +6530,10 @@ trait Documents
         }
 
         $selections = \array_merge($selections, $relationshipSelections);
+
+        if ($distinct) {
+            return \array_values(\array_unique($selections));
+        }
 
         $selections[] = Document::ID;
         $selections[] = Document::SEQUENCE;

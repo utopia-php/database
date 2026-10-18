@@ -8,8 +8,9 @@ use Utopia\Database\PermissionType;
 use Utopia\Query\CursorDirection;
 
 /**
- * Runs a write of the test's choosing right after a find() returns, or right before a bulk delete reaches the
- * engine, as another connection whose write lands in between would, and counts the finds and bulk deletes.
+ * Runs a write of the test's choosing right after a find() returns, or right before a bulk delete or an increase
+ * reaches the engine, as another connection whose write lands in between would, and counts the finds and bulk
+ * deletes.
  */
 trait Interleaves
 {
@@ -22,6 +23,13 @@ trait Interleaves
      * @var (Closure(Document): void)|null
      */
     public ?Closure $beforeDelete = null;
+
+    /**
+     * Runs once, before the next increase or decrease reaches the engine.
+     *
+     * @var (Closure(Document, string): void)|null
+     */
+    public ?Closure $beforeIncrease = null;
 
     public int $finds = 0;
 
@@ -51,5 +59,17 @@ trait Interleaves
         }
 
         return parent::deleteDocuments($collection, $sequences, $permissionIds);
+    }
+
+    #[\Override]
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
+    {
+        $beforeIncrease = $this->beforeIncrease;
+        $this->beforeIncrease = null;
+        if ($beforeIncrease !== null) {
+            $beforeIncrease($collection, $id);
+        }
+
+        return parent::increaseDocumentAttribute($collection, $id, $attribute, $value, $updatedAt, $min, $max);
     }
 }

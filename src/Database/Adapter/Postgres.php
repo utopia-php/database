@@ -56,6 +56,8 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
     public const int MAX_IDENTIFIER_NAME = 63;
 
+    protected const int MAX_LABEL_LENGTH = self::MAX_IDENTIFIER_NAME;
+
     protected const string MIN_DATETIME = '-4713-01-01 00:00:00';
 
     private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
@@ -1944,6 +1946,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
         if ($e->getCode() === '22003' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Numeric value out of range', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '2201B' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new QueryException('Invalid regular expression', $e->getCode(), $e);
         }
 
         if ($e->getCode() === '2201F' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {

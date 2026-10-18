@@ -106,6 +106,55 @@ final class EngineErrorMappingTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{0: Closure(PDOException): Throwable, 1: PDOException, 2: string}>
+     */
+    public static function invalidInputProvider(): iterable
+    {
+        $invalidGeometry = self::engineError('22023', 3037, 'SQLSTATE[22023]: Invalid parameter value: 3037 Invalid GIS data provided to function st_geomfromtext.');
+        yield 'MariaDB invalid geometry' => [self::mariaDB(), $invalidGeometry, 'Invalid spatial value'];
+
+        $geometries = [
+            'invalid geometry' => $invalidGeometry,
+            'longitude out of range' => self::engineError('22S02', 3616, 'SQLSTATE[22S02]: <<Unknown error>>: 3616 Longitude 999.000000 is out of range in function st_geomfromtext. It must be within (-180.000000, 180.000000].'),
+            'latitude out of range' => self::engineError('22S03', 3617, 'SQLSTATE[22S03]: <<Unknown error>>: 3617 Latitude 999.000000 is out of range in function st_geomfromtext. It must be within [-90.000000, 90.000000].'),
+        ];
+        foreach ($geometries as $name => $error) {
+            yield "MySQL {$name}" => [self::mySQL(), $error, 'Invalid spatial value'];
+        }
+
+        yield 'MariaDB invalid regular expression' => [
+            self::mariaDB(),
+            self::engineError('42000', 1139, "SQLSTATE[42000]: Syntax error or access violation: 1139 Regex error 'missing closing parenthesis at offset 2'"),
+            'Invalid regular expression',
+        ];
+        $patterns = [
+            'mismatched parenthesis' => self::engineError('HY000', 3691, 'SQLSTATE[HY000]: General error: 3691 Mismatched parenthesis in regular expression.'),
+            'unclosed bracket' => self::engineError('HY000', 3696, 'SQLSTATE[HY000]: General error: 3696 The regular expression contains an unclosed bracket expression.'),
+            'interval maximum below minimum' => self::engineError('HY000', 3693, 'SQLSTATE[HY000]: General error: 3693 The maximum is less than the minumum in a {min,max} interval.'),
+            'syntax error' => self::engineError('HY000', 3688, 'SQLSTATE[HY000]: General error: 3688 Syntax error in regular expression on line 1, character 1.'),
+            'invalid capture group name' => self::engineError('HY000', 3887, 'SQLSTATE[HY000]: General error: 3887 A capture group has an invalid name.'),
+            'error ICU only names' => self::engineError('42000', 1139, "SQLSTATE[42000]: Syntax error or access violation: 1139 Got error 'U_ILLEGAL_CHAR_FOUND' from regexp"),
+        ];
+        foreach ($patterns as $name => $error) {
+            yield "MySQL {$name}" => [self::mySQL(), $error, 'Invalid regular expression'];
+        }
+        yield 'Postgres invalid regular expression' => [
+            self::postgres(),
+            self::engineError('2201B', 7, 'SQLSTATE[2201B]: Invalid regular expression: 7 ERROR:  invalid regular expression: parentheses () not balanced'),
+            'Invalid regular expression',
+        ];
+    }
+
+    /**
+     * @param  Closure(PDOException): Throwable  $map
+     */
+    #[DataProvider('invalidInputProvider')]
+    public function testInvalidInputTheEngineRefusesIsAQueryError(Closure $map, PDOException $error, string $message): void
+    {
+        $this->assertMapped($map, $error, QueryException::class, $message);
+    }
+
+    /**
      * @return array<string, array{0: string, 1: class-string<Throwable>, 2: string}>
      */
     public static function undefinedTableProvider(): array

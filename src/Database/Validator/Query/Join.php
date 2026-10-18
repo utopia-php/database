@@ -15,7 +15,15 @@ use Utopia\Query\Query as BaseQuery;
  */
 class Join extends Base
 {
-    public const string ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
+    /**
+     * The characters of an Appwrite ID but `.`, which separates an alias from its column.
+     */
+    public const string ALIAS_PATTERN = '/^[A-Za-z0-9_][A-Za-z0-9_-]*$/';
+
+    /**
+     * PostgreSQL folds an identifier past 63 bytes, so two longer aliases could read as one.
+     */
+    public const int MAX_ALIAS_LENGTH = 63;
 
     private const array OPERATORS = ['=', '!=', '<', '>', '<=', '>=', '<>'];
 
@@ -122,22 +130,50 @@ class Join extends Base
     /**
      * Why a join alias cannot be used, or null when it can. The reserved alias is matched without
      * case: SQLite, and MySQL on case-insensitive file systems, treat `x` and `X` as one alias.
+     * A defaulted alias is the table ID the join names, so the reason says that ID cannot serve as
+     * the alias and asks for one.
      */
-    public static function describeInvalidAlias(string $alias): ?string
+    public static function describeInvalidAlias(string $alias, bool $defaulted = false): ?string
     {
         if ($alias === '') {
             return 'Join alias is required';
         }
 
         if (\preg_match(self::ALIAS_PATTERN, $alias) !== 1) {
-            return 'Join alias must start with a letter or an underscore and contain only letters, digits and underscores';
+            return $defaulted
+                ? self::describeUnusableTable($alias, 'an alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens')
+                : 'Join alias must start with a letter, a digit or an underscore and contain only letters, digits, underscores and hyphens';
+        }
+
+        if (\strlen($alias) > self::MAX_ALIAS_LENGTH) {
+            return $defaulted
+                ? self::describeUnusableTable($alias, 'an alias must be at most '.self::MAX_ALIAS_LENGTH.' characters')
+                : 'Join alias must be at most '.self::MAX_ALIAS_LENGTH.' characters';
         }
 
         if (\strcasecmp($alias, Query::DEFAULT_ALIAS) === 0) {
-            return "Join alias \"{$alias}\" is reserved for the main collection";
+            return $defaulted
+                ? self::describeUnusableTable($alias, 'it is reserved for the main collection')
+                : "Join alias \"{$alias}\" is reserved for the main collection";
         }
 
         return null;
+    }
+
+    /**
+     * Why a join alias another join of the same query set already declared cannot be used. The
+     * adapters check it, as they read `x` and `X` as one alias.
+     */
+    public static function describeDuplicateAlias(string $alias, bool $defaulted = false): string
+    {
+        return $defaulted
+            ? self::describeUnusableTable($alias, 'another join of the query already uses it as its alias')
+            : "Join alias \"{$alias}\" is declared more than once";
+    }
+
+    private static function describeUnusableTable(string $table, string $reason): string
+    {
+        return "Table ID \"{$table}\" cannot be used as the join alias: {$reason}. Pass an alias for the join";
     }
 
     /**
@@ -187,7 +223,8 @@ class Join extends Base
         }
 
         $alias = $query->getAlias();
-        $invalidAlias = self::describeInvalidAlias($alias);
+        $defaulted = $query->isAliasDefaulted();
+        $invalidAlias = self::describeInvalidAlias($alias, $defaulted);
         if ($invalidAlias !== null) {
             $this->message = $invalidAlias;
 
@@ -195,7 +232,9 @@ class Join extends Base
         }
 
         if (isset($this->relationships[$alias])) {
-            $this->message = "Join alias \"{$alias}\" is the key of the relationship attribute \"{$alias}\": give the join another alias";
+            $this->message = $defaulted
+                ? self::describeUnusableTable($alias, "it is the key of the relationship attribute \"{$alias}\"")
+                : "Join alias \"{$alias}\" is the key of the relationship attribute \"{$alias}\": give the join another alias";
 
             return false;
         }

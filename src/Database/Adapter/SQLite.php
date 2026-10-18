@@ -271,19 +271,22 @@ class SQLite extends SQL
             }
 
             if (!isset($delimitedCache[$pattern])) {
-                if (\count($delimitedCache) >= self::REGEXP_PATTERN_CACHE_LIMIT) {
-                    \array_shift($delimitedCache);
-                }
                 // Use a delimiter unlikely to appear in user input (chr(1))
                 // so we don't have to escape forward-slashes the user wrote
                 // intentionally and risk double-escaping backslashes.
-                $delimitedCache[$pattern] = "\x01" . $pattern . "\x01u";
+                $delimited = "\x01" . $pattern . "\x01u";
+                if (@\preg_match($delimited, '') === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+                    throw new QueryException('Invalid regular expression');
+                }
+                if (\count($delimitedCache) >= self::REGEXP_PATTERN_CACHE_LIMIT) {
+                    \array_shift($delimitedCache);
+                }
+                $delimitedCache[$pattern] = $delimited;
             }
             $delimited = $delimitedCache[$pattern];
 
-            // preg_match returns false on bad pattern / runtime error
-            // (e.g. PREG_BACKTRACK_LIMIT_ERROR). Silently treat those as
-            // no-match — REGEXP is a query predicate, not a validator.
+            // preg_match returns false on a runtime error such as
+            // PREG_BACKTRACK_LIMIT_ERROR, which reads as no match.
             $result = @\preg_match($delimited, $value);
 
             return $result === 1 ? 1 : 0;
@@ -1715,6 +1718,10 @@ class SQLite extends SQL
             return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'integer overflow') !== false) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
         // Duplicate - SQLite uses various error codes for constraint violations:
         // - Error code 19 is SQLITE_CONSTRAINT (includes UNIQUE violations)
         // - Error code 1 is also used for some duplicate cases
@@ -1798,7 +1805,7 @@ class SQLite extends SQL
                 if (in_array($filterType, $comparisonTypes)) {
                     $bindKey = "op_{$bindIndex}";
                     $value = (is_bool($filterValue)) ? (int) $filterValue : $filterValue;
-                    $statement->bindValue(":{$bindKey}", $value, $this->getPdoType($value));
+                    $this->bind($statement, ":{$bindKey}", $value);
                     $bindIndex++;
                 }
             }
@@ -2401,7 +2408,7 @@ class SQLite extends SQL
         );
 
         foreach ($bindValues as $key => $binding) {
-            $statement->bindValue($key, $binding, $this->getPdoType($binding));
+            $this->bind($statement, $key, $binding);
         }
 
         $opIndexForBinding = 0;

@@ -52,7 +52,11 @@ readonly class Filter implements FilterHook, JoinFilter
         protected string $quoteCharacter = '`',
         protected bool $semiJoin = true,
     ) {
-        foreach ([$documentColumn, $permissionDocumentColumn, $permissionRoleColumn, $permissionTypeColumn, $scopeColumn] as $column) {
+        if (! \preg_match(self::QUOTED_IDENTIFIER_PATTERN, $documentColumn)) {
+            throw new InvalidArgumentException('Invalid column name: '.$documentColumn);
+        }
+
+        foreach ([$permissionDocumentColumn, $permissionRoleColumn, $permissionTypeColumn, $scopeColumn] as $column) {
             if (! \preg_match(self::IDENTIFIER_PATTERN, $column)) {
                 throw new InvalidArgumentException('Invalid column name: '.$column);
             }

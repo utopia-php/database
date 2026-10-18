@@ -302,7 +302,7 @@ trait IndexTests
             $database->createIndex(__FUNCTION__, Index::key(key: 'index1', attributes: ['title1', 'title2'], lengths: [701, 50]));
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
-            $this->assertEquals('Index length 701 is larger than the size for title1: 700"', $e->getMessage());
+            $this->assertEquals('Index length 701 is larger than the size for title1: 700', $e->getMessage());
         }
 
         $database->deleteCollection(__FUNCTION__);
@@ -681,7 +681,7 @@ trait IndexTests
         $validator = $this->indexValidator($attributes, $indexes);
 
         if ($adapter->supports(Capability::IndexIdentical)) {
-            $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
+            $errorMessage = 'Index length 701 is larger than the size for title1: 700';
             $this->assertFalse($validator->isValid($indexes[0]));
             $this->assertSame($errorMessage, $validator->getDescription());
 

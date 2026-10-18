@@ -54,16 +54,40 @@ final class JoinAliasTest extends TestCase
         ]));
     }
 
-    public function testAJoinWithoutAnAliasIsRejectedWithoutQueryValidation(): void
+    public function testAJoinWithoutAnAliasIsReadUnderItsCollection(): void
     {
         $database = $this->database();
 
-        $this->expectException(QueryException::class);
-        $this->expectExceptionMessage('Join alias is required');
+        foreach ([
+            'factory' => Query::join('b', '', [Query::on('$id', 'mainId')]),
+            'constructor' => new Query(Method::Join, 'b', [Query::on('$id', 'mainId')]),
+            'parsed' => Query::parseQuery(['method' => 'join', 'attribute' => 'b', 'values' => ['$id', '=', 'mainId']]),
+        ] as $case => $join) {
+            $rows = $database->find('main', [$join, Query::select(['name', 'b.score'])]);
+            $this->assertCount(1, $rows, $case);
+            $this->assertSame(1, $rows[0]->getAttribute('b.score'), $case);
 
-        $database->skipValidation(fn (): array => $database->find('main', [
-            new Query(Method::Join, 'b', [Query::on('$id', 'mainId')], ''),
-        ]));
+            $rows = $database->skipValidation(fn (): array => $database->find('main', [$join, Query::select(['name', 'b.score'])]));
+            $this->assertSame(1, $rows[0]->getAttribute('b.score'), $case.' without query validation');
+        }
+    }
+
+    public function testJoiningACollectionTwiceWithoutAliasesNamesTheCollection(): void
+    {
+        $database = $this->database();
+        $joins = [
+            Query::join('b', '', [Query::on('$id', 'mainId')]),
+            Query::leftJoin('b', '', [Query::on('$id', 'mainId')]),
+        ];
+
+        foreach (['with query validation' => fn (): array => $database->find('main', $joins), 'without query validation' => fn (): array => $database->skipValidation(fn (): array => $database->find('main', $joins))] as $case => $read) {
+            try {
+                $read();
+                $this->fail($case.': the joins ran');
+            } catch (QueryException $error) {
+                $this->assertSame('Table ID "b" cannot be used as the join alias: another join of the query already uses it as its alias. Pass an alias for the join', $error->getMessage(), $case);
+            }
+        }
     }
 
     /**
@@ -142,7 +166,18 @@ final class JoinAliasTest extends TestCase
             Query::crossJoin('c', 'x'),
         ]];
         yield 'an alias that is not an identifier' => [[
-            Query::join('b', 'my-alias', [Query::on('$id', 'mainId')]),
+            Query::join('b', '-alias', [Query::on('$id', 'mainId')]),
+        ]];
+        yield 'an alias with a dot' => [[
+            Query::join('b', 'my.alias', [Query::on('$id', 'mainId')]),
+        ]];
+        yield 'a collection joined twice without aliases' => [[
+            Query::join('b', '', [Query::on('$id', 'mainId')]),
+            Query::crossJoin('b', ''),
+        ]];
+        yield 'a join without an alias that repeats an earlier alias' => [[
+            Query::join('c', 'b', [Query::on('$id', 'mainId')]),
+            Query::join('b', '', [Query::on('$id', 'mainId')]),
         ]];
         yield 'a nested join alias that repeats an earlier one' => [[
             Query::join('b', 'x', [Query::on('$id', 'mainId')]),

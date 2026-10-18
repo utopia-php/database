@@ -1536,22 +1536,31 @@ class Redis extends Adapter implements
                 $documents = \array_slice($documents, 0, $max);
             }
 
-            $sum = 0;
+            $integers = 0;
+            $floats = 0.0;
             $isFloat = false;
             foreach ($documents as $document) {
                 $value = $this->resolveDocumentAttribute($document, $attribute);
-                if ($value === null) {
+                if ($value === null || ! \is_numeric($value)) {
                     continue;
                 }
-                if (\is_float($value)) {
+                if (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value))) {
+                    $integers = BigInt::add($integers, $value);
+                } else {
                     $isFloat = true;
-                }
-                if (\is_numeric($value)) {
-                    $sum += $value;
+                    $floats += (float) $value;
                 }
             }
 
-            return $isFloat ? (float) $sum : (int) $sum;
+            if ($isFloat) {
+                return $floats + (float) $integers;
+            }
+
+            if (\is_string($integers)) {
+                throw new LimitException('Value out of range');
+            }
+
+            return $integers;
         });
     }
 
@@ -1609,20 +1618,20 @@ class Redis extends Adapter implements
                 $current = BigInt::toNative($current);
                 $value = BigInt::toNative($value);
                 if (! \is_null($min) && BigInt::compare($current, $min) < 0) {
-                    return true;
+                    return false;
                 }
                 if (! \is_null($max) && BigInt::compare($current, $max) > 0) {
-                    return true;
+                    return false;
                 }
                 $result = BigInt::add($current, $value);
             } else {
                 $current = $this->numericOr($current, 0);
                 $value = $this->numericOr($value, 0);
                 if (! \is_null($min) && $current < $min) {
-                    return true;
+                    return false;
                 }
                 if (! \is_null($max) && $current > $max) {
-                    return true;
+                    return false;
                 }
                 $result = $current + $value;
             }
@@ -3100,8 +3109,12 @@ class Redis extends Adapter implements
                 }
                 $pattern = $this->stringOrEmpty($values[0] ?? '');
                 $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
+                $matched = @\preg_match($delimited, $value);
+                if ($matched === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+                    throw new QueryException('Invalid regular expression');
+                }
 
-                return @\preg_match($delimited, $value) === 1;
+                return $matched === 1;
         }
 
         throw new QueryException('Query method not supported by Redis adapter: '.$method->value);

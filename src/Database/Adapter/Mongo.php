@@ -2365,17 +2365,15 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         ]]];
 
         try {
-            $this->updateWithPipeline(
+            return $this->updateWithPipeline(
                 $this->getNamespace().'_'.$this->filter($collectionId),
                 $filters,
                 $pipeline,
                 $this->getTransactionOptions(),
-            );
+            ) > 0;
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
-
-        return true;
     }
 
     private function normalizeAtomicNumber(int|float|string $value, string $name): int|float
@@ -2748,6 +2746,9 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             }
             /** @var mixed $sumTotal */
             $sumTotal = $sumFirstResult->total;
+            if (\is_float($sumTotal) && $this->sumsIntegers($collection, $attribute)) {
+                throw new LimitException('Value out of range');
+            }
             if (\is_int($sumTotal) || \is_float($sumTotal)) {
                 return $sumTotal;
             }
@@ -2756,6 +2757,21 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * MongoDB sums integers into a long, and into a double only when the sum does not fit one.
+     */
+    private function sumsIntegers(Document $collection, string $attribute): bool
+    {
+        $definitions = $collection->getAttribute('attributes', []);
+        foreach (\is_array($definitions) ? $definitions : [] as $definition) {
+            if ($definition instanceof Document && $definition->getId() === $attribute) {
+                return \in_array($definition->getAttribute('type'), [Attribute::storedType(ColumnType::Integer), Attribute::storedType(ColumnType::BigInteger)], true);
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -3867,6 +3883,10 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         if ($e->getCode() === 14) {
             return new TypeException('Invalid operation', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 51091) {
+            return new QueryException('Invalid regular expression', $e->getCode(), $e);
         }
 
         if ($e->getCode() === 28764) {

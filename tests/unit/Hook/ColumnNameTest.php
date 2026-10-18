@@ -130,6 +130,31 @@ final class ColumnNameTest extends TestCase
         $this->assertSame(['any', 'users', 'read', 'title', 'body'], $condition->bindings);
     }
 
+    /**
+     * The document column is quoted, so it may be a join alias shaped like an Appwrite ID.
+     */
+    public function testPermissionFilterQuotesADocumentColumnUnderAnAppwriteIdAlias(): void
+    {
+        $permissionsTable = static fn (string $table): string => $table.'_perms';
+
+        foreach (['6ad1e9ed691819ab52ee' => '`6ad1e9ed691819ab52ee`.`_uid`', 'order-items' => '`order-items`.`_uid`'] as $alias => $quoted) {
+            $condition = (new Filter(['any'], $permissionsTable, documentColumn: $alias.'._uid'))->filter('posts');
+
+            $this->assertStringStartsWith($quoted.' IN (SELECT ', $condition->expression, $alias);
+        }
+
+        $postgres = (new Filter(['any'], $permissionsTable, documentColumn: '6ad1e9ed691819ab52ee._uid', quoteCharacter: '"'))->filter('posts');
+        $this->assertStringStartsWith('"6ad1e9ed691819ab52ee"."_uid" IN (SELECT ', $postgres->expression);
+    }
+
+    public function testPermissionFilterKeepsUnquotedColumnsToPlainIdentifiers(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid column name: 1document');
+
+        new Filter(['any'], static fn (string $table): string => $table.'_perms', permissionDocumentColumn: '1document');
+    }
+
     public function testWrapAcceptsADigitOrHyphenLeadingColumnAndQuotesIt(): void
     {
         $this->assertSame('(x = 1 OR `1db`.`_uid` IS NULL)', AllowNull::wrap(new Condition('x = 1'), '1db._uid')->expression);

@@ -130,12 +130,61 @@ final class QuerySerializationTest extends TestCase
         );
     }
 
-    public function testParsedJoinWithoutAnAliasIsAQueryException(): void
+    /**
+     * @return iterable<string, array{array<string, mixed>, Method}>
+     */
+    public static function joinsWithoutAlias(): iterable
+    {
+        $on = ['method' => 'on', 'values' => ['$id', '=', 'user']];
+
+        yield 'the nested ON form' => [['method' => 'join', 'attribute' => 'orders', 'values' => [$on]], Method::Join];
+        yield 'an empty alias property' => [['method' => 'leftJoin', 'attribute' => 'orders', 'alias' => '', 'values' => [$on]], Method::LeftJoin];
+        yield 'an empty legacy alias first' => [['method' => 'join', 'attribute' => 'orders', 'values' => ['', $on]], Method::Join];
+        yield 'the column form' => [['method' => 'join', 'attribute' => 'orders', 'values' => ['$id', '=', 'user']], Method::Join];
+        yield 'a cross join' => [['method' => 'crossJoin', 'attribute' => 'orders', 'values' => []], Method::CrossJoin];
+    }
+
+    /**
+     * @param  array<string, mixed>  $array
+     */
+    #[DataProvider('joinsWithoutAlias')]
+    public function testParsedJoinWithoutAnAliasIsReadUnderItsCollection(array $array, Method $method): void
+    {
+        $parsed = Query::parseQuery($array);
+
+        $this->assertSame($method, $parsed->getMethod());
+        $this->assertSame('orders', $parsed->getAlias());
+        $this->assertTrue($parsed->isAliasDefaulted());
+
+        $serialized = $parsed->toArray();
+        $this->assertSame('orders', $serialized['alias']);
+        $this->assertSame($serialized, Query::parseQuery($serialized)->toArray());
+        $this->assertTrue(Query::parse($parsed->toString())->isAliasDefaulted());
+    }
+
+    public function testAJoinBuiltWithoutAnAliasIsReadUnderItsCollection(): void
+    {
+        $join = new Query(Method::Join, 'orders', [Query::on('$id', 'user')]);
+
+        $this->assertSame('orders', $join->getAlias());
+        $this->assertTrue($join->isAliasDefaulted());
+        $this->assertFalse(Query::join('orders', 'ord', [Query::on('$id', 'ord.user')])->isAliasDefaulted());
+    }
+
+    public function testADefaultedAliasSurvivesRenamingTheJoinedCollection(): void
+    {
+        $renamed = (clone Query::join('orders', '', [Query::on('$id', 'user')]))->setAttribute('database_1_collection_2');
+
+        $this->assertSame('orders', $renamed->getAlias());
+        $this->assertTrue($renamed->isAliasDefaulted());
+    }
+
+    public function testParsedJoinWithoutAnAliasOrCollectionIsAQueryException(): void
     {
         $this->expectException(QueryException::class);
-        $this->expectExceptionMessage('Join alias is required: join orders');
+        $this->expectExceptionMessage('Join alias is required: join ');
 
-        Query::parseQuery(['method' => 'join', 'attribute' => 'orders', 'values' => [['method' => 'on', 'values' => ['$id', '=', 'user']]]]);
+        Query::parseQuery(['method' => 'join', 'values' => [['method' => 'on', 'values' => ['$id', '=', 'user']]]]);
     }
 
     /**

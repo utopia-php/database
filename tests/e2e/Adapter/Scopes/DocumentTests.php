@@ -9,9 +9,10 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
@@ -36,9 +37,11 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Filter;
+use Utopia\Database\Format;
 use Utopia\Database\Id;
 use Utopia\Database\Index;
 use Utopia\Database\IntegerWidth;
+use Utopia\Database\Operator;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
@@ -46,14 +49,22 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 use Utopia\Database\SetType;
+use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Validator\Range;
 
 trait DocumentTests
 {
+    private const string COUNTER_INTEGER_RANGE = 'counterIntegerRange';
+
+    private const string COUNTER_BIG_INTEGER_RANGE = 'counterBigIntegerRange';
+
+    private const string COUNTER_DOUBLE_RANGE = 'counterDoubleRange';
+
     private static string $moviesCollection = '';
 
     private static string $documentsCollection = '';
@@ -1609,6 +1620,143 @@ trait DocumentTests
         $this->assertEquals('Works', $document->getAttribute('with-dash'));
     }
 
+    /**
+     * A query parsed from JSON takes an object for its values as readily as a list. Filter read such values by
+     * position and raised "Undefined array key 0" before refusing them. Every adapter refuses them as an invalid
+     * query, for find() and count(), without a warning.
+     */
+    public function testFilterValuesThatAreNotAListAreAnInvalidQuery(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $spatial = $adapter->hasFeature(Feature\Spatial::class);
+        $vectors = $adapter->supports(Capability::Vectors);
+        $collection = 'object_values_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 20),
+                Attribute::string(key: 'tags', size: 20, array: true),
+                Attribute::integer(key: 'rank'),
+                ...($spatial ? [Attribute::point(key: 'location')] : []),
+                ...($vectors ? [Attribute::vector(key: 'embedding', dimensions: 2)] : []),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createDocument($collection, new Document([
+            'name' => 'a',
+            'tags' => ['a'],
+            'rank' => 1,
+            ...($spatial ? ['location' => [1.0, 2.0]] : []),
+            ...($vectors ? ['embedding' => [1.0, 0.0]] : []),
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $queries = [
+            '{"method":"equal","attribute":"name","values":{"value":"a"}}',
+            '{"method":"equal","attribute":"name","values":{"1":"a"}}',
+            '{"method":"notEqual","attribute":"name","values":{"value":"a"}}',
+            '{"method":"contains","attribute":"tags","values":{"tag":"a"}}',
+            '{"method":"lessThan","attribute":"rank","values":{"bound":5}}',
+            '{"method":"between","attribute":"rank","values":{"from":0,"to":5}}',
+            '{"method":"startsWith","attribute":"name","values":{"prefix":"a"}}',
+            '{"method":"exists","attribute":"","values":{"attribute":"name"}}',
+        ];
+        if ($spatial) {
+            $queries[] = '{"method":"intersects","attribute":"location","values":{"type":"Point","coordinates":[1,2]}}';
+            $queries[] = '{"method":"distanceLessThan","attribute":"location","values":{"geometry":[[1,2],10,false]}}';
+            $queries[] = '{"method":"distanceLessThan","attribute":"location","values":[{"geometry":[1,2],"distance":10,"meters":false}]}';
+        }
+        if ($vectors) {
+            $queries[] = '{"method":"vectorDot","attribute":"embedding","values":{"vector":[1,0]}}';
+        }
+
+        foreach ($queries as $json) {
+            $query = Query::parse($json);
+            foreach (['find' => fn () => $database->find($collection, [$query]), 'count' => fn () => $database->count($collection, [$query])] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail("{$read}() refuses {$json}");
+                } catch (QueryException $e) {
+                    $this->assertStringStartsWith('Invalid query: ', $e->getMessage(), "{$read}() of {$json}");
+                }
+            }
+        }
+
+        $this->assertCount(1, $database->find($collection, [Query::parse('{"method":"equal","attribute":"name","values":["a"]}')]));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * A cursor on a read ordered by an array or spatial attribute reached the engine: the array cursor value failed
+     * Query::greaterThan() with a TypeError and MySQL refused a geometry comparison with error 1210, both server
+     * errors. Such an order has no value a cursor can compare, so the cursor is refused as an invalid query on every
+     * adapter, while the same order without a cursor, and a cursor along a scalar order, keep working.
+     */
+    public function testCursorAlongAnOrderWithoutComparableValuesIsAnInvalidQuery(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $spatial = $adapter->hasFeature(Feature\Spatial::class);
+        $objects = $adapter->supports(Capability::Objects);
+        $vectors = $adapter->supports(Capability::Vectors);
+        $collection = 'cursor_orders_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::integer(key: 'n', required: true),
+                Attribute::string(key: 'sa', size: 20, array: true),
+                Attribute::integer(key: 'ia', array: true),
+                ...($spatial ? [Attribute::point(key: 'pt'), Attribute::lineString(key: 'ln')] : []),
+                ...($objects ? [Attribute::object(key: 'obj')] : []),
+                ...($vectors ? [Attribute::vector(key: 'vec', dimensions: 2)] : []),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([1, 2, 3] as $n) {
+            $database->createDocument($collection, new Document([
+                '$id' => 'row'.$n,
+                'n' => $n,
+                'sa' => ['s'.$n],
+                'ia' => [$n],
+                ...($spatial ? ['pt' => [(float) $n, (float) $n], 'ln' => [[0.0, 0.0], [(float) $n, (float) $n]]] : []),
+                ...($objects ? ['obj' => ['n' => $n]] : []),
+                ...($vectors ? ['vec' => [(float) $n, 1.0]] : []),
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $cursor = $database->getDocument($collection, 'row1');
+        $orders = ['sa', 'ia', ...($spatial ? ['pt', 'ln'] : []), ...($objects ? ['obj'] : []), ...($vectors ? ['vec'] : [])];
+        foreach ($orders as $order) {
+            $pages = [
+                'asc after' => [Query::orderAsc($order), Query::cursorAfter($cursor)],
+                'desc after' => [Query::orderDesc($order), Query::cursorAfter($cursor)],
+                'asc before' => [Query::orderAsc($order), Query::cursorBefore($cursor)],
+                'behind a scalar order' => [Query::orderAsc('n'), Query::orderAsc($order), Query::cursorAfter($cursor)],
+            ];
+            foreach ($pages as $case => $queries) {
+                try {
+                    $database->find($collection, $queries);
+                    $this->fail("A cursor along {$order}, {$case}, is refused");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(QueryException::class, $exception, "{$order}, {$case}: ".$exception::class.': '.$exception->getMessage());
+                    $this->assertSame("Cannot page with a cursor along the order of '{$order}': an array, object, spatial or vector attribute has no value a cursor can compare", $exception->getMessage());
+                }
+            }
+
+            if ($order !== 'vec') {
+                $this->assertCount(3, $database->find($collection, [Query::orderAsc($order)]), "an order by {$order} without a cursor");
+            }
+        }
+
+        $next = $database->find($collection, [Query::orderAsc('n'), Query::cursorAfter($cursor)]);
+        $this->assertSame(['row2', 'row3'], \array_map(static fn (Document $document): string => $document->getId(), $next));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testFind(): void
     {
         $this->initMoviesFixture();
@@ -2101,18 +2249,6 @@ trait DocumentTests
         }
 
         return $collection;
-    }
-
-    private function engineFamily(Database $database): ?string
-    {
-        $adapter = $database->getAdapter();
-
-        return match (true) {
-            $adapter instanceof MariaDB => 'mariadb',
-            $adapter instanceof Postgres => 'postgres',
-            $adapter instanceof Mongo => 'mongo',
-            default => null,
-        };
     }
 
     /**
@@ -2726,52 +2862,250 @@ trait DocumentTests
         }
     }
 
-    public function testFloatsAreStoredAs7xBoundThem(): void
+    public function testAFloatFilterMatchesTheSameRowsInFindCountSumAndDelete(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $family = $this->engineFamily($database);
-        if ($family === null) {
-            $this->expectNotToPerformAssertions();
 
-            return;
+        $collection = $this->createFloatCollection($database, 'float_filters');
+        $documents = [];
+        foreach (['sum' => [0.1 + 0.2, 20], 'zero' => [0.0, 20], 'denormal' => [5e-324, 10]] as $name => [$value, $rows]) {
+            for ($i = 0; $i < $rows; $i++) {
+                $documents[] = new Document(['$id' => $name.$i, 'f' => $value]);
+            }
+        }
+        $database->createDocuments($collection, $documents);
+
+        $filters = [
+            'equal sum' => [[Query::equal('f', [0.1 + 0.2])], 20],
+            'equal denormal' => [[Query::equal('f', [5e-324])], 10],
+            'equal zero' => [[Query::equal('f', [0.0])], 20],
+            'not equal denormal' => [[Query::notEqual('f', 5e-324)], 40],
+            'above the short decimal' => [[Query::greaterThan('f', 0.3)], 20],
+            'below the long decimal' => [[Query::lessThan('f', 0.1 + 0.2)], 30],
+            'between zero and a denormal' => [[Query::greaterThan('f', 0.0), Query::lessThanEqual('f', 5e-324)], 10],
+            'between the decimals' => [[Query::between('f', 0.3, 0.1 + 0.2)], 20],
+        ];
+        foreach ($filters as $name => [$queries, $rows]) {
+            $this->assertCount($rows, $database->find($collection, [...$queries, Query::limit(100)]), 'find '.$name);
+            $this->assertSame($rows, $database->count($collection, $queries), 'count '.$name);
         }
 
-        $collection = 'float_binding';
+        $this->assertEqualsWithDelta(20 * (0.1 + 0.2), $database->sum($collection, 'f', [Query::equal('f', [0.1 + 0.2])]), 1e-12);
+        $this->assertSame(5e-324 * 10, $database->sum($collection, 'f', [Query::equal('f', [5e-324])]));
+
+        $this->assertSame(10, $database->deleteDocuments($collection, [Query::equal('f', [5e-324])]));
+        $this->assertSame(20, $database->count($collection, [Query::equal('f', [0.0])]));
+        $this->assertSame(20, $database->count($collection, [Query::equal('f', [0.1 + 0.2])]));
+        $this->assertSame(40, $database->count($collection));
+    }
+
+    public function testACursorAlongAFloatOrderVisitsEveryRowOnce(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $this->createFloatCollection($database, 'float_cursor');
+        $values = [-5e-324, 0.0, 5e-324, 1e-300, 0.3, 0.1 + 0.2, M_PI];
+        $documents = [];
+        foreach ($values as $rank => $value) {
+            for ($copy = 0; $copy < 3; $copy++) {
+                $documents[] = new Document(['$id' => 'r'.$rank.'c'.$copy, 'f' => $value]);
+            }
+        }
+        $database->createDocuments($collection, $documents);
+
+        foreach ([1, 2, 4] as $pageSize) {
+            foreach ([OrderDirection::Asc, OrderDirection::Desc] as $direction) {
+                $order = $direction === OrderDirection::Asc ? Query::orderAsc('f') : Query::orderDesc('f');
+                $visited = [];
+                $cursor = null;
+                for ($page = 0; $page <= \count($documents); $page++) {
+                    $queries = [$order, Query::limit($pageSize)];
+                    if ($cursor !== null) {
+                        $queries[] = Query::cursorAfter($cursor);
+                    }
+                    $rows = $database->find($collection, $queries);
+                    if ($rows === []) {
+                        break;
+                    }
+                    foreach ($rows as $row) {
+                        $visited[] = $row->getId();
+                    }
+                    $cursor = \end($rows);
+                }
+
+                $label = $direction->value.' by '.$pageSize;
+                $this->assertSame(\count($documents), \count($visited), $label.' visits every row once');
+                $this->assertSame(\count($visited), \count(\array_unique($visited)), $label.' repeats no row');
+                $ranks = \array_map(static fn (string $id): int => (int) \substr($id, 1, \strpos($id, 'c') - 1), $visited);
+                $sorted = $ranks;
+                $direction === OrderDirection::Asc ? \sort($sorted) : \rsort($sorted);
+                $this->assertSame($sorted, $ranks, $label.' follows the order');
+            }
+        }
+    }
+
+    public function testFloatsKeepEveryDigit(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $this->createFloatCollection($database, 'float_digits');
+        $database->createAttribute($collection, Attribute::double(key: 'fa', array: true));
+
+        $values = [
+            'sum' => 0.1 + 0.2,
+            'pi' => M_PI,
+            'seventeen' => 123456789.12345679,
+            'small' => 1.2345678901234567e-10,
+            'tiny' => 1e-300,
+            'normal' => 2.2250738585072014e-308,
+            'denormal' => 5e-324,
+            'negative denormal' => -5e-324,
+            'negative' => -2.5e-20,
+            'avogadro' => 6.02214076e23,
+            'max' => 1.7976931348623157e308,
+            'min' => -1.7976931348623157e308,
+        ];
+        foreach ($values as $id => $value) {
+            $database->createDocument($collection, new Document(['$id' => \str_replace(' ', '_', $id), 'f' => $value, 'fa' => [$value, -$value]]));
+        }
+
+        foreach ($values as $id => $value) {
+            $id = \str_replace(' ', '_', $id);
+            $document = $database->getDocument($collection, $id);
+            $this->assertSame($value, $document->getAttribute('f'), $id.' read');
+            if ($this->parsesJsonNumbersToWithinAnUlp($database)) {
+                $this->assertEqualsWithDelta([$value, -$value], $document->getAttribute('fa'), \abs($value) * PHP_FLOAT_EPSILON, $id.' array read');
+            } else {
+                $this->assertSame([$value, -$value], $document->getAttribute('fa'), $id.' array read');
+            }
+            $this->assertSame([$id], $this->floatIds($database, $collection, [Query::equal('f', [$value])]), $id.' equal');
+        }
+
+        $database->updateDocument($collection, 'tiny', new Document(['f' => 0.1 + 0.2]));
+        $this->assertStoredFloat($database, $collection, 'tiny', 0.1 + 0.2);
+
+        $database->updateDocuments($collection, new Document(['f' => M_PI]), [Query::equal('f', [5e-324])]);
+        $this->assertStoredFloat($database, $collection, 'denormal', M_PI);
+
+        $database->createDocuments($collection, [new Document(['$id' => 'bulk', 'f' => 123456789.12345679])]);
+        $this->assertStoredFloat($database, $collection, 'bulk', 123456789.12345679);
+
+        $database->increaseDocumentAttribute($collection, 'avogadro', 'f', 0.1);
+        $this->assertStoredFloat($database, $collection, 'avogadro', 6.02214076e23 + 0.1);
+
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'f' => 0.0]));
+        $database->increaseDocumentAttribute($collection, 'counter', 'f', 0.1 + 0.2);
+        $this->assertStoredFloat($database, $collection, 'counter', 0.1 + 0.2);
+        $database->decreaseDocumentAttribute($collection, 'counter', 'f', 5e-324);
+        $this->assertStoredFloat($database, $collection, 'counter', (0.1 + 0.2) - 5e-324);
+
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $database->upsertDocuments($collection, [new Document(['$id' => 'bulk', 'f' => 5e-324])]);
+            $this->assertStoredFloat($database, $collection, 'bulk', 5e-324);
+        }
+
+        if ($database->getAdapter()->supports(Capability::Operators)) {
+            $database->updateDocument($collection, 'pi', new Document(['f' => Operator::increment(5e-324)]));
+            $this->assertStoredFloat($database, $collection, 'pi', M_PI + 5e-324);
+            $database->updateDocument($collection, 'small', new Document(['f' => Operator::multiply(0.1 + 0.2)]));
+            $this->assertStoredFloat($database, $collection, 'small', 1.2345678901234567e-10 * (0.1 + 0.2));
+        }
+    }
+
+    public function testANonFiniteFloatIsRefused(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $this->createFloatCollection($database, 'float_non_finite');
+        $database->createDocument($collection, new Document(['$id' => 'zero', 'f' => 0.0]));
+
+        $nonFinite = ['infinity' => INF, 'negative infinity' => -INF, 'overflow' => \json_decode('1e400'), 'not a number' => NAN];
+        foreach ($nonFinite as $name => $value) {
+            foreach ([
+                'find equal' => fn () => $database->find($collection, [Query::equal('f', [$value])]),
+                'find less than' => fn () => $database->find($collection, [Query::lessThan('f', $value)]),
+                'count between' => fn () => $database->count($collection, [Query::between('f', 0, $value)]),
+                'sum greater than' => fn () => $database->sum($collection, 'f', [Query::greaterThan('f', $value)]),
+                'delete not equal' => fn () => $database->deleteDocuments($collection, [Query::notEqual('f', $value)]),
+            ] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail($read.' on '.$name.' was accepted');
+                } catch (QueryException) {
+                }
+            }
+
+            foreach ([
+                'create' => fn () => $database->createDocument($collection, new Document(['f' => $value])),
+                'update' => fn () => $database->updateDocument($collection, 'zero', new Document(['f' => $value])),
+            ] as $write => $call) {
+                try {
+                    $call();
+                    $this->fail($write.' of '.$name.' was accepted');
+                } catch (StructureException) {
+                }
+            }
+        }
+
+        $this->assertSame(1, $database->count($collection));
+        $this->assertSame(0.0, $database->getDocument($collection, 'zero')->getAttribute('f'));
+    }
+
+    private function createFloatCollection(Database $database, string $collection): string
+    {
         $database->createCollection(Collection::create(id: $collection, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
+            Permission::delete(Role::any()),
         ], documentSecurity: false));
         $database->createAttribute($collection, Attribute::double(key: 'f'));
-        $database->createAttribute($collection, Attribute::double(key: 'fa', array: true));
 
-        $values = [
-            'tiny' => [1e-300, 1e-300],
-            'negative' => [-2.5e-20, -2.5e-20],
-            'digits' => [1.2345678901234567e-10, $family === 'mongo' ? 1.2345678901234567e-10 : 1.2345678901235e-10],
-            'avogadro' => [6.02214076e23, 6.02214076e23],
-            'sum' => [0.1 + 0.2, $family === 'mongo' ? 0.1 + 0.2 : 0.3],
-            'max' => [1.7976931348623157e308, $family === 'mongo' ? 1.7976931348623157e308 : 1.7976931348623e308],
-        ];
-        foreach ($values as $id => [$written]) {
-            $database->createDocument($collection, new Document(['$id' => $id, 'f' => $written, 'fa' => [$written]]));
+        return $collection;
+    }
+
+    /**
+     * MySQL, pooled or not, parses a number in a JSON column only to within one unit in the last place.
+     */
+    private function parsesJsonNumbersToWithinAnUlp(Database $database): bool
+    {
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof MySQL) {
+            return true;
+        }
+        if (! $adapter instanceof Pool) {
+            return false;
         }
 
-        foreach ($values as $id => [$written, $stored]) {
-            $document = $database->getDocument($collection, $id);
-            $this->assertSame($stored, $document->getAttribute('f'), $id);
-            $this->assertSame([$written], $document->getAttribute('fa'), $id);
+        $driver = $adapter->getDriver();
+        if (! $driver instanceof PDO && ! $driver instanceof DatabasePDO) {
+            return false;
         }
+        $version = $driver->getAttribute(PDO::ATTR_SERVER_VERSION);
 
-        $database->updateDocument($collection, 'tiny', new Document(['f' => -1e-300]));
-        $this->assertSame(-1e-300, $database->getDocument($collection, 'tiny')->getAttribute('f'));
+        return $driver->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' && \is_string($version) && ! \str_contains($version, 'MariaDB');
+    }
 
-        $small = \array_map(
-            static fn (Document $document): string => $document->getId(),
-            $database->find($collection, [Query::lessThan('f', 1e-5), Query::greaterThan('f', -1), Query::orderAsc('$id')]),
-        );
-        $this->assertSame(['digits', 'negative', 'tiny'], $small);
+    private function assertStoredFloat(Database $database, string $collection, string $id, float $value): void
+    {
+        $this->assertSame($value, $database->getDocument($collection, $id)->getAttribute('f'), $id.' read');
+        $this->assertContains($id, $this->floatIds($database, $collection, [Query::equal('f', [$value])]), $id.' equal');
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     * @return list<string>
+     */
+    private function floatIds(Database $database, string $collection, array $queries): array
+    {
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $database->find($collection, [...$queries, Query::limit(100)]));
+        \sort($ids);
+
+        return $ids;
     }
 
     public function testFindOrderRandomIgnoresACursorAs7xDid(): void
@@ -2892,6 +3226,51 @@ trait DocumentTests
                 $this->addToAssertionCount(1);
             }
         }
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * An integer sum past the range of a 64-bit integer came back as an inexact float, or on Memory and Redis as a
+     * wrapped integer. It is refused on every adapter, and one that fits is answered exactly.
+     */
+    public function testIntegerSumOverflowIsRefused(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'sum_int_overflow_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'series', size: 20, required: true),
+                Attribute::bigInteger(key: 'amount', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $rows = [
+            ['above', PHP_INT_MAX], ['above', PHP_INT_MAX],
+            ['below', PHP_INT_MIN], ['below', -1],
+            ['top', PHP_INT_MAX - 1], ['top', 1],
+            ['bottom', PHP_INT_MIN + 1], ['bottom', -1],
+        ];
+        foreach ($rows as [$series, $amount]) {
+            $database->createDocument($collection, new Document([
+                'series' => $series,
+                'amount' => $amount,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([[[Query::equal('series', ['above'])], null], [[Query::equal('series', ['above'])], 5], [[Query::equal('series', ['below'])], null]] as [$queries, $max]) {
+            try {
+                $sum = $database->sum($collection, 'amount', $queries, $max);
+                $this->fail('An integer sum past the range of a 64-bit integer is refused, got '.\var_export($sum, true));
+            } catch (LimitException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        $this->assertSame(PHP_INT_MAX, $database->sum($collection, 'amount', [Query::equal('series', ['top'])]));
+        $this->assertSame(PHP_INT_MIN, $database->sum($collection, 'amount', [Query::equal('series', ['bottom'])]));
 
         $database->deleteCollection($collection);
     }
@@ -4793,6 +5172,40 @@ trait DocumentTests
             "Query should return exactly the documents matching pattern 'Captain' OR 'Frozen'"
         );
         $database->deleteCollection('moviesRegex');
+    }
+
+    /**
+     * A pattern the engine cannot compile failed as an unmapped PDOException on the SQL engines and a raw driver
+     * error on MongoDB, and matched nothing on SQLite, Memory and Redis. Every adapter refuses it as a query error.
+     */
+    public function testInvalidRegexIsAQueryError(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'invalid_regex_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [Attribute::string(key: 'text', size: 100, required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createDocument($collection, new Document([
+            'text' => 'target',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        foreach (['((', '[', 'a{2,1}', ')', '*a'] as $pattern) {
+            foreach (['find' => fn () => $database->find($collection, [Query::regex('text', $pattern)]), 'count' => fn () => $database->count($collection, [Query::regex('text', $pattern)])] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail("{$read}() refuses the pattern {$pattern}");
+                } catch (QueryException $e) {
+                    $this->assertSame('Invalid regular expression', $e->getMessage(), "{$read}() of {$pattern}");
+                }
+            }
+        }
+
+        $this->assertCount(1, $database->find($collection, [Query::regex('text', '^tar')]));
+
+        $database->deleteCollection($collection);
     }
 
     public function testRegexInjection(): void
@@ -11147,6 +11560,135 @@ trait DocumentTests
         }
     }
 
+    public function testIncreaseAndDecreaseKeepACounterWithinItsColumnRange(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = $this->createCounterRangeCollection($database);
+
+        $refusals = [
+            'an increase past the column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'b', 6), 'maximum limit: 10'],
+            'an increase with a maximum above the column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'b', 6, 20), 'maximum limit: 10'],
+            'an increase with a maximum below the column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'b', 4, 8), 'maximum limit: 8'],
+            'a decrease past the column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'b', 8), 'minimum limit: 0'],
+            'a decrease with a minimum below the column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'b', 8, -10), 'minimum limit: 0'],
+            'a decrease with a minimum above the column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'b', 4, 2), 'minimum limit: 2'],
+            'an increase of a 64-bit integer past its column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'wide', 2), 'maximum limit: '.(PHP_INT_MAX - 1)],
+            'a decrease of a 64-bit integer past its column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'low', 'wide', 2), 'minimum limit: '.(PHP_INT_MIN + 1)],
+            'an increase of a big integer past its column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'big', 2), 'maximum limit: '.(PHP_INT_MAX - 1)],
+            'a decrease of a big integer past its column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'low', 'big', 2), 'minimum limit: '.(PHP_INT_MIN + 1)],
+            'an increase of a double past its column maximum' => [fn () => $database->increaseDocumentAttribute($collection, 'row', 'f', 0.75), 'maximum limit: 2.5'],
+            'a decrease of a double past its column minimum' => [fn () => $database->decreaseDocumentAttribute($collection, 'row', 'f', 3.75), 'minimum limit: -1.5'],
+        ];
+        foreach ($refusals as $name => [$change, $message]) {
+            try {
+                $change();
+                $this->fail($name.' was accepted');
+            } catch (LimitException $error) {
+                $this->assertSame('Attribute value exceeds '.$message, $error->getMessage(), $name);
+            }
+        }
+
+        $stored = $database->getDocument($collection, 'row');
+        $this->assertSame(5, $stored->getAttribute('b'));
+        $this->assertSame(PHP_INT_MAX - 2, $stored->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MAX - 2, $this->storedNumber($stored->getAttribute('big')));
+        $this->assertSame(2.0, $stored->getAttribute('f'));
+        $low = $database->getDocument($collection, 'low');
+        $this->assertSame(PHP_INT_MIN + 2, $low->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MIN + 2, $this->storedNumber($low->getAttribute('big')));
+
+        $this->assertSame(10, $database->increaseDocumentAttribute($collection, 'row', 'b', 5)->getAttribute('b'));
+        $this->assertSame(0, $database->decreaseDocumentAttribute($collection, 'row', 'b', 10, -5)->getAttribute('b'));
+        $this->assertSame(PHP_INT_MAX - 1, $database->increaseDocumentAttribute($collection, 'row', 'wide', 1)->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MAX - 1, $this->storedNumber($database->increaseDocumentAttribute($collection, 'row', 'big', 1)->getAttribute('big')));
+        $this->assertSame(PHP_INT_MIN + 1, $database->decreaseDocumentAttribute($collection, 'low', 'wide', 1)->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MIN + 1, $this->storedNumber($database->decreaseDocumentAttribute($collection, 'low', 'big', 1)->getAttribute('big')));
+        $this->assertSame(2.5, $database->increaseDocumentAttribute($collection, 'row', 'f', 0.5, 100)->getAttribute('f'));
+        $this->assertSame(-1.5, $database->decreaseDocumentAttribute($collection, 'row', 'f', 4.0)->getAttribute('f'));
+
+        $stored = $database->getDocument($collection, 'row');
+        $this->assertSame(0, $stored->getAttribute('b'));
+        $this->assertSame(PHP_INT_MAX - 1, $stored->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MAX - 1, $this->storedNumber($stored->getAttribute('big')));
+        $this->assertSame(-1.5, $stored->getAttribute('f'));
+        $low = $database->getDocument($collection, 'low');
+        $this->assertSame(PHP_INT_MIN + 1, $low->getAttribute('wide'));
+        $this->assertSame(PHP_INT_MIN + 1, $this->storedNumber($low->getAttribute('big')));
+    }
+
+    public function testAnIncreaseTheStoredValueAlreadyPassedTheBoundOfChangesNothing(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = $this->createCounterRangeCollection($database);
+        $definition = $database->getCollection($collection);
+        $adapter = $database->getAdapter();
+        $stored = static fn (string $attribute): mixed => $adapter->getDocument($definition, 'row')->getAttribute($attribute);
+
+        $database->updateDocument($collection, 'row', new Document(['b' => 9]));
+        $now = DateTime::now();
+
+        $this->assertTrue($adapter->increaseDocumentAttribute($definition, 'row', 'b', 1, $now, max: 9), 'the first of two increases read at 9 reaches the maximum');
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'b', 1, $now, max: 9), 'the second of two increases read at 9 passes the maximum');
+        $this->assertSame(10, $this->storedNumber($stored('b')));
+
+        $this->assertTrue($adapter->increaseDocumentAttribute($definition, 'row', 'b', -10, $now, min: 10));
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'b', -10, $now, min: 10));
+        $this->assertSame(0, $this->storedNumber($stored('b')));
+
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'f', 1.0, $now, max: 1.5));
+        $this->assertFalse($adapter->increaseDocumentAttribute($definition, 'row', 'f', -4.0, $now, min: 2.5));
+        $this->assertSame(2.0, (float) $this->storedNumber($stored('f')));
+    }
+
+    /**
+     * A number as an adapter or a big integer attribute hands it back: an integer string as its integer.
+     */
+    private function storedNumber(mixed $value): int|float
+    {
+        if (! \is_numeric($value)) {
+            $this->fail('Expected a stored number, got '.\get_debug_type($value));
+        }
+
+        return $value + 0;
+    }
+
+    private function createCounterRangeCollection(Database $database): string
+    {
+        Structure::addFormat(self::COUNTER_INTEGER_RANGE, static fn (array $attribute): Range => self::counterRange($attribute, Range::TYPE_INTEGER), ColumnType::Integer);
+        Structure::addFormat(self::COUNTER_BIG_INTEGER_RANGE, static fn (array $attribute): Range => self::counterRange($attribute, Range::TYPE_INTEGER), ColumnType::BigInteger);
+        Structure::addFormat(self::COUNTER_DOUBLE_RANGE, static fn (array $attribute): Range => self::counterRange($attribute, Range::TYPE_FLOAT), ColumnType::Double);
+
+        $collection = 'counter_range_'.uniqid();
+        $database->createCollection(Collection::create(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'b', format: new Format(self::COUNTER_INTEGER_RANGE, ['min' => 0, 'max' => 10])));
+        $database->createAttribute($collection, Attribute::integer(key: 'wide', width: IntegerWidth::Bits64, format: new Format(self::COUNTER_INTEGER_RANGE, ['min' => PHP_INT_MIN + 1, 'max' => PHP_INT_MAX - 1])));
+        $database->createAttribute($collection, Attribute::bigInteger(key: 'big', format: new Format(self::COUNTER_BIG_INTEGER_RANGE, ['min' => PHP_INT_MIN + 1, 'max' => PHP_INT_MAX - 1])));
+        $database->createAttribute($collection, Attribute::double(key: 'f', format: new Format(self::COUNTER_DOUBLE_RANGE, ['min' => -1.5, 'max' => 2.5])));
+        $database->createDocument($collection, new Document(['$id' => 'row', 'b' => 5, 'wide' => PHP_INT_MAX - 2, 'big' => PHP_INT_MAX - 2, 'f' => 2.0]));
+        $database->createDocument($collection, new Document(['$id' => 'low', 'b' => 0, 'wide' => PHP_INT_MIN + 2, 'big' => PHP_INT_MIN + 2, 'f' => 0.0]));
+
+        return $collection;
+    }
+
+    /**
+     * The range Appwrite's intRange, bigintRange and floatRange formats hold a column to.
+     *
+     * @param  array<string, mixed>  $attribute
+     */
+    private static function counterRange(array $attribute, string $type): Range
+    {
+        /** @var array{min?: int|float, max?: int|float} $options */
+        $options = $attribute['formatOptions'] ?? [];
+
+        return new Range($options['min'] ?? -INF, $options['max'] ?? INF, $type);
+    }
+
     public function testIncreaseAndDecreaseRoundTheChangeValueOnAnInteger(): void
     {
         /** @var Database $database */
@@ -11170,6 +11712,107 @@ trait DocumentTests
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    /**
+     * A distinct row carried `$id`, `$sequence`, `$createdAt` and `$updatedAt` as null whenever the read did not
+     * select them, so `new Document($row->getArrayCopy())` refused it: "$id must be of type string". A distinct row
+     * carries only what it selects, and every row a read returns rebuilds into an equal Document.
+     */
+    public function testDistinctRowsCarryOnlyWhatTheySelectAndRebuildIntoADocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'distinct_rows_'.\substr(\uniqid(), -6);
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'k', size: 32),
+                Attribute::integer(key: 'n'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->withPreserveDates(true, function () use ($database, $collection): void {
+            foreach ([['a', 1], ['a', 1], ['b', 2], [null, null]] as $second => [$k, $n]) {
+                $database->createDocument($collection, new Document([
+                    'k' => $k,
+                    'n' => $n,
+                    '$createdAt' => '2026-01-01T00:00:0'.$second.'.000+00:00',
+                    '$permissions' => [Permission::read(Role::any())],
+                ]));
+            }
+        });
+
+        $roundTrip = function (array $rows, string $case): void {
+            foreach ($rows as $row) {
+                $this->assertInstanceOf(Document::class, $row);
+                $this->assertEquals($row->getArrayCopy(), (new Document($row->getArrayCopy()))->getArrayCopy(), $case);
+            }
+        };
+
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            try {
+                $database->find($collection, [Query::distinct(), Query::select(['k'])]);
+                $this->fail('A distinct() read is refused where the adapter cannot deduplicate rows');
+            } catch (QueryException) {
+                $this->addToAssertionCount(1);
+            }
+
+            $roundTrip($database->find($collection, [Query::select(['k'])]), 'a read of selected attributes');
+            $database->deleteCollection($collection);
+
+            return;
+        }
+
+        $values = $database->find($collection, [Query::distinct(), Query::select(['k'])]);
+        $roundTrip($values, 'distinct without $id');
+        $copies = \array_map(static fn (Document $row): array => $row->getArrayCopy(), $values);
+        \usort($copies, static fn (array $a, array $b): int => [$a['k'] !== null, $a['k']] <=> [$b['k'] !== null, $b['k']]);
+        $this->assertSame(
+            [['k' => null, '$collection' => $collection], ['k' => 'a', '$collection' => $collection], ['k' => 'b', '$collection' => $collection]],
+            $copies,
+        );
+
+        $pairs = $database->find($collection, [Query::distinct(), Query::select(['k', 'n']), Query::orderAsc('k'), Query::orderAsc('n')]);
+        $this->assertCount(3, $pairs);
+        foreach ($pairs as $row) {
+            $this->assertFalse($row->offsetExists('$id'));
+            $this->assertFalse($row->offsetExists('$sequence'));
+        }
+        $roundTrip($pairs, 'distinct of two attributes');
+
+        $stamped = $database->find($collection, [Query::distinct(), Query::select(['k', '$createdAt'])]);
+        $this->assertCount(4, $stamped);
+        foreach ($stamped as $row) {
+            $this->assertFalse($row->offsetExists('$id'));
+            $this->assertIsString($row->getAttribute('$createdAt'));
+        }
+        $roundTrip($stamped, 'distinct of an internal attribute but $id');
+
+        $identified = $database->find($collection, [Query::distinct(), Query::select(['k', '$id'])]);
+        $this->assertCount(4, $identified);
+        foreach ($identified as $row) {
+            $this->assertIsString($row->getAttribute('$id'));
+            $this->assertNotSame('', $row->getAttribute('$id'));
+        }
+        $roundTrip($identified, 'distinct with $id');
+
+        $paged = [Query::distinct(), Query::select(['k']), Query::isNotNull('k'), Query::orderAsc('k'), Query::limit(1)];
+        $first = $database->find($collection, $paged);
+        $next = $database->find($collection, [...$paged, Query::cursorAfter($first[0])]);
+        $this->assertSame(['a'], \array_map(static fn (Document $row): mixed => $row->getAttribute('k'), $first));
+        $this->assertSame(['b'], \array_map(static fn (Document $row): mixed => $row->getAttribute('k'), $next));
+        $roundTrip([...$first, ...$next], 'distinct pages');
+
+        $documents = $database->find($collection, [Query::select(['k'])]);
+        $this->assertCount(4, $documents);
+        foreach ($documents as $document) {
+            $this->assertIsString($document->getAttribute('$id'));
+        }
+        $roundTrip($documents, 'a read of selected attributes');
+
+        $database->deleteCollection($collection);
     }
 
     public function testDistinctIsRefusedWhereTheAdapterCannotDeduplicate(): void

@@ -38,6 +38,10 @@ final class FloatOverflowTest extends TestCase
         yield 'count is an integer' => [Query::count('*', 'total'), 'COUNT(*) AS `total`'];
         yield 'min cannot overflow' => [Query::min('reading', 'total'), 'MIN(`reading`) AS `total`'];
         yield 'max cannot overflow' => [Query::max('reading', 'total'), 'MAX(`reading`) AS `total`'];
+        yield 'bitAnd is signed' => [Query::bitAnd('flags', 'bits'), 'CAST(BIT_AND(`flags`) AS SIGNED) AS `bits`'];
+        yield 'bitOr is signed' => [Query::bitOr('flags', 'bits'), 'CAST(BIT_OR(`flags`) AS SIGNED) AS `bits`'];
+        yield 'bitXor is signed' => [Query::bitXor('flags', 'bits'), 'CAST(BIT_XOR(`flags`) AS SIGNED) AS `bits`'];
+        yield 'unaliased bitOr keeps the name the engine gives it' => [Query::bitOr('flags'), 'CAST(BIT_OR(`flags`) AS SIGNED) AS `BIT_OR(``flags``)`'];
     }
 
     /**
@@ -53,13 +57,14 @@ final class FloatOverflowTest extends TestCase
     }
 
     #[DataProvider('compilations')]
-    public function testAFloatingAggregateIsCompiledThroughTheEngineRangeCheck(Builder $builder, Query $query, string $sql): void
+    public function testAnAggregateIsCompiledAsEveryEngineAnswersIt(Builder $builder, Query $query, string $sql): void
     {
         $this->assertSame($sql, $builder->compileAggregate($query));
     }
 
-    public function testPostgresRaisesAnOverflowItselfSoItsAggregatesAreLeftAsTheyAre(): void
+    public function testPostgresRaisesAnOverflowItselfAndSignsBitwiseAggregatesSoItsAggregatesAreLeftAsTheyAre(): void
     {
+        $this->assertSame('BIT_OR("flags") AS "bits"', (new Postgres())->compileAggregate(Query::bitOr('flags', 'bits')));
         $this->assertSame('SUM("reading") AS "total"', (new Postgres())->compileAggregate(Query::sum('reading', 'total')));
         $this->assertSame('STDDEV_POP("reading") AS "total"', (new Postgres())->compileAggregate(Query::stddevPop('reading', 'total')));
     }

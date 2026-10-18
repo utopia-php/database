@@ -12,6 +12,7 @@ use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\NestedPreparationTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
+use Tests\E2E\Adapter\Scopes\Relationships\OrphanedTests;
 use Tests\E2E\Adapter\Support\EventRecorder;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
@@ -46,6 +47,7 @@ trait RelationshipTests
     use NestedPreparationTests;
     use OneToManyTests;
     use OneToOneTests;
+    use OrphanedTests;
 
     /**
      * @return array<string, array{RelationshipType, string, int}>
@@ -3536,7 +3538,7 @@ trait RelationshipTests
             [-73.99, 40.76],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::intersects('supplier.deliveryRoute', [$testLine]),
+            Query::intersects('supplier.deliveryRoute', $testLine),
         ]);
         // Verify query executes (result count depends on DB spatial implementation)
         $this->assertGreaterThanOrEqual(0, count($restaurants));
@@ -3547,7 +3549,7 @@ trait RelationshipTests
             [-73.95, 40.80],
         ];
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::crosses('supplier.deliveryRoute', [$crossingLine]),
+            Query::crosses('supplier.deliveryRoute', $crossingLine),
         ]);
         // Result depends on actual geometry intersection
 

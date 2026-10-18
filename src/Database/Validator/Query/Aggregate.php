@@ -3,7 +3,9 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Attribute;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Filter;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Query\Joined\Attributes;
@@ -69,7 +71,8 @@ class Aggregate extends Base
     protected array $numeric = [];
 
     /**
-     * The attributes whose values min() and max() cannot order: arrays and the unordered types.
+     * The attributes whose values min() and max() cannot order: arrays, the unordered types and the internal
+     * attributes stored as a JSON list, `$permissions`.
      *
      * @var array<string, true>
      */
@@ -115,6 +118,12 @@ class Aggregate extends Base
             }
 
             if (! self::isOrdered($attribute->type, $attribute->array)) {
+                $this->unordered[$attribute->key] = true;
+            }
+        }
+
+        foreach (Database::internalAttributesFor($sharedTables) as $attribute) {
+            if (\in_array(Filter::Json->value, $attribute->filters, true)) {
                 $this->unordered[$attribute->key] = true;
             }
         }
@@ -299,12 +308,14 @@ class Aggregate extends Base
             $column = $dot === false ? $attribute : \substr($attribute, $dot + 1);
             $definition = $join?->schema[$column] ?? null;
 
-            if ($definition === null) {
+            if ($definition !== null) {
+                $type = $definition['type'] ?? null;
+                $ordered = self::isOrdered($type instanceof ColumnType ? $type : null, (bool) ($definition['array'] ?? false));
+            } elseif ($join !== null && $this->isJoinedInternalAttribute($column)) {
+                $ordered = ! isset($this->unordered[$column]);
+            } else {
                 return true;
             }
-
-            $type = $definition['type'] ?? null;
-            $ordered = self::isOrdered($type instanceof ColumnType ? $type : null, (bool) ($definition['array'] ?? false));
         }
 
         if (! $ordered) {

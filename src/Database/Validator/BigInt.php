@@ -67,6 +67,23 @@ class BigInt extends Validator
         return \preg_match($signed ? '/^-?\d+$/' : '/^\d+$/', $value) === 1;
     }
 
+    /**
+     * The integer a whole number written in decimal names, as "7" or as MariaDB writes a DECIMAL sum, "7.0000"; null
+     * for any other value.
+     */
+    public static function whole(string $value): ?string
+    {
+        $dot = \strpos($value, '.');
+        if ($dot !== false) {
+            if (\trim(\substr($value, $dot + 1), '0') !== '') {
+                return null;
+            }
+            $value = \substr($value, 0, $dot);
+        }
+
+        return self::isIntegerString($value) ? $value : null;
+    }
+
     public static function fitsPhpInt(string $value, bool $signed = true): bool
     {
         if (!self::isIntegerString($value, $signed)) {

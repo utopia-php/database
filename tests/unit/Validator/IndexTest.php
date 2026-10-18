@@ -485,6 +485,14 @@ class IndexTest extends TestCase
         $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
     }
 
+    public function testIndexLengthLargerThanTheAttributeNamesBothSizes(): void
+    {
+        $validator = new IndexDefinition([Attribute::string(key: 'title', size: 64)], [], Profiles::of(capabilities: self::CAPABILITIES, indexLength: 768));
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_title', attributes: ['title'], lengths: [65])));
+        $this->assertSame('Index length 65 is larger than the size for title: 64', $validator->getDescription());
+    }
+
     public function testKeyAndUniqueIndexesAreRejectedWithoutAdapterSupport(): void
     {
         $validator = new IndexDefinition(

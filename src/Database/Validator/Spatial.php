@@ -26,7 +26,7 @@ class Spatial extends Validator
      */
     protected function validatePoint(array $value): bool
     {
-        if (count($value) !== 2) {
+        if (count($value) !== 2 || ! array_is_list($value)) {
             $this->message = 'Point must be an array of two numeric values [x, y]';
 
             return false;
@@ -55,7 +55,7 @@ class Spatial extends Validator
         }
 
         foreach ($value as $pointIndex => $point) {
-            if (! is_array($point) || count($point) !== 2) {
+            if (! is_array($point) || count($point) !== 2 || ! array_is_list($point)) {
                 $this->message = 'Each point in LineString must be an array of two values [x, y]';
 
                 return false;
@@ -91,7 +91,7 @@ class Spatial extends Validator
         }
 
         $isSingleRing = isset($value[0]) && is_array($value[0]) &&
-            count($value[0]) === 2 &&
+            count($value[0]) === 2 && array_is_list($value[0]) &&
             is_numeric($value[0][0]) &&
             is_numeric($value[0][1]);
 
@@ -100,7 +100,7 @@ class Spatial extends Validator
         }
 
         foreach ($value as $ringIndex => $ring) {
-            if (! is_array($ring) || empty($ring)) {
+            if (! is_array($ring) || empty($ring) || ! array_is_list($ring)) {
                 $this->message = "Ring #{$ringIndex} must be an array of points";
 
                 return false;
@@ -113,7 +113,7 @@ class Spatial extends Validator
             }
 
             foreach ($ring as $pointIndex => $point) {
-                if (! is_array($point) || count($point) !== 2) {
+                if (! is_array($point) || count($point) !== 2 || ! array_is_list($point)) {
                     $this->message = "Point #{$pointIndex} in ring #{$ringIndex} must be an array of two values [x, y]";
 
                     return false;
@@ -143,16 +143,120 @@ class Spatial extends Validator
     }
 
     /**
-     * Check if a value is a valid WKT (Well-Known Text) string.
-     *
-     * @param string $value The string to check
-     * @return bool
+     * Whether a value is well-formed WKT (Well-Known Text) of a point, linestring or polygon. Its coordinates are not
+     * checked; isValid() checks a stored value's.
      */
     public static function isWktString(string $value): bool
     {
-        $value = trim($value);
+        return self::parseWkt($value) !== null;
+    }
 
-        return (bool) preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value);
+    /**
+     * The type and coordinates WKT names, as a stored value of that type holds them: `[x, y]` for a point, a list of
+     * points for a linestring and a list of rings for a polygon. Null for anything that is not well-formed WKT of a
+     * point, linestring or polygon.
+     *
+     * @return array{ColumnType, array<mixed>}|null
+     */
+    public static function parseWkt(string $value): ?array
+    {
+        $value = \trim($value);
+        $open = \strpos($value, '(');
+        if ($open === false || ! \str_ends_with($value, ')')) {
+            return null;
+        }
+
+        $type = match (\strtoupper(\trim(\substr($value, 0, $open)))) {
+            'POINT' => ColumnType::Point,
+            'LINESTRING' => ColumnType::Linestring,
+            'POLYGON' => ColumnType::Polygon,
+            default => null,
+        };
+        if ($type === null) {
+            return null;
+        }
+
+        $body = \substr($value, $open + 1, -1);
+        $coordinates = match ($type) {
+            ColumnType::Point => self::parseWktPoint($body),
+            ColumnType::Linestring => self::parseWktPoints($body),
+            default => self::parseWktRings($body),
+        };
+
+        return $coordinates === null ? null : [$type, $coordinates];
+    }
+
+    /**
+     * @return list<float>|null
+     */
+    private static function parseWktPoint(string $text): ?array
+    {
+        $tokens = \array_values(\array_filter(
+            \explode(' ', \str_replace(["\t", "\n", "\r"], ' ', $text)),
+            static fn (string $token): bool => $token !== '',
+        ));
+
+        if (\count($tokens) !== 2 || ! \is_numeric($tokens[0]) || ! \is_numeric($tokens[1])) {
+            return null;
+        }
+
+        return [(float) $tokens[0], (float) $tokens[1]];
+    }
+
+    /**
+     * @return list<list<float>>|null
+     */
+    private static function parseWktPoints(string $text): ?array
+    {
+        $points = [];
+        foreach (\explode(',', $text) as $point) {
+            $parsed = self::parseWktPoint($point);
+            if ($parsed === null) {
+                return null;
+            }
+            $points[] = $parsed;
+        }
+
+        return $points;
+    }
+
+    /**
+     * @return list<list<list<float>>>|null
+     */
+    private static function parseWktRings(string $text): ?array
+    {
+        $rings = [];
+        $rest = \trim($text);
+        while ($rest !== '') {
+            if (! \str_starts_with($rest, '(')) {
+                return null;
+            }
+
+            $close = \strpos($rest, ')');
+            if ($close === false) {
+                return null;
+            }
+
+            $ring = self::parseWktPoints(\substr($rest, 1, $close - 1));
+            if ($ring === null) {
+                return null;
+            }
+            $rings[] = $ring;
+
+            $rest = \trim(\substr($rest, $close + 1));
+            if ($rest === '') {
+                break;
+            }
+            if (! \str_starts_with($rest, ',')) {
+                return null;
+            }
+            $rest = \trim(\substr($rest, 1));
+            if ($rest === '') {
+                return null;
+            }
+        }
+
+        return $rings === [] ? null : $rings;
     }
 
     #[\Override]
@@ -192,7 +296,19 @@ class Spatial extends Validator
         }
 
         if (is_string($value)) {
-            return self::isWktString($value);
+            $wkt = self::parseWkt($value);
+            if ($wkt === null) {
+                $this->message = 'WKT must be a well-formed POINT, LINESTRING or POLYGON';
+
+                return false;
+            }
+
+            [$type, $value] = $wkt;
+            if ($type->value !== $this->spatialType) {
+                $this->message = 'WKT must be a '.\strtoupper($this->spatialType).', got a '.\strtoupper($type->value);
+
+                return false;
+            }
         }
 
         if (is_array($value)) {
@@ -221,6 +337,12 @@ class Spatial extends Validator
 
     private function isValidCoordinate(int|float $x, int|float $y): bool
     {
+        if (! \is_finite($x) || ! \is_finite($y)) {
+            $this->message = 'Coordinates must be finite numbers';
+
+            return false;
+        }
+
         if ($x < -180 || $x > 180) {
             $this->message = "Longitude (x) must be between -180 and 180, got {$x}";
 

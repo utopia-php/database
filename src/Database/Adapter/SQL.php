@@ -36,6 +36,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -88,6 +89,30 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
+    /**
+     * A joined column whose `alias.column` label is longer than the engine keeps is labelled with
+     * this prefix and a digest of the label instead, and remapRow() reads it back. A join alias
+     * cannot hold `$`.
+     */
+    private const string JOIN_LABEL_PREFIX = '$join_';
+
+    /**
+     * The `alias.column` label each digest label stands for, oldest first. Join aliases are the
+     * caller's, so the map keeps only the newest JOIN_LABELS_KEPT labels instead of every label a
+     * long-lived worker was ever asked for. A read's labels are the newest when its rows are
+     * remapped, and an adapter runs one statement at a time, so none of them is evicted first.
+     *
+     * @var array<string, string>
+     */
+    private array $joinLabels = [];
+
+    private const int JOIN_LABELS_KEPT = 1024;
+
+    /**
+     * MariaDB and MySQL keep a column label of up to 256 characters.
+     */
+    protected const int MAX_LABEL_LENGTH = 256;
+
     protected const string MIN_DATETIME = '1000-01-01 00:00:00';
 
     /**
@@ -123,12 +148,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     private const int UNPAIRED_JOINED_ROWS = 4;
 
-    protected object $pdo;
+    private const string ROUND_TRIP_PRECISION = '-1';
 
-    /**
-     * Controls how many fractional digits are used when binding float parameters.
-     */
-    protected int $floatPrecision = 17;
+    protected object $pdo;
 
     /**
      * Lazily constructed AttributeMap shared by every builder's scope.
@@ -208,11 +230,57 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Helper to format a float value according to configured precision for binding/logging.
+     * A decimal that reads back as exactly this double, in as few digits as PHP writes it when they suffice. Casts
+     * and `%H` ignore the locale, and a double needs at most 17 significant digits to round-trip.
      */
-    protected function getFloatPrecision(float $value): string
+    protected function formatFloat(float $value): string
     {
-        return sprintf('%.'.$this->floatPrecision.'F', $value);
+        $formatted = (string) $value;
+        if ((float) $formatted === $value) {
+            return $formatted;
+        }
+
+        $formatted = \sprintf('%.16H', $value);
+
+        return (float) $formatted === $value ? $formatted : \sprintf('%.17H', $value);
+    }
+
+    /**
+     * Binds a value as its PDO type, and a double as its exact decimal: PDO would write it at the `precision` ini.
+     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $statement
+     */
+    protected function bind(object $statement, int|string $parameter, mixed $value): void
+    {
+        if (\is_float($value)) {
+            $statement->bindValue($parameter, $this->formatFloat($value), PDO::PARAM_STR);
+
+            return;
+        }
+
+        $statement->bindValue($parameter, $value, $this->getPdoType($value));
+    }
+
+    /**
+     * Runs a fetch at the precision that round-trips every double. PDO stringifies a double it fetches at the
+     * `precision` ini, 14 significant digits by default.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $fetch
+     * @return T
+     */
+    protected function fetchExactly(callable $fetch): mixed
+    {
+        $precision = \ini_set('precision', self::ROUND_TRIP_PRECISION);
+
+        try {
+            return $fetch();
+        } finally {
+            if ($precision !== false) {
+                \ini_set('precision', $precision);
+            }
+        }
     }
 
     #[\Override]
@@ -620,12 +688,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             try {
                 $statement = $this->prepareStatement($sql, Event::DocumentRead);
                 foreach ($bindings as $parameter => $value) {
-                    $statement->bindValue($parameter, $value, $this->getPdoType($value));
+                    $this->bind($statement, $parameter, $value);
                 }
                 $this->describeStatement($statement, $bindings, $name);
                 $this->execute($statement);
                 /** @var array<string, mixed>|false $row */
-                $row = $statement->fetch(PDO::FETCH_ASSOC);
+                $row = $this->fetchExactly(static fn (): mixed => $statement->fetch(PDO::FETCH_ASSOC));
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
@@ -983,7 +1051,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $statement = $this->executeResult($builder->build(), Event::DocumentRead);
         $this->execute($statement);
         /** @var list<list<mixed>> $rows */
-        $rows = $statement->fetchAll(PDO::FETCH_NUM);
+        $rows = $this->fetchExactly(static fn (): array => $statement->fetchAll(PDO::FETCH_NUM));
         $statement->closeCursor();
 
         return $rows;
@@ -1451,7 +1519,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             throw $this->processException($e);
         }
 
-        return true;
+        return $statement->rowCount() > 0;
     }
 
     #[\Override]
@@ -1535,7 +1603,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $this->describeStatement($statement, [], $name);
                 $this->execute($statement);
                 /** @var array<int, array<string, mixed>> $rows */
-                $rows = $statement->fetchAll();
+                $rows = $this->fetchExactly(static fn (): array => $statement->fetchAll());
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
@@ -1836,14 +1904,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         try {
             $statement = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
-                $statement->bindValue($i + 1, $value, $this->getPdoType($value));
+                $this->bind($statement, $i + 1, $value);
             }
             $this->execute($statement);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
-        $results = $statement->fetchAll();
+        $results = $this->fetchExactly(static fn (): array => $statement->fetchAll());
         $statement->closeCursor();
 
         $documents = [];
@@ -2065,7 +2133,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 return $this->qualifiedGroupNames($values)[$index] ?? $column;
             }
 
-            return $dot === false ? $column : \substr($attribute, 0, $dot).'.'.$column;
+            return $dot === false ? $column : $this->joinLabel(\substr($attribute, 0, $dot), $column);
         }
 
         throw new QueryException('Invalid query: sum() over '.($grouped ? 'grouped' : 'distinct').' rows adds up one of their '.($grouped ? 'groupBy' : 'selected').' attributes, and '.$attribute.' is not one of them');
@@ -2335,13 +2403,21 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
     /**
      * The sum in a row, with SQLite's `INF`, `-INF` and `NAN` read as the doubles they name for Database::sum() to
-     * refuse.
+     * refuse. MariaDB, MySQL and PostgreSQL sum integers exactly past the range of a 64-bit integer, which is refused
+     * rather than read as an inexact double.
      *
      * @param  array<string, mixed>  $row
+     *
+     * @throws LimitException When an integer sum does not fit a 64-bit integer
      */
     private function sumOf(array $row): int|float
     {
         $sum = $row['sum'] ?? 0;
+
+        $whole = \is_string($sum) ? BigInt::whole($sum) : null;
+        if ($whole !== null && ! BigInt::fitsPhpInt($whole)) {
+            throw new LimitException('Value out of range');
+        }
 
         if (\is_numeric($sum)) {
             return $sum + 0;
@@ -3543,7 +3619,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         try {
             $statement = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
-                $statement->bindValue($i + 1, $value, $this->getPdoType($value));
+                $this->bind($statement, $i + 1, $value);
             }
             $this->execute($statement);
         } catch (PDOException $e) {
@@ -3652,10 +3728,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * Prepares the SQL statement and binds positional parameters from the Statement.
      * Does NOT call execute() - the caller is responsible for that.
      *
-     * Floats are bound as 7.x bound them: a find() binds them in fixed-point notation, every other statement as
-     * PHP writes them, so a write keeps a magnitude fixed point would round to zero. A bulk delete binds them as a
-     * find() does, so its filters match the rows the find() of the documents it deletes matched.
-     *
      * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
@@ -3667,13 +3739,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
             }
-            if (\is_float($value) && ($event === Event::DocumentFind || $event === Event::DocumentsDelete)) {
-                $prepared->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-            } elseif (\is_float($value)) {
-                $prepared->bindValue($i + 1, $value, PDO::PARAM_STR);
-            } else {
-                $prepared->bindValue($i + 1, $value, $this->getPdoType($value));
-            }
+            $this->bind($prepared, $i + 1, $value);
         }
 
         return $prepared;
@@ -4152,7 +4218,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         $aliasSet = \array_fill_keys($joinAliases, true);
-        $quote = $this->getIdentifierQuote();
         $columns = [];
         foreach ($selections as $selection) {
             $dot = \strpos($selection, '.');
@@ -4161,9 +4226,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if (isset($aliasSet[$prefix])) {
                     $name = \substr($selection, $dot + 1);
                     $internal = $this->filter($this->getInternalKeyForAttribute($name));
-                    $qualified = $quote.$this->filter($prefix).$quote.'.'.$quote.$internal.$quote;
-                    $output = $prefix.'.'.$internal;
-                    $columns[] = $qualified.' AS '.$quote.$output.$quote;
+                    $columns[] = $this->quote($prefix).'.'.$this->quote($internal).' AS '.$this->quote($this->joinLabel($prefix, $internal));
 
                     continue;
                 }
@@ -4172,6 +4235,27 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         return $columns;
+    }
+
+    /**
+     * The label a joined column is read under: `alias.column`, or a digest of it when that is longer
+     * than the engine keeps a label, so the engine cannot cut it short.
+     */
+    private function joinLabel(string $alias, string $column): string
+    {
+        $label = $alias.'.'.$column;
+        if (\strlen($label) <= static::MAX_LABEL_LENGTH) {
+            return $label;
+        }
+
+        $digest = self::JOIN_LABEL_PREFIX.\md5($label);
+        unset($this->joinLabels[$digest]);
+        $this->joinLabels[$digest] = $label;
+        if (\count($this->joinLabels) > self::JOIN_LABELS_KEPT) {
+            unset($this->joinLabels[\array_key_first($this->joinLabels)]);
+        }
+
+        return $digest;
     }
 
     /**
@@ -4465,14 +4549,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             $alias = $query->getAlias();
-            $invalid = JoinValidator::describeInvalidAlias($alias);
+            $invalid = JoinValidator::describeInvalidAlias($alias, $query->isAliasDefaulted());
             if ($invalid !== null) {
                 throw new QueryException($invalid);
             }
 
             $key = \strtolower($alias);
             if (isset($declared[$key])) {
-                throw new QueryException("Join alias \"{$alias}\" is declared more than once");
+                throw new QueryException(JoinValidator::describeDuplicateAlias($alias, $query->isAliasDefaulted()));
             }
             $declared[$key] = true;
         }
@@ -6257,7 +6341,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $statement = $this->executeResult($result, $event, $collection);
             $this->execute($statement);
             /** @var array<int, array<string, mixed>> $results */
-            $results = $statement->fetchAll(PDO::FETCH_ASSOC);
+            $results = $this->fetchExactly(static fn (): array => $statement->fetchAll(PDO::FETCH_ASSOC));
         } catch (PDOException $e) {
             $exception = $e;
         } finally {
@@ -6359,7 +6443,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * @param array<int|string, mixed> $row
+     * @param  array<int|string, mixed>  $row
      */
     private function remapRow(array &$row): void
     {
@@ -6367,6 +6451,11 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (\is_int($key)) {
                 unset($row[$key]);
                 continue;
+            }
+            if (isset($this->joinLabels[$key])) {
+                $row[$this->joinLabels[$key]] = $row[$key];
+                unset($row[$key]);
+                $key = $this->joinLabels[$key];
             }
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);
@@ -6511,13 +6600,13 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             case OperatorType::Divide:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
 
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
-                    $statement->bindValue(':'.$limitKey, $limit, $this->getPdoType($limit));
+                    $this->bind($statement, ':'.$limitKey, $limit);
                     $bindIndex++;
                 }
                 break;
@@ -6525,20 +6614,20 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             case OperatorType::Modulo:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
                 break;
 
             case OperatorType::Power:
                 $value = $values[0] ?? 1;
                 $bindKey = "op_{$bindIndex}";
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
 
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
-                    $statement->bindValue(':'.$maxKey, $limit, $this->getPdoType($limit));
+                    $this->bind($statement, ':'.$maxKey, $limit);
                     $bindIndex++;
                 }
                 break;
@@ -6587,7 +6676,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 if (is_array($value)) {
                     $value = json_encode($value);
                 }
-                $statement->bindValue(':'.$bindKey, $value, $this->getPdoType($value));
+                $this->bind($statement, ':'.$bindKey, $value);
                 $bindIndex++;
                 break;
 

@@ -117,6 +117,19 @@ class MySQL extends MariaDB
         return parent::processException($e);
     }
 
+    /**
+     * ER_GIS_INVALID_DATA, ER_LONGITUDE_OUT_OF_RANGE and ER_LATITUDE_OUT_OF_RANGE.
+     */
+    protected const array INVALID_GEOMETRY_ERRORS = [3037, 3616, 3617];
+
+    /**
+     * ER_REGEXP_ERROR, which MySQL raises for an error ICU only names, and the errors for a pattern ICU cannot compile
+     * or run: illegal argument, rule syntax, bad escape sequence, unimplemented, mismatched parenthesis, bad interval,
+     * max below min, invalid back reference, look-behind limit, missing close bracket, invalid range, stack overflow,
+     * pattern too big and invalid capture group name. ER_REGEXP_TIME_OUT is a timeout.
+     */
+    protected const array INVALID_REGEX_ERRORS = [1139, 3685, 3688, 3689, 3690, 3691, 3692, 3693, 3694, 3695, 3696, 3697, 3698, 3700, 3887];
+
     #[\Override]
     protected function dialectBuilder(): SQLBuilder&Scoping
     {

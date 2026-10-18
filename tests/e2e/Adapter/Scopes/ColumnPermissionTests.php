@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Attribute\Update as AttributeUpdate;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Collection\Update as CollectionUpdate;
@@ -18,6 +19,7 @@ use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update as RelationshipUpdate;
 use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
@@ -1570,6 +1572,100 @@ trait ColumnPermissionTests
         $this->assertContains('read("any", "name")', $left);
         $this->assertContains('read("any", "name")', $right);
         $this->assertContains('create("any")', $left);
+    }
+
+    /**
+     * A grant follows a rename made through updateAttribute(), which is the rename a consumer
+     * reaches: renameAttribute() is the dedicated call, but an attribute update carrying a new
+     * key renames too, and that is the one an API exposes.
+     *
+     * Indexes already follow such a rename. A grant that did not would name a key nothing has:
+     * unreachable, and a grant createCollection() refuses.
+     */
+    public function testAColumnGrantFollowsAnUpdateThatRenamesIt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsUpdateRenamed',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::update(Role::any(), 'name'),
+                Permission::read(Role::team('hr'), 'salary'),
+            ],
+        )));
+
+        $database->updateAttribute('columnGrantsUpdateRenamed', 'name', new AttributeUpdate(key: 'fullName'));
+
+        $declared = $database->getCollection('columnGrantsUpdateRenamed')->declaredPermissions() ?? [];
+
+        $this->assertContains('read("any", "fullName")', $declared, 'the read grant did not follow the rename');
+        $this->assertContains('update("any", "fullName")', $declared, 'the update grant did not follow the rename');
+        $this->assertNotContains('read("any", "name")', $declared);
+
+        // Grants on other columns, and grants naming none, are untouched.
+        $this->assertContains('read("team:hr", "salary")', $declared);
+        $this->assertContains('create("any")', $declared);
+    }
+
+    /**
+     * And a grant on a relationship follows a rename of its key, on either side.
+     */
+    public function testAGrantOnARelationshipFollowsARename(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->markTestSkipped('Adapter does not support relationships');
+        }
+
+        foreach (['columnGrantsRenRelLeft', 'columnGrantsRenRelRight'] as $id) {
+            $database->createCollection(Collection::create(
+                id: $id,
+                attributes: [Attribute::string(key: 'name', size: 64)],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            ));
+        }
+
+        $database->createRelationship('columnGrantsRenRelLeft', Relationship::oneToOne(
+            relatedCollection: 'columnGrantsRenRelRight',
+            key: 'link',
+            twoWay: true,
+            twoWayKey: 'backlink',
+        ));
+
+        $database->withColumnPermissions(function () use ($database): void {
+            $database->updateCollection('columnGrantsRenRelLeft', new CollectionUpdate(permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'link'),
+            ]));
+            $database->updateCollection('columnGrantsRenRelRight', new CollectionUpdate(permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'backlink'),
+            ]));
+        });
+
+        $database->updateRelationship(
+            collection: 'columnGrantsRenRelLeft',
+            key: 'link',
+            update: new RelationshipUpdate(key: 'connection', twoWayKey: 'backConnection'),
+        );
+
+        $left = $database->getCollection('columnGrantsRenRelLeft')->declaredPermissions() ?? [];
+        $right = $database->getCollection('columnGrantsRenRelRight')->declaredPermissions() ?? [];
+
+        $this->assertContains('read("any", "connection")', $left, 'the grant did not follow the relationship rename');
+        $this->assertNotContains('read("any", "link")', $left);
+
+        $this->assertContains('read("any", "backConnection")', $right, 'the grant did not follow the two-way key rename');
+        $this->assertNotContains('read("any", "backlink")', $right);
     }
 
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void

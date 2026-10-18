@@ -64,7 +64,7 @@ trait Collections
         if ($this->validation()->get()) {
             $validator = new Permissions(columns: \array_map(fn (Attribute $attribute) => $attribute->key, $attributes));
             if (! $validator->isValid($permissions)) {
-                throw new DatabaseException($validator->getDescription());
+                throw new StructureException($validator->getDescription());
             }
         }
 
@@ -179,7 +179,7 @@ trait Collections
         if ($update->permissions !== null && $this->validation()->get()) {
             $validator = new Permissions(columns: \array_map(fn (Attribute $attribute) => $attribute->key, $definition->attributes()));
             if (! $validator->isValid($update->permissions)) {
-                throw new DatabaseException($validator->getDescription());
+                throw new StructureException($validator->getDescription());
             }
         }
 

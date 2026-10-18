@@ -1511,6 +1511,67 @@ trait ColumnPermissionTests
         $this->assertContains('create("any")', $declared);
     }
 
+    /**
+     * A relationship is an attribute, so a grant may name it -- and goes with it.
+     *
+     * Both sides lose their key when the relationship is deleted, so both lose the grants that
+     * named it. Left behind, such a grant would name a column the collection no longer has,
+     * which createCollection() refuses outright, and it would reach nothing in the meantime.
+     */
+    public function testAGrantOnARelationshipGoesWithIt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->markTestSkipped('Adapter does not support relationships');
+        }
+
+        foreach (['columnGrantsRelLeft', 'columnGrantsRelRight'] as $id) {
+            $database->createCollection(Collection::create(
+                id: $id,
+                attributes: [Attribute::string(key: 'name', size: 64)],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            ));
+        }
+
+        $database->createRelationship('columnGrantsRelLeft', Relationship::oneToOne(
+            relatedCollection: 'columnGrantsRelRight',
+            key: 'link',
+            twoWay: true,
+            twoWayKey: 'backlink',
+        ));
+
+        $database->withColumnPermissions(function () use ($database): void {
+            $database->updateCollection('columnGrantsRelLeft', new CollectionUpdate(permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'link'),
+                Permission::read(Role::any(), 'name'),
+            ]));
+            $database->updateCollection('columnGrantsRelRight', new CollectionUpdate(permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'backlink'),
+                Permission::read(Role::any(), 'name'),
+            ]));
+        });
+
+        $this->assertContains('read("any", "link")', $database->getCollection('columnGrantsRelLeft')->declaredPermissions() ?? []);
+        $this->assertContains('read("any", "backlink")', $database->getCollection('columnGrantsRelRight')->declaredPermissions() ?? []);
+
+        $database->deleteRelationship('columnGrantsRelLeft', 'link');
+
+        $left = $database->getCollection('columnGrantsRelLeft')->declaredPermissions() ?? [];
+        $right = $database->getCollection('columnGrantsRelRight')->declaredPermissions() ?? [];
+
+        $this->assertNotContains('read("any", "link")', $left, 'a grant outlived the relationship it named');
+        $this->assertNotContains('read("any", "backlink")', $right, 'a grant outlived the two-way key it named');
+
+        // Grants on the columns that remain are untouched, on both sides.
+        $this->assertContains('read("any", "name")', $left);
+        $this->assertContains('read("any", "name")', $right);
+        $this->assertContains('create("any")', $left);
+    }
+
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void
     {
         /** @var Database $database */

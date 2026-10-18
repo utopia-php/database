@@ -20,6 +20,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Relationship;
 use Utopia\Database\Relationship\Update as RelationshipUpdate;
 use Utopia\Database\RelationshipSide;
@@ -492,6 +493,16 @@ trait Relationships
         $relatedCollection = $this->silent(fn () => $this->getCollection($relatedCollection->getId()));
         $collection->setAttribute(self::COLLECTION_ATTRIBUTES, $collectionAttributes);
         $relatedCollection->setAttribute(self::COLLECTION_ATTRIBUTES, $relatedCollectionAttributes);
+
+        // A relationship is an attribute, so a permission may name it as its column. Both
+        // sides lose their key here, so both lose the grants that named it -- a grant left
+        // behind would name a column the collection no longer has, which createCollection()
+        // refuses outright. The same rule deleteAttribute() follows for an ordinary column.
+        $collection->setPermissions(Permission::withoutColumn($collection->declaredPermissions() ?? [], $key));
+
+        if ($twoWayKey !== '') {
+            $relatedCollection->setPermissions(Permission::withoutColumn($relatedCollection->declaredPermissions() ?? [], $twoWayKey));
+        }
 
         try {
             $shouldRollback = $this->deleteRelationshipFromSchema($collection->getId(), $relationship, $side);

@@ -86,10 +86,22 @@ trait ColumnPermissionTests
         $authorization->addRole(Role::any()->toString());
 
         try {
-            $ids = \array_map(
-                static fn (Collection $collection): string => $collection->getId(),
-                $database->listCollections(100),
-            );
+            // Paged: the listing has no order, so it answers with the oldest collections
+            // first and this one is created last. A single page would stop finding it once
+            // the suite grows past it, which says nothing about the grant under test.
+            $ids = [];
+
+            for ($offset = 0; ; $offset += 100) {
+                $page = $database->listCollections(100, $offset);
+
+                foreach ($page as $collection) {
+                    $ids[] = $collection->getId();
+                }
+
+                if (\count($page) < 100) {
+                    break;
+                }
+            }
         } finally {
             $authorization->cleanRoles();
             foreach ($previous as $role) {

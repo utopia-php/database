@@ -23,6 +23,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Refused as RefusedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Index;
+use Utopia\Database\Permission;
 use Utopia\Database\Schema;
 use Utopia\Database\SetType;
 use Utopia\Database\Validator\AttributeDefinition;
@@ -376,6 +377,10 @@ trait Attributes
         $this->writeAttributes($definition, \array_values($attributes));
         $this->writeIndexes($definition, self::withoutIndexedAttribute($indexes, $key));
 
+        // Nothing is left for a grant on this column to reach, and one left behind would name
+        // a column the collection no longer has -- which createCollection() refuses outright.
+        $definition->setPermissions(Permission::withoutColumn($definition->declaredPermissions() ?? [], $key));
+
         $deletedInSchema = $this->deleteAttributeFromSchema($definition->getId(), $key);
 
         $this->updateMetadata(
@@ -448,6 +453,10 @@ trait Attributes
 
         $this->writeAttributes($definition, $attributes);
         $this->writeIndexes($definition, self::renameIndexedAttribute($indexes, $old, $new));
+
+        // A grant names its column by key, so it follows the rename with it. setPermissions()
+        // writes the gate and the verbatim list together, so the two cannot drift.
+        $definition->setPermissions(Permission::renameColumn($definition->declaredPermissions() ?? [], $old, $new));
 
         $this->updateMetadata(
             collection: $definition,

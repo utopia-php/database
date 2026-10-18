@@ -294,6 +294,69 @@ class Permission
     }
 
     /**
+     * The same permissions with every grant on $old pointed at $new.
+     *
+     * A grant names a column by its key, so renaming the column would otherwise leave the grant
+     * naming one that no longer exists: it would reach nothing, and the collection would hold a
+     * grant createCollection() refuses. Following the rename keeps the grant on the column the
+     * caller granted, under whatever it is now called.
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     *
+     * @throws DatabaseException
+     */
+    public static function renameColumn(array $permissions, string $old, string $new): array
+    {
+        $renamed = [];
+
+        foreach ($permissions as $permission) {
+            $parsed = self::parse($permission);
+
+            $renamed[] = $parsed->isForAllColumns() || $parsed->getColumn() !== $old
+                ? $permission
+                : (new self(
+                    $parsed->getPermission(),
+                    $parsed->getRole(),
+                    $parsed->getIdentifier(),
+                    $parsed->getDimension(),
+                    $new
+                ))->toString();
+        }
+
+        return \array_values(\array_unique($renamed));
+    }
+
+    /**
+     * The same permissions without the grants naming $column.
+     *
+     * Dropping the column leaves nothing for a grant on it to reach, and a grant left behind
+     * would name a column the collection no longer has. Grants naming no column are untouched:
+     * they cover the whole row, which still exists.
+     *
+     * @param  list<string>  $permissions
+     * @return list<string>
+     *
+     * @throws DatabaseException
+     */
+    public static function withoutColumn(array $permissions, string $column): array
+    {
+        $kept = [];
+
+        foreach ($permissions as $permission) {
+            $parsed = self::parse($permission);
+
+            if (! $parsed->isForAllColumns() && $parsed->getColumn() === $column) {
+                continue;
+            }
+
+            $kept[] = $permission;
+        }
+
+        return \array_values(\array_unique($kept));
+    }
+
+    /**
      * The same permissions with every column dropped, deduplicated.
      *
      * Whether a caller may reach a row is a question about the role alone: a column narrows what

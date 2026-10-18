@@ -1348,6 +1348,169 @@ trait ColumnPermissionTests
         $this->assertSame('Ada Lovelace', $stored->getAttribute('name'));
     }
 
+    /**
+     * A column-scoped updater may not rewrite the row's permissions.
+     *
+     * The row's permissions are not a column, and rewriting them is a whole-row act. Left
+     * open, a caller granted one column could grant itself delete through them and destroy the
+     * row, turning a grant over one column into power over all of it. The mask would still
+     * hold -- it reads the collection's grants, not the row's -- so the escalation is over the
+     * row rather than its columns, which makes it no less an escalation.
+     */
+    public function testAColumnScopedUpdaterMayNotRewriteTheRowsPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsEscalation',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::update(Role::any(), 'name'),
+                Permission::read(Role::team('exec')),
+                Permission::update(Role::team('exec')),
+            ],
+            documentSecurity: true,
+        )));
+
+        $stored = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsEscalation', new Document([
+            '$id' => 'row',
+            'name' => 'Ada',
+            'salary' => 120000,
+            '$permissions' => $stored,
+        ])));
+
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database): void {
+            // Granting itself delete is the escalation the refusal exists for.
+            try {
+                $database->updateDocument('columnGrantsEscalation', 'row', new Document([
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                        Permission::delete(Role::any()),
+                    ],
+                ]));
+                $this->fail('a column-scoped updater rewrote the row\'s permissions');
+            } catch (AuthorizationException $e) {
+                $this->assertStringContainsString('Missing "update" permission for the row', $e->getMessage());
+            }
+
+            // Refused even alongside a column it is allowed to change, since the write is
+            // refused whole rather than applied in part.
+            try {
+                $database->updateDocument('columnGrantsEscalation', 'row', new Document([
+                    'name' => 'Ada Lovelace',
+                    '$permissions' => [Permission::read(Role::any())],
+                ]));
+                $this->fail('a column-scoped updater rewrote permissions beside a granted column');
+            } catch (AuthorizationException $e) {
+                $this->assertStringContainsString('Missing "update" permission for the row', $e->getMessage());
+            }
+
+            // The granted column alone still updates.
+            $this->assertSame(
+                'Ada L',
+                $database->updateDocument('columnGrantsEscalation', 'row', new Document(['name' => 'Ada L']))->getAttribute('name'),
+            );
+        });
+
+        // Nothing was escalated: the row keeps the permissions it was created with.
+        $after = $authorization->skip(fn () => $database->getDocument('columnGrantsEscalation', 'row'));
+
+        $this->assertSame($stored, $after->getPermissions());
+
+        // A whole-row grant is not column-scoped, so it rewrites permissions as it always did.
+        $this->asRole($authorization, Role::team('exec')->toString(), function () use ($database): void {
+            $updated = $database->updateDocument('columnGrantsEscalation', 'row', new Document([
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::team('exec'))],
+            ]));
+
+            $this->assertContains('update("team:exec")', $updated->getPermissions());
+        });
+    }
+
+    /**
+     * A grant follows the column it names, and goes when the column goes.
+     *
+     * A grant names its column by key, so a rename would otherwise leave it pointing at a key
+     * nothing has and a delete would leave it naming a column the collection no longer holds.
+     * Either way the collection ends up with a grant createCollection() refuses outright, and
+     * the role silently loses the access it was given. Both are kept consistent instead.
+     */
+    public function testAColumnGrantFollowsARenameAndGoesWithADelete(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+
+        $database->withColumnPermissions(fn () => $database->createCollection(Collection::create(
+            id: 'columnGrantsRenamed',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::integer(key: 'salary'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any(), 'name'),
+                Permission::update(Role::any(), 'name'),
+                Permission::read(Role::team('hr'), 'salary'),
+            ],
+        )));
+
+        $authorization->skip(fn () => $database->createDocument('columnGrantsRenamed', new Document([
+            '$id' => 'r1',
+            'name' => 'Ada',
+            'salary' => 120000,
+        ])));
+
+        $database->renameAttribute('columnGrantsRenamed', 'name', 'fullName');
+
+        $declared = $database->getCollection('columnGrantsRenamed')->declaredPermissions() ?? [];
+
+        $this->assertContains('read("any", "fullName")', $declared, 'the read grant did not follow the rename');
+        $this->assertContains('update("any", "fullName")', $declared, 'the update grant did not follow the rename');
+        $this->assertNotContains('read("any", "name")', $declared);
+
+        // A grant on another column is untouched, and so is one naming no column.
+        $this->assertContains('read("team:hr", "salary")', $declared);
+        $this->assertContains('create("any")', $declared);
+
+        // The grant still reaches the column it was given, under its new name.
+        $this->asRole($authorization, Role::any()->toString(), function () use ($database): void {
+            $stored = $database->getDocument('columnGrantsRenamed', 'r1');
+
+            $this->assertSame('Ada', $stored->getAttribute('fullName'));
+            $this->assertFalse($stored->offsetExists('salary'));
+
+            // And it is writable, which a grant naming a missing column could not be.
+            $this->assertSame(
+                'Ada L',
+                $database->updateDocument('columnGrantsRenamed', 'r1', new Document(['fullName' => 'Ada L']))->getAttribute('fullName'),
+            );
+        });
+
+        // Deleting the column takes its grants with it, leaving the rest alone.
+        $database->deleteAttribute('columnGrantsRenamed', 'fullName');
+
+        $declared = $database->getCollection('columnGrantsRenamed')->declaredPermissions() ?? [];
+
+        $this->assertNotContains('read("any", "fullName")', $declared, 'a grant outlived the column it named');
+        $this->assertNotContains('update("any", "fullName")', $declared, 'a grant outlived the column it named');
+        $this->assertContains('read("team:hr", "salary")', $declared);
+        $this->assertContains('create("any")', $declared);
+    }
+
     public function testADocumentPermissionNamingNoColumnIsUnaffected(): void
     {
         /** @var Database $database */

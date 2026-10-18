@@ -1692,6 +1692,14 @@ trait Documents
             return;
         }
 
+        // The row's own permissions are not a column, and rewriting them is a whole-row act:
+        // a caller who may change one column could otherwise grant itself delete and destroy
+        // the row, turning a grant over one column into power over all of it. The other system
+        // attributes are not writable this way, so skipping them stays correct.
+        if ($document->offsetExists(Document::PERMISSIONS)) {
+            throw new AuthorizationException('Missing "update" permission for the row\'s permissions, which a column-scoped grant does not cover.');
+        }
+
         foreach (\array_keys($document->getArrayCopy()) as $key) {
             if (\str_starts_with($key, '$')) {
                 continue;

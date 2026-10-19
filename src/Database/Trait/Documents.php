@@ -109,6 +109,8 @@ trait Documents
 
     private const int DOCUMENT_CACHE_RECHECK = 60;
 
+    private const int DOCUMENT_CACHE_REGISTRATION_ATTEMPTS = 2;
+
     private const string DOCUMENT_CACHE_EPOCH = 'epoch';
 
     private const string DOCUMENT_CACHE_FIELD = 'field';
@@ -3727,18 +3729,18 @@ trait Documents
 
     /**
      * Publish a tombstone before the write, then drop the definition that carried the previous
-     * epoch, so readers refill it with the tombstone.
+     * epoch, so readers refill it with the tombstone. A write whose registration keeps failing
+     * still blocks with its tombstone: its activation finishes it while the tombstone is its own,
+     * and otherwise retires whatever readers filled while it ran.
      */
     private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): bool
     {
         $epochKey = $collectionKey.'#epoch';
-        if (! (new Owners($this->cache))->register($collectionKey, $token)) {
+        if (! $this->registerDocumentCacheOwner($collectionKey, $token)) {
             $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
             if ($epoch === false || $epoch === null) {
                 return false;
             }
-
-            throw new RuntimeException("Failed to register document cache owner '{$token}' for '{$collectionKey}'");
         }
 
         if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
@@ -3749,6 +3751,18 @@ trait Documents
         $this->purgeCachedDefinition($definitionKey);
 
         return true;
+    }
+
+    private function registerDocumentCacheOwner(string $collectionKey, string $token): bool
+    {
+        $owners = new Owners($this->cache);
+        for ($attempt = 0; $attempt < self::DOCUMENT_CACHE_REGISTRATION_ATTEMPTS; $attempt++) {
+            if ($owners->register($collectionKey, $token)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function purgeCachedDefinition(string $definitionKey): void

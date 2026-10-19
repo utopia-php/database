@@ -4,6 +4,7 @@ namespace Tests\Unit\Documents;
 
 use Closure;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Cache\FailingRegistrationCache;
 use Tests\Unit\Cache\RacedReleaseCache;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
@@ -628,6 +629,55 @@ final class DocumentCacheEpochTest extends TestCase
         $adapter->reset();
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $this->assertSame(0, $adapter->documentReads, 'A registration another worker already released is not a failed release: the write activates and reads are cached again');
+    }
+
+    public function testAWriteWhoseOwnerRegistrationKeepsFailingStillBlocksReaders(): void
+    {
+        $cache = new FailingRegistrationCache();
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing($cache);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            $cache->failRegistrations(\PHP_INT_MAX);
+
+            $writer->withTransaction(function () use ($writer, $reader): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write whose owner registration failed must still keep readers from caching what they read while it ran');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testAWriteWhoseOwnerRegistrationKeepsFailingReenablesTheCollection(): void
+    {
+        $cache = new FailingRegistrationCache();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->failRegistrations(\PHP_INT_MAX);
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'A write that blocked its collection without an owner registration re-enables it once it activates');
+    }
+
+    public function testAFailedOwnerRegistrationIsRetried(): void
+    {
+        $cache = new FailingRegistrationCache();
+        $database = $this->createCountedDatabase(new CountingMemory(), $cache);
+        $cache->failRegistrations(1);
+        $registrations = $cache->getRegistrations();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+
+        $this->assertSame(2, $cache->getRegistrations() - $registrations, 'A registration refused once is tried again, so the write is counted by the writers it overlaps');
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
     private function createCountedDatabase(CountingMemory $adapter, CacheAdapter $cache): Database

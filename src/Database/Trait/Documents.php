@@ -3523,6 +3523,28 @@ trait Documents
     }
 
     /**
+     * Invalidate a collection's cached documents after a schema change committed. The write to its definition already
+     * retired them before the commit, so a failure here leaves nothing stale and is not the caller's: it is logged.
+     */
+    private function purgeCommittedCollection(string $collection): void
+    {
+        if ($collection === self::METADATA) {
+            $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+
+            return;
+        }
+
+        [$collectionKey] = $this->getCacheKeys($collection);
+        try {
+            $this->withRetries(fn () => $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collection)));
+        } catch (Throwable $error) {
+            Console::warning("Warning: Failed to invalidate the cached documents of '{$collection}' after its schema change: ".$error->getMessage());
+        }
+
+        $this->withRetries(fn () => $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collection));
+    }
+
+    /**
      * Purge a document's cache slot, and once more after the open invalidation scope ends.
      *
      * @throws Exception
@@ -3541,6 +3563,9 @@ trait Documents
             if ($collectionId !== self::METADATA) {
                 $this->documentCacheDefinitions[$context][$collectionKey] = $this->getDefinitionCacheKey($collectionId);
             }
+        }
+        if ($collectionId === self::METADATA && $id !== self::METADATA && isset($this->documentCacheMutations[$context])) {
+            $this->advanceDocumentCacheEpoch($this->getCacheBaseKeys($id)[0], $documentKey);
         }
         if (isset($this->transactionWrites[$context])) {
             $this->transactionWrites[$context][\strtolower($documentKey)] = true;
@@ -3731,7 +3756,8 @@ trait Documents
      * Publish a tombstone before the write, then drop the definition that carried the previous
      * epoch, so readers refill it with the tombstone. A write whose registration keeps failing
      * still blocks with its tombstone: its activation finishes it while the tombstone is its own,
-     * and otherwise retires whatever readers filled while it ran.
+     * and otherwise retires whatever readers filled while it ran. An epoch that cannot be read is
+     * purged all the same, so a cache that cannot confirm the purge fails the write.
      */
     private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): bool
     {
@@ -3739,6 +3765,8 @@ trait Documents
         if (! $this->registerDocumentCacheOwner($collectionKey, $token)) {
             $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
             if ($epoch === false || $epoch === null) {
+                $this->cache->purge($epochKey);
+
                 return false;
             }
         }

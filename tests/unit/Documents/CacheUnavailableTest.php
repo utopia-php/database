@@ -1,0 +1,191 @@
+<?php
+
+namespace Tests\Unit\Documents;
+
+use Closure;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use Tests\Unit\Cache\UnavailableCache;
+use Tests\Unit\Support\UncachedTwin;
+use Throwable;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Permission;
+use Utopia\Database\Query;
+use Utopia\Database\Role;
+
+final class CacheUnavailableTest extends TestCase
+{
+    private const string OPEN = 'open';
+
+    private const string FAILING_WRITES = 'failing writes';
+
+    /** @return array<string, array{string, Closure(Database): mixed}> */
+    public static function writes(): array
+    {
+        $writes = [
+            'update' => static fn (Database $database): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated'])),
+            'update in a transaction' => static fn (Database $database): mixed => $database->withTransaction(
+                static fn (): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']))
+            ),
+            'delete' => static fn (Database $database): bool => $database->deleteDocument('webhooks', 'hook'),
+            'batch update' => static fn (Database $database): int => $database->updateDocuments(
+                'webhooks',
+                new Document(['name' => 'updated']),
+                [Query::equal('$id', ['hook'])],
+            ),
+        ];
+
+        $cases = [];
+        foreach ([self::OPEN, self::FAILING_WRITES] as $outage) {
+            foreach ($writes as $name => $write) {
+                $cases["{$name}, {$outage}"] = [$outage, $write];
+            }
+        }
+
+        return $cases;
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testAWriteTheCacheCannotInvalidateIsRolledBack(string $outage, Closure $write): void
+    {
+        $cache = new UnavailableCache();
+        $database = $this->createDatabase($cache);
+        $outage === self::OPEN ? $cache->open() : $cache->failWrites();
+
+        $failure = $this->attempt(fn (): mixed => $write($database));
+        $cache->recover();
+
+        $this->assertInstanceOf(Throwable::class, $failure, 'A write whose cache invalidation could not be confirmed must fail');
+
+        $this->assertSame('original', $this->stored($database), 'The write must be rolled back');
+        $this->assertSame('original', $this->cached($database));
+    }
+
+    public function testAPurgeFailingAfterTheCommitRetiresTheCollectionInstead(): void
+    {
+        $cache = new UnavailableCache();
+        $adapter = new CommitHookMemory();
+        $database = $this->createDatabase($cache, $adapter);
+        $adapter->afterCommit = $cache->failWrites(...);
+
+        $this->attempt(fn (): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated'])));
+        $cache->recover();
+
+        $this->assertSame('updated', $this->stored($database));
+        $this->assertSame('updated', $this->cached($database), 'A committed write whose purge failed must not leave the old document cached');
+    }
+
+    public function testPurgeCachedCollectionReportsACacheThatCannotConfirmIt(): void
+    {
+        $cache = new UnavailableCache();
+        $database = $this->createDatabase($cache);
+        $cache->open();
+
+        $this->expectExceptionMessage('Cache purge could not be confirmed');
+
+        $database->purgeCachedCollection('webhooks');
+    }
+
+    public function testASchemaChangeRetiresCachedDocumentsBeforeItCommits(): void
+    {
+        $cache = new UnavailableCache();
+        $adapter = new CommitHookMemory();
+        $database = $this->createDatabase($cache, $adapter);
+        $adapter->afterCommit = $cache->open(...);
+
+        $this->attempt(fn () => $database->renameAttribute('webhooks', 'name', 'title'));
+        $cache->recover();
+
+        $this->assertSame(['title'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $database->getCollection('webhooks')->attributes()));
+        $document = $database->getDocument('webhooks', 'hook');
+        $this->assertSame('original', $document->getAttribute('title'), 'A document cached before a schema change must not be served once the cache recovers');
+        $this->assertNull($document->getAttribute('name'));
+    }
+
+    public function testASchemaChangeTheCacheCannotInvalidateIsRolledBack(): void
+    {
+        $cache = new UnavailableCache();
+        $database = $this->createDatabase($cache);
+        $cache->open();
+
+        $failure = $this->attempt(fn () => $database->renameAttribute('webhooks', 'name', 'title'));
+        $cache->recover();
+
+        $this->assertInstanceOf(Throwable::class, $failure, 'A schema change whose cache invalidation could not be confirmed must fail');
+
+        $this->assertSame(['name'], \array_map(static fn (Attribute $attribute): string => $attribute->key, $database->getCollection('webhooks')->attributes()));
+        $this->assertSame('original', $this->cached($database));
+    }
+
+    /**
+     * @param  Closure(): mixed  $write
+     */
+    private function attempt(Closure $write): ?Throwable
+    {
+        try {
+            $write();
+        } catch (Throwable $error) {
+            return $error;
+        }
+
+        return null;
+    }
+
+    private function stored(Database $database): mixed
+    {
+        return UncachedTwin::of($database)->getDocument('webhooks', 'hook')->getAttribute('name');
+    }
+
+    private function cached(Database $database): mixed
+    {
+        return $database->getDocument('webhooks', 'hook')->getAttribute('name');
+    }
+
+    private function createDatabase(UnavailableCache $cache, DatabaseMemory $adapter = new DatabaseMemory()): Database
+    {
+        $database = new Database($adapter, new Cache($cache));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('unavailable_'.\uniqid());
+        $database->create();
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
+            Attribute::string(key: 'name'),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $database->createDocument('webhooks', new Document(['$id' => 'hook', 'name' => 'original']));
+        $this->assertSame('original', $this->cached($database));
+        $this->assertSame('original', $this->cached($database));
+
+        return $database;
+    }
+}
+
+final class CommitHookMemory extends DatabaseMemory
+{
+    public ?Closure $afterCommit = null;
+
+    #[\Override]
+    public function commitTransaction(): bool
+    {
+        $committed = parent::commitTransaction();
+        if ($committed && ! $this->inTransaction() && $this->afterCommit !== null) {
+            $afterCommit = $this->afterCommit;
+            $this->afterCommit = null;
+            $afterCommit();
+        }
+
+        return $committed;
+    }
+}

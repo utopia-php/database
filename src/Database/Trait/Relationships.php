@@ -424,8 +424,8 @@ trait Relationships
             throw new DatabaseException("Failed to update relationship indexes for '{$key}': ".$error->getMessage(), previous: $error);
         }
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collectionId));
-        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollectionId));
+        $this->purgeCommittedCollection($collectionId);
+        $this->purgeCommittedCollection($relatedCollectionId);
 
         $listeners = $this->listens(Event::AttributeUpdate);
         if ($listeners !== []) {
@@ -511,6 +511,10 @@ trait Relationships
                 });
             });
         } catch (Throwable $error) {
+            if ($this->mayHaveCommitted($error)) {
+                throw $error;
+            }
+
             $rollbacks = [];
             if ($shouldRollback) {
                 $rollbacks[] = $side === RelationshipSide::Parent
@@ -526,8 +530,8 @@ trait Relationships
             );
         }
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
-        $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+        $this->purgeCommittedCollection($collection->getId());
+        $this->purgeCommittedCollection($relatedCollection->getId());
 
         $listeners = $this->listens(Event::AttributeDelete);
         if ($listeners !== []) {

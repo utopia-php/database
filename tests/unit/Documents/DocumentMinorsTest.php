@@ -4,7 +4,6 @@ namespace Tests\Unit\Documents;
 
 use PDO;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
@@ -125,7 +124,7 @@ final class DocumentMinorsTest extends TestCase
         $this->assertSame(1, $database->count(self::COLLECTION));
     }
 
-    public function testAWriteWhoseCacheOwnerCannotBeRegisteredIsRolledBack(): void
+    public function testAWriteWhoseCacheOwnerCannotBeRegisteredStillCommits(): void
     {
         $cache = new class () extends MemoryCache {
             public bool $refuseOwners = false;
@@ -149,10 +148,9 @@ final class DocumentMinorsTest extends TestCase
         $database->getDocument(self::COLLECTION, 'entry');
         $cache->refuseOwners = true;
 
-        $this->assertThrows(RuntimeException::class, null, fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['count' => 2])));
-        $cache->refuseOwners = false;
+        $this->assertSame(1, $database->updateDocuments(self::COLLECTION, new Document(['count' => 2])));
 
-        $this->assertSame(1, $database->getDocument(self::COLLECTION, 'entry')->getAttribute('count'));
+        $this->assertSame(2, $database->getDocument(self::COLLECTION, 'entry')->getAttribute('count'));
     }
 
     public function testMixedOrNestedDocumentListsAreNotCached(): void

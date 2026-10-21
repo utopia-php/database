@@ -165,16 +165,17 @@ final class DocumentCacheInvalidationTest extends TestCase
         $this->assertTrue($database->getCollection('logs')->getAttribute('documentSecurity'), 'The written definition must be read again');
     }
 
+    /**
+     * A purge refused once is retried, so the cache refuses for as long as the write runs: an
+     * outage longer than the retries must still roll the write back.
+     */
     public function testAFailedPurgeInsideTheTransactionRollsTheWriteBack(): void
     {
         /** @var bool $refusing */
         $refusing = false;
         $database = $this->createDatabase(new CountingMemory(), $this->purgeRefusingCache(
             static function () use (&$refusing): bool {
-                $refused = $refusing;
-                $refusing = false;
-
-                return $refused;
+                return $refusing;
             }
         ));
         $database->createDocument('webhooks', $this->hook('hook'));
@@ -187,6 +188,7 @@ final class DocumentCacheInvalidationTest extends TestCase
         } catch (Throwable $error) {
             $failure = $error->getMessage();
         }
+        $refusing = false;
 
         $this->assertSame(self::PURGE_FAILURE, $failure, 'A failed purge inside the transaction must reach the caller');
 

@@ -69,6 +69,41 @@ final class CacheUnavailableTest extends TestCase
         $this->assertSame('original', $this->cached($database));
     }
 
+    /**
+     * One Redis timeout used to refuse the write outright, surfacing to the client as a 500 for a
+     * cache that answered the very next call. A blip shorter than the retries must not cost the write.
+     *
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('blips')]
+    public function testAWriteRidesOutAPurgeBlip(Closure $write): void
+    {
+        $cache = new UnavailableCache();
+        $database = $this->createDatabase($cache);
+        $cache->failNextPurges(2);
+
+        $write($database);
+
+        $this->assertSame('updated', $this->stored($database));
+        $this->assertSame('updated', $this->cached($database), 'The document must not be served from the cache as it was before the write');
+    }
+
+    /** @return array<string, array{Closure(Database): mixed}> */
+    public static function blips(): array
+    {
+        return [
+            'update' => [static fn (Database $database): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']))],
+            'update in a transaction' => [static fn (Database $database): mixed => $database->withTransaction(
+                static fn (): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']))
+            )],
+            'batch update' => [static fn (Database $database): int => $database->updateDocuments(
+                'webhooks',
+                new Document(['name' => 'updated']),
+                [Query::equal('$id', ['hook'])],
+            )],
+        ];
+    }
+
     public function testAPurgeFailingAfterTheCommitRetiresTheCollectionInstead(): void
     {
         $cache = new UnavailableCache();

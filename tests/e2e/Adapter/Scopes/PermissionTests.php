@@ -1915,6 +1915,10 @@ trait PermissionTests
 
         foreach ([RelationshipType::OneToOne, RelationshipType::OneToMany, RelationshipType::ManyToOne, RelationshipType::ManyToMany] as $type) {
             foreach ($scenarios as $scenario => [$documentSecurity, $permissions, $related, $refusal]) {
+                // A many-to-one link by ID is only the key on the parent, so it needs read on the related document.
+                if ($type === RelationshipType::ManyToOne && $related === 'stored' && $refusal === "No permissions provided for action 'update'") {
+                    $refusal = null;
+                }
                 $parents = 'link_rule_parents_'.\uniqid();
                 $relatedCollection = 'link_rule_related_'.\uniqid();
                 $label = $type->value.', '.$scenario;

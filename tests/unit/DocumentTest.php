@@ -541,6 +541,39 @@ class DocumentTest extends TestCase
         $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
     }
 
+    /**
+     * The role list answers who holds a permission. A column narrows what the permission
+     * reaches, not who holds it, so it is left out of the roles and the grant still admits
+     * its role to the row.
+     */
+    public function testAColumnScopedPermissionContributesOnlyItsRole(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [
+            Permission::read(Role::any(), 'name'),
+            Permission::read(Role::team('hr'), 'salary'),
+            Permission::update(Role::user('alice'), 'salary'),
+        ]]);
+
+        $this->assertSame(['any', 'team:hr'], $document->getPermissionsByType(PermissionType::Read));
+        $this->assertSame(['user:alice'], $document->getPermissionsByType(PermissionType::Update));
+
+        // The permissions themselves keep the column they were written with.
+        $this->assertContains('read("any", "name")', $document->getPermissions());
+    }
+
+    /**
+     * Two grants on the same role, each narrowed to a different column, name that role once.
+     */
+    public function testTwoColumnGrantsOnOneRoleYieldOneRole(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [
+            Permission::read(Role::any(), 'name'),
+            Permission::read(Role::any(), 'salary'),
+        ]]);
+
+        $this->assertSame(['any'], $document->getPermissionsByType(PermissionType::Read));
+    }
+
     public function testUnsetPermissionsClearsRoles(): void
     {
         $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);

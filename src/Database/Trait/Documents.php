@@ -46,10 +46,12 @@ use Utopia\Database\Id;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\ParsedQuery;
+use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
+use Utopia\Database\Role;
 use Utopia\Database\Rounding;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
@@ -600,7 +602,11 @@ trait Documents
             ? self::sharedDefinition()
             : $this->silent(fn () => $this->getCollection($collection));
 
-        return $this->readDocument($definition, $id, $this->rewriteQueries(Event::DocumentRead, $definition, $queries), $forUpdate);
+        $document = $this->readDocument($definition, $id, $this->rewriteQueries(Event::DocumentRead, $definition, $queries), $forUpdate);
+
+        $this->maskColumns($definition, $document);
+
+        return $document;
     }
 
     /**
@@ -1347,6 +1353,8 @@ trait Documents
             $this->dispatch(new Event\Document\Created($collection->getId(), $document), $listeners);
         }
 
+        $this->maskColumns($collection, $document);
+
         return $document;
     }
 
@@ -1490,10 +1498,332 @@ trait Documents
     }
 
     /**
+     * The columns the caller may reach on this collection, or null when nothing narrows them.
+     *
+     * Grants only ever add: a grant naming no column reaches every column, one naming a column
+     * reaches that column alone, and a caller's reach is the union over the grants whose role
+     * they hold. Nothing is restricted by default and nothing a grant says takes access away --
+     * a column is simply unreachable until something grants it.
+     *
+     * Null means "do not narrow", which covers the ordinary collection where no grant names a
+     * column at all, and the caller who holds a whole-row grant. A document's own permissions
+     * never name a column, so a row-level grant is whole-row and reaches everything.
+     *
+     * @return list<string>|null
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function grantedColumns(Document $collection, PermissionType $type): ?array
+    {
+        $definition = Collection::fromDocument($collection);
+
+        // The overwhelming majority of collections name no column anywhere, and pay one
+        // array check rather than a parse of every permission on every read.
+        if ($definition->getAttribute(Collection::COLUMN_PERMISSIONS, []) === []) {
+            return null;
+        }
+
+        $columns = [];
+        $narrowed = false;
+
+        foreach ($definition->declaredPermissions() ?? [] as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if ($parsed->getPermission() !== $type->value) {
+                continue;
+            }
+
+            $role = (new Role($parsed->getRole(), $parsed->getIdentifier(), $parsed->getDimension()))->toString();
+
+            if (! $this->authorization->isValid(new Input($type, [$role]))) {
+                continue;
+            }
+
+            if ($parsed->isForAllColumns()) {
+                return null;
+            }
+
+            $narrowed = true;
+            $columns[] = $parsed->getColumn();
+        }
+
+        return $narrowed ? \array_values(\array_unique($columns)) : null;
+    }
+
+    /**
+     * Refuse a join while a column restriction applies to either side of it.
+     *
+     * A join names columns in a second collection under an alias, and returns them beside the
+     * base row as "alias.column". Neither this gate nor maskColumns() resolves that alias: the
+     * gate would read the joined names against the base collection's grants, and the mask only
+     * knows the base collection, so the joined columns would come back unshaped. That cuts both
+     * ways -- a restricted base must not reach into an open collection, and an open base must
+     * not be used to read a restricted one -- so the join is refused if either side narrows for
+     * this role. A role holding a whole-row grant on both sides is unrestricted and joins as it
+     * always did.
+     *
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     *
+     * @throws QueryException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function rejectRestrictedJoins(Document $collection, array $queries, ?array &$joinedCollections): void
+    {
+        $joined = self::joinedBy($queries);
+
+        if ($joined === []) {
+            return;
+        }
+
+        // An adapter that cannot join at all refuses the join further down, for a better
+        // reason than this one. Stepping aside leaves that error to it, and a join that can
+        // never run leaks nothing in the meantime.
+        if (! $this->adapter->supports(Capability::Joins)) {
+            return;
+        }
+
+        $message = 'Join queries are not supported while a column-scoped permission applies';
+
+        // Before resolving anything: a restricted base refuses the join whatever it joins.
+        if ($this->grantedColumns($collection, PermissionType::Read) !== null) {
+            throw new QueryException($message);
+        }
+
+        // The read's own map, filled in here when this gate is the first to need it and reused
+        // by the rest of the read, so a joined collection is still resolved once per read.
+        $joinedCollections ??= $this->resolveJoinedCollections($queries);
+
+        foreach ($joined as $id) {
+            // Absent from the map only for a nested join, which it does not walk. A join naming
+            // no such collection is validation's to report, not this gate's.
+            $definition = $joinedCollections[$id] ?? $this->silent(fn (): ?Collection => $this->findCollection($id));
+
+            if ($definition !== null && $this->grantedColumns($definition, PermissionType::Read) !== null) {
+                throw new QueryException($message);
+            }
+        }
+    }
+
+    /**
+     * Every collection a set of queries joins, nested joins included.
+     *
+     * @param  array<mixed>  $queries
+     * @return list<string>
+     */
+    private static function joinedBy(array $queries): array
+    {
+        $ids = [];
+
+        foreach ($queries as $query) {
+            if (! $query instanceof Query) {
+                continue;
+            }
+
+            if ($query->getMethod()->isJoin() && $query->getAttribute() !== '') {
+                $ids[] = $query->getAttribute();
+            }
+
+            // A nested join is a join among its parent's values.
+            foreach (self::joinedBy($query->getValues()) as $id) {
+                $ids[] = $id;
+            }
+        }
+
+        return \array_values(\array_unique($ids));
+    }
+
+    /**
+     * Remove the columns the caller was not granted from a document on its way back.
+     *
+     * The other half of the gate: a query naming an ungranted column is refused, and a read
+     * naming nothing is answered with what the caller may see. Asking for everything -- a bare
+     * read, or select('*') -- is not refusing, so it is shaped rather than thrown.
+     *
+     * The key is removed rather than nulled: null would be indistinguishable from a column that
+     * genuinely holds null, which tells the caller something untrue. System attributes are left
+     * alone; they are not columns and the row gate already decided them.
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function maskColumns(Document $collection, Document $document): void
+    {
+        if (! $this->authorization->getStatus() || $document->isEmpty()) {
+            return;
+        }
+
+        $granted = $this->grantedColumns($collection, PermissionType::Read);
+
+        if ($granted === null) {
+            return;
+        }
+
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$') || \in_array($key, $granted, true)) {
+                continue;
+            }
+
+            $document->removeAttribute($key);
+        }
+    }
+
+    /**
+     * Refuse a write that touches a column the caller may not change.
+     *
+     * The mirror of the read gate, and the simpler half: there is no query surface, only the
+     * columns the document carries. A caller granted one column may change that column and no
+     * other, and the write is refused whole rather than applied in part -- a half-applied update
+     * is harder to reason about than one that did not happen.
+     *
      * @throws AuthorizationException
      * @throws DatabaseException
      * @throws StructureException
      */
+    private function assertWritableColumns(Document $collection, Document $document): void
+    {
+        if (! $this->authorization->getStatus()) {
+            return;
+        }
+
+        $granted = $this->grantedColumns($collection, PermissionType::Update);
+
+        if ($granted === null) {
+            return;
+        }
+
+        // The row's own permissions are not a column, and rewriting them is a whole-row act:
+        // a caller who may change one column could otherwise grant itself delete and destroy
+        // the row, turning a grant over one column into power over all of it. The other system
+        // attributes are not writable this way, so skipping them stays correct.
+        if ($document->offsetExists(Document::PERMISSIONS)) {
+            throw new AuthorizationException('Missing "update" permission for the row\'s permissions, which a column-scoped grant does not cover.');
+        }
+
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$')) {
+                continue;
+            }
+
+            if (! \in_array($key, $granted, true)) {
+                throw new AuthorizationException('Missing "update" permission for column "'.$key.'".');
+            }
+        }
+    }
+
+    /**
+     * Refuse a query that names a column the caller may not read.
+     *
+     * Masking the result is not enough on its own: a filter on a column answers questions about
+     * it whether or not the value comes back, and Query::greaterThan() turns that into a binary
+     * search. Ordering leaks the order, and an aggregate leaks the aggregate. So anything that
+     * names a column is settled here, before the adapter sees it.
+     *
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     *
+     * @throws AuthorizationException
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function assertQueryColumns(Document $collection, array $queries, ?array &$joinedCollections = null): void
+    {
+        if (! $this->authorization->getStatus()) {
+            return;
+        }
+
+        // Before the base collection's own grant is consulted: a join is refused for a
+        // restriction on either side, and an unrestricted base is exactly the case where one
+        // can be used to read a restricted collection.
+        $this->rejectRestrictedJoins($collection, $queries, $joinedCollections);
+
+        $granted = $this->grantedColumns($collection, PermissionType::Read);
+
+        if ($granted === null) {
+            return;
+        }
+
+        foreach (self::columnsNamedBy($queries) as $column) {
+            if (! \in_array($column, $granted, true)) {
+                throw new AuthorizationException('Missing "read" permission for column "'.$column.'".');
+            }
+        }
+    }
+
+    /**
+     * Every column a set of queries names, nested ones included.
+     *
+     * @param  array<mixed>  $queries
+     * @return list<string>
+     */
+    private static function columnsNamedBy(array $queries): array
+    {
+        $columns = [];
+
+        foreach ($queries as $query) {
+            if (! $query instanceof Query) {
+                continue;
+            }
+
+            if ($query->getMethod() === Method::Select) {
+                foreach ($query->getValues() as $value) {
+                    // '*' names nothing in particular -- it asks for whatever the caller is
+                    // entitled to, which is what a read with no select asks for too. Naming a
+                    // column is what gets refused; asking for the lot is not.
+                    if (\is_string($value) && $value !== '' && $value !== '*' && ! \str_starts_with($value, '$')) {
+                        $columns[] = $value;
+                    }
+                }
+
+                continue;
+            }
+
+            $attribute = $query->getAttribute();
+
+            if ($attribute !== '' && ! \str_starts_with($attribute, '$')) {
+                $columns[] = $attribute;
+            }
+
+            // and/or carry their operands as values
+            foreach (self::columnsNamedBy($query->getValues()) as $column) {
+                $columns[] = $column;
+            }
+        }
+
+        return \array_values(\array_unique($columns));
+    }
+
+    /**
+     * A row's permissions may not name a column.
+     *
+     * No column list on purpose, and no exemption: a column-scoped permission belongs to a
+     * collection, and a row naming one would be stored where nothing enforces it. It is also
+     * what every read gate matches against -- the `_perms` side table, Postgres' JSONB
+     * containment, Mongo's `$in` -- so a column stored here hides the row from the role it was
+     * granted to, while getDocument() still returns it.
+     *
+     * Every path that writes permissions calls this. It used to live inline in
+     * prepareDocument(), which only createDocument() reaches, so the rule held on one entry
+     * point out of six and a batch create, an update or an upsert stored the grant happily.
+     *
+     * @throws DatabaseException
+     * @throws StructureException
+     */
+    private function assertRowPermissions(Document $document): void
+    {
+        if (! $this->validation()->get()) {
+            return;
+        }
+
+        $validator = new Permissions(columns: null);
+
+        if (! $validator->isValid($document->getPermissions())) {
+            throw new DatabaseException($validator->getDescription());
+        }
+    }
+
     private function prepareDocument(Document $collection, Document $document): Document
     {
         if ($collection->getId() !== self::METADATA) {
@@ -1532,14 +1862,39 @@ trait Documents
             }
         }
 
-        $document = $this->encode($collection, $document);
+        // Before encode(), which turns both of these into JSON strings.
+        //
+        // A collection definition records the grants it was given, columns and all, beside the
+        // role-only projection of them that goes in $permissions. The rule below never sees them
+        // -- by the time they reach a row they are not in $permissions any more -- so they are
+        // judged here, against the columns the definition itself declares. Without this, a write
+        // that reaches past createCollection() could record a grant on a column that does not
+        // exist, and nothing would ever say so.
+        if ($this->validation()->get() && $collection->getId() === Database::METADATA) {
+            $declared = $document->getAttribute(Collection::ATTRIBUTES, []);
+            $columns = [];
 
-        if ($this->validation()->get()) {
-            $validator = new Permissions();
-            if (! $validator->isValid($document->getPermissions())) {
+            foreach (\is_array($declared) ? $declared : [] as $attribute) {
+                $key = match (true) {
+                    $attribute instanceof Document => $attribute->getAttribute('key'),
+                    \is_array($attribute) => $attribute['key'] ?? null,
+                    default => null,
+                };
+
+                if (\is_string($key) && $key !== '') {
+                    $columns[] = $key;
+                }
+            }
+
+            $validator = new Permissions(columns: $columns);
+            if (! $validator->isValid($document->getAttribute(Collection::COLUMN_PERMISSIONS, []))) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
+
+        $document = $this->encode($collection, $document);
+
+        $this->assertRowPermissions($document);
 
         if ($this->validation()->get()) {
             $structure = new Structure(
@@ -1600,6 +1955,10 @@ trait Documents
             if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
+        }
+
+        foreach ($documents as $document) {
+            $this->assertRowPermissions($document);
         }
 
         $time = DateTime::now();
@@ -1703,6 +2062,7 @@ trait Documents
 
             foreach ($batch as $document) {
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $document);
                     $onNext($document, null);
                 }
 
@@ -1736,7 +2096,12 @@ trait Documents
             throw new DatabaseException('Must define $id attribute');
         }
 
+        $this->assertRowPermissions($document);
+
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        $this->assertWritableColumns($collection, $document);
+
         $preparation = $this->nestedPreparation(lock: true);
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
@@ -2023,6 +2388,8 @@ trait Documents
             $this->dispatch(new Event\Document\Updated($collection->getId(), $document), $listeners);
         }
 
+        $this->maskColumns($collection, $document);
+
         return $document;
     }
 
@@ -2059,6 +2426,9 @@ trait Documents
         $batchSize = self::batchSize($batchSize);
 
         $this->rejectJoins($queries, 'Join queries are not supported for bulk updates');
+
+        $this->assertRowPermissions($updates);
+        $this->assertWritableColumns($this->silent(fn () => $this->getCollection($collection)), $updates);
 
         if ($updates->isEmpty()) {
             return 0;
@@ -2273,6 +2643,8 @@ trait Documents
 
             foreach ($batch as $index => $doc) {
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $doc);
+                    $this->maskColumns($collection, $old[$index]);
                     $onNext($doc, $old[$index]);
                 }
                 $modified++;
@@ -2393,6 +2765,10 @@ trait Documents
             throw new DatabaseException('Adapter does not support upserts');
         }
 
+        foreach ($documents as $document) {
+            $this->assertRowPermissions($document);
+        }
+
         if (
             $this->adapter->hasSharedTables()
             && ! $this->adapter->isTenantPerDocument()
@@ -2434,6 +2810,15 @@ trait Documents
             $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
+
+            // An upsert onto a stored row is an update, and is gated as updateDocument() is.
+            // Before keepStored() merges the row in, so the columns judged are the ones the
+            // caller wrote rather than every column the row happens to hold. An upsert that
+            // creates carries no stored row and is covered by the create grant instead.
+            if (! $old->isEmpty()) {
+                $this->assertWritableColumns($collection, $document);
+            }
+
             $unchanged = $this->roundOperators($collection, $document);
             if (! $old->isEmpty()) {
                 self::keepStored($document, $old, $unchanged);
@@ -2695,9 +3080,11 @@ trait Documents
 
                 if (! $old->isEmpty()) {
                     $old = $this->castAfterDocument($collection, $old);
+                    $this->maskColumns($collection, $old);
                 }
 
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $doc);
                     $onNext($doc, $old->isEmpty() ? null : $old);
                 }
             }
@@ -2798,6 +3185,9 @@ trait Documents
         $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        // The one column the counter changes, judged as any other write of it would be.
+        $this->assertWritableColumns($collection, new Document([$attribute => null]));
         $numericAttribute = $this->numericAttribute($collection, $attribute);
         $declared = $numericAttribute ?? $this->declaredAttribute($collection, $attribute);
 
@@ -2893,6 +3283,8 @@ trait Documents
             $this->dispatch(new Event\Document\Increased($collection->getId(), $document, $attribute), $listeners);
         }
 
+        $this->maskColumns($collection, $document);
+
         return $document;
     }
 
@@ -2934,6 +3326,9 @@ trait Documents
         $this->assertPositiveChange($value);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        // The one column the counter changes, judged as any other write of it would be.
+        $this->assertWritableColumns($collection, new Document([$attribute => null]));
 
         $numericAttribute = $this->numericAttribute($collection, $attribute);
         $declared = $numericAttribute ?? $this->declaredAttribute($collection, $attribute);
@@ -3029,6 +3424,8 @@ trait Documents
         if ($listeners !== [] && $value !== 0) {
             $this->dispatch(new Event\Document\Decreased($collection->getId(), $document, $attribute), $listeners);
         }
+
+        $this->maskColumns($collection, $document);
 
         return $document;
     }
@@ -3270,6 +3667,7 @@ trait Documents
 
             foreach ($deleted as $document) {
                 if ($onNext !== null) {
+                    $this->maskColumns($collection, $document);
                     $onNext($document, clone $document);
                 }
                 $modified++;
@@ -4322,7 +4720,13 @@ trait Documents
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
 
-        return $this->fetch($definition, $this->rewriteQueries(Event::DocumentFind, $definition, $queries), $forPermission, false);
+        $documents = $this->fetch($definition, $this->rewriteQueries(Event::DocumentFind, $definition, $queries), $forPermission, false);
+
+        foreach ($documents as $document) {
+            $this->maskColumns($definition, $document);
+        }
+
+        return $documents;
     }
 
     /**
@@ -4366,6 +4770,12 @@ trait Documents
         }
 
         $relationships = self::relationshipAttributes($collection);
+
+        // Covers aggregate() too, which reads through here: min, max and the rest arrive as
+        // queries naming the column they aggregate, and an aggregate over a column you cannot
+        // read discloses it as surely as reading it. After checkQueryTypes() above, so a
+        // malformed query is still reported as malformed rather than reaching this.
+        $this->assertQueryColumns($collection, $queries, $joinedCollectionsById);
 
         $parsed = Query::groupByType($queries);
         $filters = $parsed->filters;
@@ -4675,6 +5085,7 @@ trait Documents
         $queries = $this->rewriteQueries(Event::DocumentCount, $collection, $queries);
 
         $this->checkQueryTypes($queries);
+
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
@@ -4683,6 +5094,8 @@ trait Documents
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
         }
+
+        $this->assertQueryColumns($collection, $queries, $joinedCollections);
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getPermissionsByType(PermissionType::Read)));
@@ -4896,6 +5309,7 @@ trait Documents
         $queries = $this->rewriteQueries(Event::DocumentSum, $collection, $queries);
 
         $this->checkQueryTypes($queries);
+
         $queries = self::resolveOneToManyJoins($collection, $queries);
 
         $joinedCollections = null;
@@ -4907,6 +5321,9 @@ trait Documents
             }
             $this->validateSumAttribute($collection, $attribute, $queries, $joinedCollections);
         }
+
+        // The aggregated column is read too, so it is named alongside the queries.
+        $this->assertQueryColumns($collection, [...$queries, Query::sum($attribute)], $joinedCollections);
 
         if (! \str_contains($attribute, '.') && ! $this->declaresSumAttribute($collection, $attribute)) {
             $joinedCollections ??= $this->resolveJoinedCollections($queries);
@@ -5228,6 +5645,7 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         $definition = $this->silent(fn () => $this->getCollection($collection));
+
         $queries = self::aliasAggregates($this->rewriteQueries(Event::DocumentAggregate, $definition, $queries));
 
         $floating = self::floatingAggregates($queries);

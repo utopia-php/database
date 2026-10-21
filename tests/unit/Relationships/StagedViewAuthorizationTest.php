@@ -89,7 +89,10 @@ final class StagedViewAuthorizationTest extends TestCase
 
         foreach ($adapters as $adapterName => $adapter) {
             foreach (self::TYPES as $type) {
+                // A one-way one-to-one or many-to-one link by ID is only the key on the parent, so it needs read.
+                $keySide = \in_array($type, ['oneToOne one-way', 'manyToOne'], true);
                 foreach ($scenarios as $scenario => [$state, $documentSecurity, $collectionPermissions, $storedPermissions, $stagedPermissions, $byId, $asDocument]) {
+                    $byId = $keySide && $byId === self::NO_UPDATE ? null : $byId;
                     yield "{$adapterName}, {$type} by ID, {$scenario}" => [$adapter, $type, $state, $documentSecurity, $collectionPermissions, $storedPermissions, $stagedPermissions, self::ID, $byId];
                     yield "{$adapterName}, {$type} as a document, {$scenario}" => [$adapter, $type, $state, $documentSecurity, $collectionPermissions, $storedPermissions, $stagedPermissions, self::DOCUMENT, $asDocument];
                 }
@@ -214,7 +217,7 @@ final class StagedViewAuthorizationTest extends TestCase
         $this->seed(new Memory(), 'oneToMany', false, [Permission::create(Role::users()), Permission::read(Role::users()), Permission::update(Role::users())], []);
         $this->authorization->skip(function (): void {
             $this->database->createCollection(Collection::create('toys', attributes: [Attribute::string('name', size: 64)], permissions: [Permission::read(Role::users())]));
-            $this->database->createRelationship('related', Relationship::manyToOne('toys', 'toy', onDelete: RelationshipDeleteAction::SetNull));
+            $this->database->createRelationship('related', Relationship::oneToOne('toys', 'toy', twoWay: true, twoWayKey: 'owner', onDelete: RelationshipDeleteAction::SetNull));
             $this->database->createDocument('toys', new Document(['$id' => 'toy', 'name' => 'Toy']));
         });
         $parent = new Document(['$id' => 'parent', 'related' => [['$id' => 'stored', 'toy' => 'toy']]]);

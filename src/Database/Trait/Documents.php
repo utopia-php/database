@@ -3575,7 +3575,7 @@ trait Documents
             );
         }
 
-        $this->cache->purge($documentKey);
+        $this->withRetries(fn () => $this->cache->purge($documentKey));
 
         return true;
     }
@@ -3757,7 +3757,8 @@ trait Documents
      * epoch, so readers refill it with the tombstone. A write whose registration keeps failing
      * still blocks with its tombstone: its activation finishes it while the tombstone is its own,
      * and otherwise retires whatever readers filled while it ran. An epoch that cannot be read is
-     * purged all the same, so a cache that cannot confirm the purge fails the write.
+     * purged all the same, so a cache that cannot confirm the purge fails the write. Each step is
+     * retried first, so a blip shorter than the retries does not cost the write.
      */
     private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): bool
     {
@@ -3765,18 +3766,20 @@ trait Documents
         if (! $this->registerDocumentCacheOwner($collectionKey, $token)) {
             $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
             if ($epoch === false || $epoch === null) {
-                $this->cache->purge($epochKey);
+                $this->withRetries(fn () => $this->cache->purge($epochKey));
 
                 return false;
             }
         }
 
-        if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
-            throw new RuntimeException("Failed to block document cache epoch '{$epochKey}'");
-        }
+        $this->withRetries(function () use ($epochKey, $token): void {
+            if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
+                throw new RuntimeException("Failed to block document cache epoch '{$epochKey}'");
+            }
+        });
 
-        $this->cache->purge($collectionKey.'#started');
-        $this->purgeCachedDefinition($definitionKey);
+        $this->withRetries(fn () => $this->cache->purge($collectionKey.'#started'));
+        $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
 
         return true;
     }

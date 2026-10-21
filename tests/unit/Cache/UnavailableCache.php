@@ -19,6 +19,8 @@ final class UnavailableCache implements CacheAdapter, Leasable
 
     private bool $failingWrites = false;
 
+    private int $failingPurges = 0;
+
     public function __construct()
     {
         $this->cache = new RedisLeasableCache();
@@ -34,6 +36,14 @@ final class UnavailableCache implements CacheAdapter, Leasable
         $this->failingWrites = true;
     }
 
+    /**
+     * A blip rather than an outage: the next purges cannot be confirmed, later ones can.
+     */
+    public function failNextPurges(int $count): void
+    {
+        $this->failingPurges = $count;
+    }
+
     public function recover(): void
     {
         $this->open = false;
@@ -47,6 +57,12 @@ final class UnavailableCache implements CacheAdapter, Leasable
 
     private function confirmPurge(): void
     {
+        if ($this->failingPurges > 0) {
+            $this->failingPurges--;
+
+            throw new RuntimeException('Cache purge could not be confirmed');
+        }
+
         if (! $this->writable()) {
             throw new RuntimeException('Cache purge could not be confirmed');
         }

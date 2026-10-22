@@ -5,6 +5,7 @@ namespace Utopia\Database\Cache;
 use InvalidArgumentException;
 use RuntimeException;
 use Utopia\Cache\Cache;
+use Utopia\Cache\Exception\Unavailable;
 use Utopia\Database\Document;
 
 /**
@@ -209,11 +210,11 @@ class Query
     public function blockCollection(string $key, string $token): void
     {
         if (! (new Owners($this->cache))->register($key, $token)) {
-            throw new RuntimeException("Failed to register query cache owner for '{$key}'");
+            throw new Unavailable("Failed to register query cache owner for '{$key}'");
         }
 
         if ($this->cache->save($this->getEpochKey($key), self::BLOCKED_PREFIX.$token.self::SEPARATOR.\time()) === false) {
-            throw new RuntimeException("Failed to block query cache epoch for '{$key}'");
+            throw new Unavailable("Failed to block query cache epoch for '{$key}'");
         }
 
         $this->cache->purge($this->getStartedKey($key));
@@ -237,7 +238,7 @@ class Query
         if ($owned && ! $this->cache->purge($registration->key, $registration->field)) {
             $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);
             if ($owner !== false && $owner !== null) {
-                throw new RuntimeException("Failed to release query cache owner for '{$key}'");
+                throw new Unavailable("Failed to release query cache owner for '{$key}'");
             }
             $owned = false;
         }
@@ -277,7 +278,7 @@ class Query
         }
 
         if ($nextFinished === $finished && $this->isTombstoneOf($this->cache->load($epochKey, self::PERMANENT), $token)) {
-            throw new RuntimeException("Failed to finish query cache invalidation for '{$key}'");
+            throw new Unavailable("Failed to finish query cache invalidation for '{$key}'");
         }
 
         if ($registration->field !== '' && $this->releaseAbandonedOwners($registration->key, $writerTimeout)) {
@@ -288,7 +289,7 @@ class Query
     public function flush(): void
     {
         if (! $this->cache->flush()) {
-            throw new RuntimeException('Failed to flush query cache');
+            throw new Unavailable('Failed to flush query cache');
         }
     }
 
@@ -411,7 +412,7 @@ class Query
         $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::SEPARATOR.$finished;
 
         if ($this->cache->save($this->getEpochKey($key), $epoch) === false) {
-            throw new RuntimeException("Failed to activate query cache for '{$key}'");
+            throw new Unavailable("Failed to activate query cache for '{$key}'");
         }
     }
 

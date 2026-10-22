@@ -9,6 +9,7 @@ use Tests\Unit\Cache\UnavailableCache;
 use Tests\Unit\Support\UncachedTwin;
 use Throwable;
 use Utopia\Cache\Cache;
+use Utopia\Cache\Exception\Unavailable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -63,7 +64,7 @@ final class CacheUnavailableTest extends TestCase
         $failure = $this->attempt(fn (): mixed => $write($database));
         $cache->recover();
 
-        $this->assertInstanceOf(Throwable::class, $failure, 'A write whose cache invalidation could not be confirmed must fail');
+        $this->assertInstanceOf(Unavailable::class, $failure, 'A write whose cache invalidation could not be confirmed must fail as unavailable, so a caller can tell it was refused');
 
         $this->assertSame('original', $this->stored($database), 'The write must be rolled back');
         $this->assertSame('original', $this->cached($database));

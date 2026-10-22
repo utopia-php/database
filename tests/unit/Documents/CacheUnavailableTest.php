@@ -104,6 +104,32 @@ final class CacheUnavailableTest extends TestCase
         ];
     }
 
+    /**
+     * A purge that outlasts its retries used to refuse the write. Blocking the collection's epoch before the commit
+     * keeps the document cached before the write from being served, so the write commits instead.
+     *
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('singleWrites')]
+    public function testAWritePastThePurgeRetriesCommitsBehindATombstone(Closure $write): void
+    {
+        $cache = new UnavailableCache();
+        $database = $this->createDatabase($cache);
+        $cache->failNextPurges(3);
+
+        $failure = $this->attempt(fn (): mixed => $write($database));
+
+        $this->assertNull($failure, 'A write the cache can still block must not be refused');
+        $this->assertSame('updated', $this->stored($database));
+        $this->assertSame('updated', $this->cached($database), 'The document must not be served from the cache as it was before the write');
+    }
+
+    /** @return array<string, array{Closure(Database): mixed}> */
+    public static function singleWrites(): array
+    {
+        return \array_diff_key(self::blips(), ['batch update' => true]);
+    }
+
     public function testAPurgeFailingAfterTheCommitRetiresTheCollectionInstead(): void
     {
         $cache = new UnavailableCache();
@@ -111,11 +137,51 @@ final class CacheUnavailableTest extends TestCase
         $database = $this->createDatabase($cache, $adapter);
         $adapter->afterCommit = $cache->failWrites(...);
 
-        $this->attempt(fn (): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated'])));
+        $failure = $this->attempt(fn (): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated'])));
         $cache->recover();
 
+        $this->assertNull($failure, 'A stored write must not be reported as failed because its cache invalidation failed');
         $this->assertSame('updated', $this->stored($database));
         $this->assertSame('updated', $this->cached($database), 'A committed write whose purge failed must not leave the old document cached');
+    }
+
+    /**
+     * Publishing the epoch after a batch write commits can miss a Redis timeout. The write is stored and its
+     * tombstone stays in place, so it must report success while readers keep bypassing the cache.
+     */
+    public function testACommittedWriteWhoseEpochCannotBePublishedStaysFailClosed(): void
+    {
+        $cache = new UnavailableCache();
+        $adapter = new CommitHookMemory();
+        $database = $this->createDatabase($cache, $adapter);
+        $adapter->afterCommit = fn () => $cache->failNextSaves(3);
+
+        $failure = $this->attempt(fn (): int => $database->updateDocuments(
+            'webhooks',
+            new Document(['name' => 'updated']),
+            [Query::equal('$id', ['hook'])],
+        ));
+
+        $this->assertNull($failure, 'A stored write must not be reported as failed because its epoch could not be published');
+        $this->assertSame('updated', $this->stored($database));
+        $this->assertSame('updated', $this->cached($database));
+        $this->assertSame('updated', $this->cached($database), 'A refill while the tombstone stands must not cache the old document');
+    }
+
+    public function testAnEpochPublishBlipAfterTheCommitIsRetried(): void
+    {
+        $cache = new UnavailableCache();
+        $adapter = new CommitHookMemory();
+        $database = $this->createDatabase($cache, $adapter);
+        $adapter->afterCommit = fn () => $cache->failNextSaves(2);
+
+        $database->updateDocuments('webhooks', new Document(['name' => 'updated']), [Query::equal('$id', ['hook'])]);
+
+        $collectionKey = $database->getCacheBaseKeys('webhooks')[0];
+        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
+        $this->assertIsString($epoch);
+        $this->assertStringStartsNotWith('blocked', $epoch, 'A blip shorter than the retries must still publish a fresh epoch');
+        $this->assertSame('updated', $this->cached($database));
     }
 
     public function testPurgeCachedCollectionReportsACacheThatCannotConfirmIt(): void

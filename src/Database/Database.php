@@ -3323,7 +3323,7 @@ class Database
     /**
      * Persist metadata with automatic rollback on failure
      *
-     * A failure raised after the metadata write committed (its cache invalidation or events), or a commit that
+     * A failure raised after the metadata write committed (its events), or a commit that
      * could not be confirmed, is rethrown unchanged and rolls nothing back: the definition it reports on may be stored.
      *
      * @param  callable|null  $rollbackOperation  Cleanup operation to run if persistence fails (null if no cleanup needed)

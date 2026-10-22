@@ -337,7 +337,7 @@ final class CoreMinorsTest extends TestCase
 
         $this->assertSame(0, $deletes, 'An index whose definition committed must not be rolled back');
         $this->assertSame(1, $writes, 'A write that committed must not be repeated');
-        $this->assertSame($failures[0] ?? null, $error, 'The failure after the commit must reach the caller as it was raised');
+        $this->assertNull($error, 'A stored write must not be reported as failed because the invalidation after its commit failed');
         $this->assertSame(['by_count'], $this->indexKeys($database, 'logs'));
         $this->assertTrue($this->hasSchemaIndex($database, 'logs', 'by_count'), 'The committed index must still exist');
     }
@@ -423,7 +423,7 @@ final class CoreMinorsTest extends TestCase
         $this->assertSame(['_index_profile'], $this->indexKeys($database, 'accounts'), 'The two-way index must still be created');
         $this->assertTrue($this->hasSchemaIndex($database, 'profiles', '_index_account'));
         $this->assertTrue($this->hasSchemaIndex($database, 'accounts', '_index_profile'));
-        $this->assertSame($failures[0] ?? null, $error, 'The failure after the commit must reach the caller as it was raised');
+        $this->assertNull($error, 'A stored write must not be reported as failed because the invalidation after its commit failed');
     }
 
     /**

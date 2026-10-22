@@ -519,6 +519,26 @@ trait AttributeTests
         $database->deleteCollection($collection);
     }
 
+    public function testDottedAttributeKeysInBatchWrites(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createDottedKeyCollection($database);
+
+        $database->createDocuments($collection, [
+            new Document(['$id' => 'e', 'dots.name' => 'x', 'dots.score' => 7]),
+            new Document(['$id' => 'f', 'dots.name' => 'x', 'dots.score' => 11]),
+        ]);
+        $database->getAuthorization()->skip(fn (): int => $database->upsertDocuments($collection, [
+            new Document(['$id' => 'e', 'dots.name' => 'y', 'dots.score' => 7]),
+            new Document(['$id' => 'g', 'dots.name' => 'y', 'dots.score' => 13]),
+        ]));
+
+        $this->assertSame(['e', 'g'], $this->sortedIds($database->find($collection, [Query::equal('dots.name', ['y'])])));
+        $this->assertSame(['f'], $this->sortedIds($database->find($collection, [Query::equal('dots.name', ['x'])])));
+
+        $database->deleteCollection($collection);
+    }
+
     /**
      * @param  array<string, mixed>  $group
      */

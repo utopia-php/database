@@ -98,12 +98,7 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $cache->failActivations();
 
-        try {
-            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
-            $this->fail('Document cache activation failure was not propagated');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
-        }
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
@@ -134,15 +129,10 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('original', $database->getDocument('logs', 'log')->getAttribute('name'));
         $cache->failActivations('collection:webhooks#epoch');
 
-        try {
-            $database->withTransaction(function () use ($database): void {
-                $this->renameDocument($database, 'webhooks', 'hook', 'updated');
-                $this->renameDocument($database, 'logs', 'log', 'updated');
-            });
-            $this->fail('Document cache activation failure was not propagated');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
-        }
+        $database->withTransaction(function () use ($database): void {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $this->renameDocument($database, 'logs', 'log', 'updated');
+        });
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
@@ -207,7 +197,7 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertNull($database->findCollection('webhooks'));
     }
 
-    public function testActivationPurgeFailureStillPropagates(): void
+    public function testALostFinishAfterCommitDoesNotFailTheWrite(): void
     {
         $cache = new FlushDuringActivationMemory();
         $database = $this->createDatabaseWithCache($cache);
@@ -218,12 +208,7 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertTrue($cache->flush());
         $cache->failDuringActivation();
 
-        try {
-            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
-            $this->fail('Document cache activation purge failure was not propagated');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('finish document cache invalidation', $error->getMessage());
-        }
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
@@ -292,7 +277,7 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('updated', $writer->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
-    public function testActivationRejectsACorruptedOwnerRegistration(): void
+    public function testACorruptedOwnerRegistrationDoesNotFailTheCommittedWrite(): void
     {
         $cache = new RedisLeasableCache();
         $database = $this->createDatabaseWithCache($cache);
@@ -302,12 +287,7 @@ final class DocumentCacheEpochTest extends TestCase
         ]));
         $cache->corruptFieldWrites();
 
-        try {
-            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
-            $this->fail('A corrupted document cache owner registration was accepted');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('Invalid document cache owner', $error->getMessage());
-        }
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
 
         $cache->corruptFieldWrites(false);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
@@ -315,7 +295,7 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation was refused stays uncached');
     }
 
-    public function testActivationPropagatesAnOwnerReleaseFailure(): void
+    public function testAnOwnerReleaseFailureDoesNotFailTheCommittedWrite(): void
     {
         $cache = new RedisLeasableCache();
         $database = $this->createDatabaseWithCache($cache);
@@ -325,12 +305,7 @@ final class DocumentCacheEpochTest extends TestCase
         ]));
         $cache->failFieldPurges();
 
-        try {
-            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
-            $this->fail('A document cache owner release failure was not propagated');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('Failed to release document cache owner', $error->getMessage());
-        }
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
@@ -427,12 +402,7 @@ final class DocumentCacheEpochTest extends TestCase
         $database = $this->createCountedDatabase($adapter, $cache);
         $cache->failActivations();
 
-        try {
-            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
-            $this->fail('The activation did not fail');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
-        }
+        $this->renameDocument($database, 'webhooks', 'hook', 'updated');
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
@@ -454,12 +424,7 @@ final class DocumentCacheEpochTest extends TestCase
         $database = $this->createCountedDatabase($adapter, $cache);
         $cache->abandonNextWrite();
 
-        try {
-            $this->renameDocument($database, 'webhooks', 'hook', 'abandoned');
-            $this->fail('The abandoned write released its registration');
-        } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('release document cache owner', $error->getMessage());
-        }
+        $this->renameDocument($database, 'webhooks', 'hook', 'abandoned');
 
         $this->renameDocument($database, 'webhooks', 'hook', 'second');
         $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
@@ -484,17 +449,12 @@ final class DocumentCacheEpochTest extends TestCase
         try {
             $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
 
-            try {
-                $writer->withTransaction(function () use ($writer, $reader, $cache): void {
-                    $this->renameDocument($writer, 'users', 'user', 'updated');
-                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-                    $cache->failActivations();
-                });
-                $this->fail('The activation did not fail');
-            } catch (\RuntimeException $error) {
-                $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
-            }
+            $writer->withTransaction(function () use ($writer, $reader, $cache): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $cache->failActivations();
+            });
 
             $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A reader must not cache what it read while a write younger than the writer timeout was in flight');
         } finally {
@@ -531,18 +491,13 @@ final class DocumentCacheEpochTest extends TestCase
         try {
             $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
 
-            try {
-                $writer->withTransaction(function () use ($writer, $reader, $cache): void {
-                    $this->renameDocument($writer, 'users', 'user', 'updated');
-                    $reader->purgeCachedCollection('users');
-                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-                    $cache->abandonNextWrite();
-                });
-                $this->fail('The abandoned write released its registration');
-            } catch (\RuntimeException $error) {
-                $this->assertStringContainsString('release document cache owner', $error->getMessage());
-            }
+            $writer->withTransaction(function () use ($writer, $reader, $cache): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $reader->purgeCachedCollection('users');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $cache->abandonNextWrite();
+            });
 
             $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write that finishes while another is in flight must not re-enable the collection');
         } finally {
@@ -896,6 +851,8 @@ final class AbandoningCache implements CacheAdapter, Leasable
 
     private bool $abandoning = false;
 
+    private string $abandoned = '';
+
     public function __construct()
     {
         $this->cache = new RedisLeasableCache();
@@ -934,10 +891,14 @@ final class AbandoningCache implements CacheAdapter, Leasable
     #[\Override]
     public function purge(string $key, string $hash = ''): bool
     {
-        if ($this->abandoning && $hash !== '' && \str_ends_with($key, '#owners')) {
-            $this->abandoning = false;
-
-            return false;
+        if ($hash !== '' && \str_ends_with($key, '#owners')) {
+            if ($this->abandoning) {
+                $this->abandoning = false;
+                $this->abandoned = $hash;
+            }
+            if ($hash === $this->abandoned) {
+                return false;
+            }
         }
 
         return $this->cache->purge($key, $hash);

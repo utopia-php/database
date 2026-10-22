@@ -616,12 +616,8 @@ final class DatabaseTest extends TestCase
             );
             $cache->failActivations();
 
-            try {
-                $writer->updateDocument('users', 'existing', new Document(['name' => 'updated']));
-                $this->fail('Post-commit query-cache activation failure was not propagated');
-            } catch (\RuntimeException $exception) {
-                $this->assertStringContainsString('activate query cache', $exception->getMessage());
-            }
+            $updated = $writer->updateDocument('users', 'existing', new Document(['name' => 'updated']));
+            $this->assertSame('updated', $updated->getAttribute('name'), 'A stored write must not be reported as failed because its query-cache activation failed');
 
             $readerAdapter->observeFinds('users');
             $this->assertSame(

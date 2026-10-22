@@ -243,7 +243,7 @@ final class DocumentCacheInvalidationTest extends TestCase
                 $failure = $error->getMessage();
             }
 
-            $this->assertSame(self::PURGE_FAILURE, $failure, 'A failed purge after the commit must reach the caller');
+            $this->assertNull($failure, 'A stored write must not be reported as failed because its purge after the commit failed');
 
             $this->assertSame('hook', $duringCommit, 'A reader outside the transaction reads the committed row and caches it');
             $this->assertSame('renamed', $reader->getDocument('webhooks', 'hook')->getAttribute('name'), 'A fill made before the commit must never be served after it, even when the purge after the commit fails');

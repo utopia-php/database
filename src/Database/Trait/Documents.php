@@ -16,6 +16,7 @@ use Utopia\Database\Aggregation;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
+use Utopia\Database\Cache\Registration;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -3545,7 +3546,9 @@ trait Documents
     }
 
     /**
-     * Purge a document's cache slot, and once more after the open invalidation scope ends.
+     * Purge a document's cache slot, and once more after the open invalidation scope ends. A write whose purge
+     * cannot be confirmed blocks its collection's epoch instead, before it commits, so the document cached
+     * before it is never served again; only when that fails too is the write refused.
      *
      * @throws Exception
      */
@@ -3575,7 +3578,20 @@ trait Documents
             );
         }
 
-        $this->withRetries(fn () => $this->cache->purge($documentKey));
+        $scoped = $collectionId !== self::METADATA && isset($this->documentCacheMutations[$context]);
+        try {
+            if ($scoped && isset($this->documentCacheMutations[$context][$collectionKey])) {
+                $this->cache->purge($documentKey);
+            } else {
+                $this->withRetries(fn () => $this->cache->purge($documentKey));
+            }
+        } catch (Throwable $error) {
+            if (! $scoped) {
+                throw $error;
+            }
+
+            $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
+        }
 
         return true;
     }
@@ -3619,7 +3635,7 @@ trait Documents
      * Purge the documents a transaction wrote once it has committed or rolled back. A reader
      * outside the transaction may have cached the pre-commit row after the purge inside it, so
      * when this purge fails the collection's epoch is retired instead, which no such fill survives.
-     * A collection definition has no epoch of its own: its purge is tried once more.
+     * A collection definition has no epoch of its own, so its failed purge is the one thrown.
      *
      * @param  array<string, string>  $documents  Collection keys by document key
      */
@@ -3628,20 +3644,29 @@ trait Documents
         $definitions = $this->documentCacheDefinitions[$this->getEventContext()] ?? [];
         $failure = null;
         $retired = [];
+        $reachable = true;
         foreach ($documents as $documentKey => $collectionKey) {
+            if (isset($retired[$collectionKey])) {
+                continue;
+            }
             try {
-                $this->cache->purge($documentKey);
+                if ($reachable) {
+                    $this->withRetries(fn () => $this->cache->purge($documentKey));
+                } else {
+                    $this->cache->purge($documentKey);
+                }
             } catch (Throwable $error) {
-                $failure ??= $error;
+                $reachable = false;
+                if (! isset($definitions[$collectionKey])) {
+                    $failure ??= $error;
+
+                    continue;
+                }
                 try {
-                    if (! isset($definitions[$collectionKey])) {
-                        $this->cache->purge($documentKey);
-                    } elseif (! isset($retired[$collectionKey])) {
-                        $retired[$collectionKey] = true;
-                        $this->advanceDocumentCacheEpoch($collectionKey, $definitions[$collectionKey]);
-                    }
+                    $this->advanceDocumentCacheEpoch($collectionKey, $definitions[$collectionKey]);
+                    $retired[$collectionKey] = true;
                 } catch (Throwable) {
-                    // The purge failure below reaches the caller either way.
+                    $failure ??= $error;
                 }
             }
         }
@@ -3838,14 +3863,7 @@ trait Documents
         if ($owner !== false && $owner !== null && $owner !== $token) {
             throw new RuntimeException("Invalid document cache owner '{$token}' for '{$collectionKey}'");
         }
-        $owned = $owner === $token;
-        if ($owned && ! $this->cache->purge($registration->key, $registration->field)) {
-            $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
-            if ($owner !== false && $owner !== null) {
-                throw new RuntimeException("Failed to release document cache owner '{$token}' for '{$collectionKey}'");
-            }
-            $owned = false;
-        }
+        $owned = $owner === $token && $this->releaseDocumentCacheOwner($registration, $collectionKey, $token);
 
         $startedKey = $collectionKey.'#started';
         $finishedKey = $collectionKey.'#finished';
@@ -3874,19 +3892,7 @@ trait Documents
             return;
         }
 
-        $this->cache->purge($finishedKey);
-        $nextFinished = $this->cache->getGeneration($finishedKey);
-
-        // A cache flush restarts generations, so an unchanged #finished
-        // only proves this purge was lost while the epoch read with it is
-        // still in place; publish the new epoch after this check, not before.
-        if (
-            $nextFinished === $finished
-            && \is_string($epoch)
-            && $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT) === $epoch
-        ) {
-            throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
-        }
+        $nextFinished = $this->finishDocumentCacheWrite($collectionKey, $finished, $epoch);
 
         $nextStarted = $this->cache->getGeneration($startedKey);
         if ($nextStarted === $nextFinished) {
@@ -3912,11 +3918,68 @@ trait Documents
     {
         $epochKey = $collectionKey.'#epoch';
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::DOCUMENT_CACHE_SEPARATOR.$started;
-        if ($this->cache->save($epochKey, $epoch) === false) {
-            throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
-        }
+        $this->withRetries(function () use ($epochKey, $epoch): void {
+            if ($this->cache->save($epochKey, $epoch) === false) {
+                throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
+            }
+        });
 
-        $this->purgeCachedDefinition($definitionKey);
+        $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
+    }
+
+    /**
+     * Release this write's registration, and report whether it was still this write's to release. A purge
+     * that cannot be confirmed is retried while the registration is still in place.
+     */
+    private function releaseDocumentCacheOwner(Registration $registration, string $collectionKey, string $token): bool
+    {
+        $released = true;
+        $this->withRetries(function () use ($registration, $collectionKey, $token, &$released): void {
+            if ($this->cache->purge($registration->key, $registration->field)) {
+                return;
+            }
+
+            $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
+            if ($owner !== false && $owner !== null) {
+                throw new RuntimeException("Failed to release document cache owner '{$token}' for '{$collectionKey}'");
+            }
+            $released = false;
+        });
+
+        return $released;
+    }
+
+    /**
+     * Count this write as finished and return the `#finished` generation after it. A cache flush restarts
+     * generations, so an unchanged `#finished` only proves the purge was lost while the epoch read with it
+     * is still in place; the purge is retried only then, so a purge that did land is never counted twice.
+     */
+    private function finishDocumentCacheWrite(string $collectionKey, string $finished, mixed $epoch): string
+    {
+        $finishedKey = $collectionKey.'#finished';
+        $epochKey = $collectionKey.'#epoch';
+        $next = $finished;
+        $attempted = false;
+        $this->withRetries(function () use ($finishedKey, $epochKey, $finished, $epoch, &$next, &$attempted): void {
+            if ($attempted) {
+                $next = $this->cache->getGeneration($finishedKey);
+            }
+            if ($next === $finished) {
+                $attempted = true;
+                $this->cache->purge($finishedKey);
+            }
+
+            $next = $this->cache->getGeneration($finishedKey);
+            if (
+                $next === $finished
+                && \is_string($epoch)
+                && $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT) === $epoch
+            ) {
+                throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
+            }
+        });
+
+        return $next;
     }
 
     /**

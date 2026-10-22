@@ -21,6 +21,8 @@ final class UnavailableCache implements CacheAdapter, Leasable
 
     private int $failingPurges = 0;
 
+    private int $failingSaves = 0;
+
     public function __construct()
     {
         $this->cache = new RedisLeasableCache();
@@ -42,6 +44,14 @@ final class UnavailableCache implements CacheAdapter, Leasable
     public function failNextPurges(int $count): void
     {
         $this->failingPurges = $count;
+    }
+
+    /**
+     * A blip on writes: the next saves report false, later ones are stored.
+     */
+    public function failNextSaves(int $count): void
+    {
+        $this->failingSaves = $count;
     }
 
     public function recover(): void
@@ -77,6 +87,12 @@ final class UnavailableCache implements CacheAdapter, Leasable
     #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
+        if ($this->failingSaves > 0) {
+            $this->failingSaves--;
+
+            return false;
+        }
+
         return $this->writable() ? $this->cache->save($key, $data, $hash) : false;
     }
 

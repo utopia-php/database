@@ -924,7 +924,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $spatialMap = \array_fill_keys($spatialAttributes, true);
 
         foreach ($spatialAttributes as $spatialColumn) {
-            $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
+            $builder->insertColumnExpression($this->filter($spatialColumn), $this->getSpatialGeometryFromText('?'));
         }
 
         $intBools = $this->supports(Capability::IntegerBooleans);
@@ -3912,6 +3912,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     ): void {
         $builder = $this->dialectBuilder()->into($this->getTableRaw($name));
 
+        $spatialAttributes = \array_map($this->filter(...), $spatialAttributes);
+        $operators = \array_combine(\array_map($this->filter(...), \array_keys($operators)), $operators);
+
         foreach ($spatialAttributes as $spatialColumn) {
             $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeometryFromText('?'));
         }
@@ -3956,11 +3959,14 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
             $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $document);
 
-            foreach (\array_keys($currentRegularAttributes) as $column) {
+            $row = [];
+            foreach ($currentRegularAttributes as $column => $value) {
+                $column = $this->filter($column);
+                $row[$column] = $value;
                 $allColumnNames[$column] = true;
             }
 
-            $documentsData[] = $currentRegularAttributes;
+            $documentsData[] = $row;
         }
 
         foreach (\array_keys($operators) as $column) {
@@ -6550,7 +6556,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if ($intBools && ! isset($spatialMap[$key])) {
                 $value = (\is_bool($value)) ? (int) $value : $value;
             }
-            $row[$key] = $value;
+            $row[$this->filter($key)] = $value;
         }
 
         return $row;

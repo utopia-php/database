@@ -522,6 +522,12 @@ trait AttributeTests
     public function testDottedAttributeKeysInBatchWrites(): void
     {
         $database = $this->getDatabase();
+        if (! $database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
         $collection = $this->createDottedKeyCollection($database);
 
         $database->createDocuments($collection, [

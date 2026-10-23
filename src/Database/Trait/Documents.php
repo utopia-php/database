@@ -8,6 +8,7 @@ use Exception;
 use Generator;
 use RuntimeException;
 use Throwable;
+use Utopia\Cache\Exception\Unavailable as CacheUnavailable;
 use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
@@ -3799,7 +3800,7 @@ trait Documents
 
         $this->withRetries(function () use ($epochKey, $token): void {
             if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
-                throw new RuntimeException("Failed to block document cache epoch '{$epochKey}'");
+                throw new CacheUnavailable("Failed to block document cache epoch '{$epochKey}'");
             }
         });
 
@@ -3920,7 +3921,7 @@ trait Documents
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::DOCUMENT_CACHE_SEPARATOR.$started;
         $this->withRetries(function () use ($epochKey, $epoch): void {
             if ($this->cache->save($epochKey, $epoch) === false) {
-                throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
+                throw new CacheUnavailable("Failed to activate document cache epoch '{$epochKey}'");
             }
         });
 
@@ -3941,7 +3942,7 @@ trait Documents
 
             $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
             if ($owner !== false && $owner !== null) {
-                throw new RuntimeException("Failed to release document cache owner '{$token}' for '{$collectionKey}'");
+                throw new CacheUnavailable("Failed to release document cache owner '{$token}' for '{$collectionKey}'");
             }
             $released = false;
         });
@@ -3975,7 +3976,7 @@ trait Documents
                 && \is_string($epoch)
                 && $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT) === $epoch
             ) {
-                throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
+                throw new CacheUnavailable("Failed to finish document cache invalidation '{$epochKey}'");
             }
         });
 

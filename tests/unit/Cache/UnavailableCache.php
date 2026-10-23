@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Cache;
 
-use RuntimeException;
 use Utopia\Cache\Adapter as CacheAdapter;
+use Utopia\Cache\Exception\Unavailable;
 use Utopia\Cache\Feature\Leasable;
 
 /**
@@ -70,11 +70,11 @@ final class UnavailableCache implements CacheAdapter, Leasable
         if ($this->failingPurges > 0) {
             $this->failingPurges--;
 
-            throw new RuntimeException('Cache purge could not be confirmed');
+            throw new Unavailable('Cache purge could not be confirmed');
         }
 
         if (! $this->writable()) {
-            throw new RuntimeException('Cache purge could not be confirmed');
+            throw new Unavailable('Cache purge could not be confirmed');
         }
     }
 

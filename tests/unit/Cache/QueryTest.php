@@ -7,6 +7,7 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory;
 use Utopia\Cache\Cache;
+use Utopia\Cache\Exception\Unavailable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Entry;
 use Utopia\Database\Cache\Invalidator;
@@ -940,7 +941,7 @@ class QueryTest extends TestCase
             }
         });
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(Unavailable::class);
         $this->expectExceptionMessage('Failed to block query cache epoch');
         $queryCache->invalidateCollection(new Scope(), 'users');
     }

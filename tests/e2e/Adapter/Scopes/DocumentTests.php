@@ -1384,6 +1384,78 @@ trait DocumentTests
         }
     }
 
+    public function testStringByteTruncationCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(Collection::create(id: __FUNCTION__));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'cursorJson', size: 20000));
+
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value));
+
+        $document = new Document([
+            '$id' => 'first',
+            'cursorJson' => $value,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        try {
+            $database->createDocument(__FUNCTION__, $document);
+            $this->fail('Expected StructureException for over-capacity string value');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
+        }
+    }
+
+    public function testStringByteTruncationUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(Collection::create(id: __FUNCTION__));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'cursorJson', size: 20000));
+
+        $document = new Document([
+            '$id' => 'first',
+            'cursorJson' => \str_repeat('a', 16383),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value));
+
+        try {
+            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('cursorJson', $value));
+            $this->fail('Expected StructureException for over-capacity string value on update');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
+        }
+    }
+
     public function testUpsertDocumentsInc(): void
     {
         /** @var Database $database */

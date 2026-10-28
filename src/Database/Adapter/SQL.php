@@ -2610,7 +2610,13 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             idType: ColumnType::Integer,
             keywords: $this->getKeywords(),
             internalIndexKeys: [Storage::INDEX_PRIMARY, Storage::INDEX_CREATED_AT, Storage::INDEX_UPDATED_AT, Storage::INDEX_TENANT_ID],
+            escalatedStringByteCap: $this->limitsEscalatedStringByteCap(),
         );
+    }
+
+    protected function limitsEscalatedStringByteCap(): bool
+    {
+        return true;
     }
 
     #[\Override]

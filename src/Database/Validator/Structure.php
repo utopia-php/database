@@ -325,8 +325,15 @@ class Structure extends Validator
                     break;
 
                 case ColumnType::Varchar:
+                    $validators[] = new Text($size, min: 0);
+                    break;
+
                 case ColumnType::String:
                     $validators[] = new Text($size, min: 0);
+                    $byteCap = $this->profile->limits->stringEscalatedStorageByteLimit($size);
+                    if ($byteCap !== null) {
+                        $validators[] = new ByteLength($byteCap);
+                    }
                     break;
 
                 case ColumnType::Integer:

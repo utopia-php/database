@@ -35,6 +35,7 @@ final class Profiles
         ?DateTime $minDateTime = null,
         ?DateTime $maxDateTime = null,
         array $internalIndexKeys = [],
+        bool $escalatedStringByteCap = true,
     ): Profile {
         return new Profile(
             new Limits(
@@ -54,6 +55,7 @@ final class Profiles
                 idType: $idType,
                 keywords: [],
                 internalIndexKeys: $internalIndexKeys,
+                escalatedStringByteCap: $escalatedStringByteCap,
             ),
             $capabilities,
             $features,

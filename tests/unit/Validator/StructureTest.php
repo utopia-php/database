@@ -1,1 +1,0 @@
-@workspace:tests/unit/Validator/StructureTest.php

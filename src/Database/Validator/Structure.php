@@ -1,0 +1,1 @@
+__LOAD_FROM_WORKSPACE__/workspace/src/Database/Validator/Structure.php

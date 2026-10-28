@@ -1,1 +1,1 @@
-__MCP_LOAD_FILE__/workspace/src/Database/Adapter/Redis.php
+___FULL_FROM_JSON___

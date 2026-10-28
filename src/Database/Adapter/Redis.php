@@ -1,1 +1,1 @@
-file:///tmp/mcp_args_only.json
+__cursor_file__:/tmp/redis_patched.php

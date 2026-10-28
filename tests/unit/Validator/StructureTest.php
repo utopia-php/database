@@ -1,1 +1,1 @@
-__FROM_WORKSPACE_PUSH_ARGS__
+@/workspace/tests/unit/Validator/StructureTest.php

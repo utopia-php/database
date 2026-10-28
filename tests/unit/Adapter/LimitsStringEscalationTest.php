@@ -31,6 +31,9 @@ class LimitsStringEscalationTest extends TestCase
         );
 
         $this->assertNull($limits->stringEscalatedStorageByteLimit(100));
+        $this->assertSame(Database::MAX_TEXT_BYTES, $limits->stringEscalatedStorageByteLimit(16382));
+        $this->assertSame(Database::MAX_TEXT_BYTES, $limits->stringEscalatedStorageByteLimit(65535));
+        $this->assertSame(Database::MAX_MEDIUMTEXT_BYTES, $limits->stringEscalatedStorageByteLimit(65536));
         $this->assertSame(Database::MAX_TEXT_BYTES, $limits->stringEscalatedStorageByteLimit(20000));
         $this->assertSame(Database::MAX_MEDIUMTEXT_BYTES, $limits->stringEscalatedStorageByteLimit(100000));
         $this->assertSame(Database::MAX_LONGTEXT_BYTES, $limits->stringEscalatedStorageByteLimit(20000000));

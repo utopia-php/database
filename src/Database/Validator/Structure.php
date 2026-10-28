@@ -1,1 +1,1 @@
-___FULL_FROM_JSON___
+__READ__:/workspace/src/Database/Validator/Structure.php

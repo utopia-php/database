@@ -1,1 +1,1 @@
-file:///workspace/src/Database/Validator/Structure.php
+/workspace/src/Database/Validator/Structure.php

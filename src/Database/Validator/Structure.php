@@ -1,1 +1,1 @@
-@workspace:src/Database/Validator/Structure.php
+git:24bc80422:src/Database/Validator/Structure.php

@@ -1,0 +1,1 @@
+{{read_file:/workspace/tests/e2e/Adapter/Scopes/DocumentTests.php}}

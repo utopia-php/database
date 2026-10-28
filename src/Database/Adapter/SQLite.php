@@ -1,1 +1,1 @@
-__FROM_WORKSPACE_PUSH_ARGS__
+file:///workspace/src/Database/Adapter/SQLite.php

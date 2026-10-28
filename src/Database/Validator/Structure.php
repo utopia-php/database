@@ -1,1 +1,1 @@
-__READ__:/workspace/src/Database/Validator/Structure.php
+x

@@ -1,1 +1,1 @@
-PH
+@file:/workspace/src/Database/Validator/Structure.php

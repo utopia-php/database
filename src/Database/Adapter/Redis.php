@@ -1,1 +1,1 @@
-PLACEHOLDER
+$workspaceFile:src/Database/Adapter/Redis.php

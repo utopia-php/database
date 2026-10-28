@@ -1,1 +1,1 @@
-__LOAD_FROM__/workspace/push_args_fresh.json__
+$WORKSPACE:/workspace/src/Database/Adapter/Redis.php

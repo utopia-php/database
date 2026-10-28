@@ -1,1 +1,1 @@
-git:24bc80422:src/Database/Validator/Structure.php
+base64:PD9waHAKCm5hbWVzcGFjZSBVdG9waWFcRGF0YWJhc2VcVmFsaWRhdG9yOwo=

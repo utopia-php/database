@@ -1,1 +1,1 @@
-__cursor_file__:/tmp/redis_patched.php
+@file:/tmp/redis_patched.php

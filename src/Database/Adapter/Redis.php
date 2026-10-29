@@ -1,1 +1,1 @@
-file:///workspace/src/Database/Adapter/Redis.php
+USE_STORE

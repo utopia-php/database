@@ -1,1 +1,1 @@
-data:application/gzip;base64,TEST
+@/tmp/sqlite_content_only.txt

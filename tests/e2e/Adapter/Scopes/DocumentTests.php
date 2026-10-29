@@ -1,1 +1,1 @@
-$file:/workspace/tests/e2e/Adapter/Scopes/DocumentTests.php
+$workspace:tests/e2e/Adapter/Scopes/DocumentTests.php

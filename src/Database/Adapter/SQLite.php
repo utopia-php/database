@@ -1,1 +1,1 @@
-$file:/workspace/src/Database/Adapter/SQLite.php
+$workspace:src/Database/Adapter/SQLite.php

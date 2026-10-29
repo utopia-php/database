@@ -1,1 +1,1 @@
-REPLACED_BY_SCRIPT
+@/workspace/src/Database/Adapter/Redis.php

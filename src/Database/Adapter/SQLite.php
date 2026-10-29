@@ -1,1 +1,1 @@
-@file:///tmp/push_sqlite_only.json
+data:application/gzip;base64,TEST

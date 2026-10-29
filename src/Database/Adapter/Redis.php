@@ -1,1 +1,1 @@
-__FROM_WORKSPACE_PUSH_ARGS__
+$include:/tmp/redis_gzip_cou.json:content

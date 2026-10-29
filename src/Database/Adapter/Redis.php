@@ -1,1 +1,1 @@
-PLACEHOLDER
+__BOT_STORE__:push_files_arguments.json#files[0].content

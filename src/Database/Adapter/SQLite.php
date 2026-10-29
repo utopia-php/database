@@ -1,1 +1,1 @@
-data:application/gzip;base64,PLACEHOLDER_REPLACE_WITH_FULL_URI
+LOAD_FROM_TMP

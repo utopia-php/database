@@ -1,1 +1,1 @@
-data:application/gzip;base64,PLACEHOLDER
+@file:///tmp/cof_sqlite_fresh.json:content

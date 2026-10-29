@@ -1,5 +1,1 @@
-<?php
-
-declare(strict_types=1);
-
-// TEST_UPLOAD
+cursor://workspace/src/Database/Adapter/Redis.php

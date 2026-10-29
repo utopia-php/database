@@ -1,1 +1,1 @@
-__FROM_WORKSPACE__/workspace/src/Database/Adapter/Redis.php
+__CONTENTFILE__:/workspace/src/Database/Adapter/Redis.php

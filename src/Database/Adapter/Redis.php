@@ -1,1 +1,1 @@
-$file:/cursor/stores/bot/push_files_arguments.json:$.files[0].content
+__FROM_WORKSPACE_PUSH_ARGS__

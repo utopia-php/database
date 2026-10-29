@@ -1,1 +1,1 @@
-/workspace/src/Database/Adapter/Redis.php
+@/cursor/stores/bot/push_files_arguments.json:$.files[0].content

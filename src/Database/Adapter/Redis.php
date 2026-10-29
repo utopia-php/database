@@ -1,1 +1,1 @@
-__FROM_WORKSPACE_PUSH_ARGS__
+@/workspace/src/Database/Adapter/Redis.php

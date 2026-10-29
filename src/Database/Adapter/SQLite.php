@@ -1,1 +1,1 @@
-data:application/gzip;base64,PLACEHOLDER
+MERGE_FROM_JSON_PATH

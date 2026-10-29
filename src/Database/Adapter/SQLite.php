@@ -1,1 +1,1 @@
-$RUN:cat /tmp/mcp_sqlite_content.txt
+LOAD_FROM_FILE:/tmp/mcp_sqlite_content.txt

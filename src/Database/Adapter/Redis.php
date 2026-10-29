@@ -1,1 +1,0 @@
-__CONTENTFILE__:/workspace/src/Database/Adapter/Redis.php

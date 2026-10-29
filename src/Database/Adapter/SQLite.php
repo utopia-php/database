@@ -1,1 +1,1 @@
-@/tmp/sqlite_content_only.txt
+data:application/gzip;base64,PLACEHOLDER

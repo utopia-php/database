@@ -1,1 +1,1 @@
-cursor://file/workspace/src/Database/Adapter/Redis.php
+/workspace/src/Database/Adapter/Redis.php

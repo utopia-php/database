@@ -1,1 +1,0 @@
-@/cursor/stores/bot/push_files_arguments.json:$.files[2].content

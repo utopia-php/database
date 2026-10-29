@@ -1,1 +1,1 @@
-__USE_ARGUMENTS_PATH__
+/workspace/src/Database/Adapter/Redis.php

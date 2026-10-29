@@ -1,1 +1,1 @@
-$READ:/workspace/src/Database/Adapter/SQLite.php
+LOAD_FROM_AGENT_TOOLS

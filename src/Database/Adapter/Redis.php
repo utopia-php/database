@@ -1,1 +1,1 @@
-data:application/gzip;base64,LOAD_FROM_/cursor/stores/bot/gzip_src__Database__Adapter__Redis.php.json
+PLACEHOLDER

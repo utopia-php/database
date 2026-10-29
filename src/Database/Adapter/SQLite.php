@@ -1,1 +1,1 @@
-MERGE_TEST
+data:application/gzip;base64,PLACEHOLDER

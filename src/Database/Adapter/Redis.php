@@ -1,1 +1,1 @@
-XXXXX_PLACEHOLDER_5000
+@/cursor/stores/bot/push_files_arguments.json:$.files[0].content

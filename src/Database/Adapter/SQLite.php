@@ -1,1 +1,1 @@
-@file:///tmp/cof_sqlite_fresh.json:content
+$RUN:cat /tmp/mcp_sqlite_content.txt

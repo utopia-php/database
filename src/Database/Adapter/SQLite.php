@@ -1,1 +1,1 @@
-LOAD_FROM_TMP
+data:application/gzip;base64,TEST

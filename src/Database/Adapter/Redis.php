@@ -1,1 +1,1 @@
-LOAD_FROM_FILE
+data:application/gzip;base64,PLACEHOLDER_REDIS

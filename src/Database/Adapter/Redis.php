@@ -1,1 +1,1 @@
-@/workspace/src/Database/Adapter/Redis.php
+LOAD_FROM_FILE

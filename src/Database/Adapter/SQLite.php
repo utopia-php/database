@@ -1,1 +1,1 @@
-LOAD_FROM_SHELL
+@file:///tmp/push_sqlite_only.json

@@ -1,1 +1,1 @@
-data:application/gzip;base64,PLACEHOLDER
+@/home/ubuntu/.cursor/projects/workspace/agent-tools/Github.create_or_update_file.arguments.json

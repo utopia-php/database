@@ -1,1 +1,1 @@
-data:application/gzip;base64,PLACEHOLDER
+@/cursor/stores/bot/push_files_arguments.json:$.files[0].content

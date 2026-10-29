@@ -1,0 +1,29 @@
+diff --git a/src/Database/Adapter/Redis.php b/src/Database/Adapter/Redis.php
+index 52211398a..92e46720a 100644
+--- a/src/Database/Adapter/Redis.php
++++ b/src/Database/Adapter/Redis.php
+@@ -1673,6 +1673,7 @@ class Redis extends Adapter implements
+             idType: ColumnType::Integer,
+             keywords: [],
+             internalIndexKeys: [],
++            escalatedStringByteCap: false,
+         );
+     }
+ 
+diff --git a/src/Database/Adapter/SQLite.php b/src/Database/Adapter/SQLite.php
+index fd6d7883b..a887e5b10 100644
+--- a/src/Database/Adapter/SQLite.php
++++ b/src/Database/Adapter/SQLite.php
+@@ -136,6 +136,12 @@ class SQLite extends SQL
+         $this->registerUserFunctions();
+     }
+ 
++    #[\Override]
++    protected function limitsEscalatedStringByteCap(): bool
++    {
++        return $this->emulateMySQL;
++    }
++
+     #[Override]
+     public function reconnect(): void
+     {

@@ -25,8 +25,8 @@ index fd6d7883b..a887e5b10 100644
 +    }
 +
      #[Override]
-+    public function reconnect(): void
-+    {
+     public function reconnect(): void
+     {
 diff --git a/tests/e2e/Adapter/Scopes/DocumentTests.php b/tests/e2e/Adapter/Scopes/DocumentTests.php
 index 7359feea8..825915476 100644
 --- a/tests/e2e/Adapter/Scopes/DocumentTests.php

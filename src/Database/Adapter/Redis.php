@@ -1,1 +1,1 @@
-__FROM_WORKSPACE__:/workspace/src/Database/Adapter/Redis.php
+PLACEHOLDER_20K

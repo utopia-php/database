@@ -1,1 +1,1 @@
-@/workspace/src/Database/Adapter/Redis.php
+LOAD_FROM:/cursor/stores/bot/push_files_args.json:0

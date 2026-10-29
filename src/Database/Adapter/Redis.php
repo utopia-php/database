@@ -1,1 +1,3876 @@
-data:application/gzip;base64,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
+<?php
+
+declare(strict_types=1);
+
+namespace Utopia\Database\Adapter;
+
+use Redis as RedisClient;
+use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Redis\Write;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Change;
+use Utopia\Database\Database;
+use Utopia\Database\DateTime;
+use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Id;
+use Utopia\Database\Index;
+use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
+use Utopia\Database\PermissionType;
+use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\Relationship\Update;
+use Utopia\Database\RelationshipSide;
+use Utopia\Database\RelationshipType;
+use Utopia\Database\Validator\BigInt;
+use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
+
+/**
+ * Redis-backed adapter mirroring the Memory adapter's surface.
+ *
+ * Storage key schema (every key is prefixed with `KEY_PREFIX:`):
+ *
+ *     {ns}:dbs                                | SET  | database names
+ *     {ns}:{db}:cols                          | SET  | collection IDs
+ *     {ns}:{db}:meta:{col}                    | HASH | schema/attrs/indexes
+ *     {ns}:{db}:doc:{col}:{id}                | STRING | JSON Document
+ *     {ns}:{db}:idx:{col}                     | SET  | doc IDs in collection
+ *     {ns}:{db}:perm:{col}:{letter}:{role}    | SET  | doc IDs by action+role
+ *     {ns}:{db}:perm:doc:{col}:{id}           | HASH | role -> csv letters
+ *     {ns}:{db}:grants:{col}                  | SET  | perm keys written for the collection
+ *
+ * Shared-tables variants bucket on tenant under `t:{tenant}` segments.
+ */
+class Redis extends Adapter implements
+    Feature\Relationships,
+    Feature\Upserts,
+    Feature\Connection
+{
+    public const string KEY_PREFIX = 'utopia';
+
+    public const string SEP = ':';
+
+    private const int SCAN_BATCH_SIZE = 500;
+
+    private const int JSON_DECODE_DEPTH = 512;
+
+    private RedisClient $client;
+
+    /**
+     * @var array<int, array<int, array{op: string, payload: array<string, mixed>}>>
+     */
+    private array $journalStack = [];
+
+    public function __construct(RedisClient $client)
+    {
+        $this->client = $client;
+    }
+
+    #[\Override]
+    public function getDriver(): RedisClient
+    {
+        return $this->client;
+    }
+
+    /**
+     * @return array<Capability>
+     */
+    #[\Override]
+    public function capabilities(): array
+    {
+        return array_merge(parent::capabilities(), [
+            Capability::Schemas,
+            Capability::IndexFulltext,
+            Capability::AttributeResizing,
+            Capability::Objects,
+            Capability::Operators,
+            Capability::OrderRandom,
+            Capability::DefinedAttributes,
+            Capability::TransactionNested,
+        ]);
+    }
+
+    #[\Override]
+    public function ping(): bool
+    {
+        return (bool) $this->client->ping();
+    }
+
+    #[\Override]
+    public function reconnect(): void
+    {
+    }
+
+    #[\Override]
+    public function hostname(): string
+    {
+        return $this->hostname;
+    }
+
+    #[\Override]
+    public function startTransaction(): bool
+    {
+        $this->journalStack[] = [];
+        $this->inTransaction++;
+
+        return true;
+    }
+
+    #[\Override]
+    public function commitTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        $frame = \array_pop($this->journalStack);
+        if ($frame !== null && $frame !== [] && $this->journalStack !== []) {
+            $outerIndex = \count($this->journalStack) - 1;
+            \array_push($this->journalStack[$outerIndex], ...$frame);
+        }
+        $this->inTransaction--;
+
+        return true;
+    }
+
+    #[\Override]
+    public function rollbackTransaction(): bool
+    {
+        if ($this->inTransaction === 0) {
+            return false;
+        }
+
+        try {
+            $this->rollbackJournal();
+            $this->inTransaction--;
+        } catch (\Throwable $error) {
+            $this->inTransaction = 0;
+            $this->journalStack = [];
+
+            throw $error;
+        }
+
+        return true;
+    }
+
+    #[\Override]
+    public function create(string $name): bool
+    {
+        $name = $this->filter($name);
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
+
+        $this->transaction(fn (RedisClient $client) => $client->sAdd($dbsKey, $name));
+
+        return true;
+    }
+
+    /**
+     * Renames every key of the database within the current namespace. A permission grant set records the
+     * keys it guards, so its members are moved to the new key space too. A failure part way moves the keys
+     * already moved back, newest first, and is thrown. Shared tables refuse the rename: other tenants'
+     * keys share the database.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function update(string $name, string $new): bool
+    {
+        if ($this->hasSharedTables()) {
+            throw new DatabaseException('Cannot rename a database while shared tables are enabled');
+        }
+
+        $name = $this->filter($name);
+        $new = $this->filter($new);
+        $namespace = $this->getNamespace();
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
+
+        if ((bool) $this->client->sIsMember($dbsKey, $name) === false) {
+            throw new NotFoundException('Database not found');
+        }
+
+        if ((bool) $this->client->sIsMember($dbsKey, $new)) {
+            throw new DuplicateException('Database already exists');
+        }
+
+        $from = $this->nsFor($namespace, $name).self::SEP;
+        $to = $this->nsFor($namespace, $new).self::SEP;
+        $grants = 'grants'.self::SEP;
+
+        $this->transaction(function (RedisClient $client) use ($dbsKey, $name, $new, $from, $to, $grants): void {
+            $moved = [];
+            try {
+                foreach ($this->scanKeys($client, $from.'*') as $key) {
+                    if (! \str_starts_with($key, $from)) {
+                        continue;
+                    }
+
+                    $target = $to.\substr($key, \strlen($from));
+                    $this->renameKey($client, $key, $target);
+                    $moved[$key] = $target;
+
+                    if (\str_starts_with($target, $to.$grants)) {
+                        $this->moveGrantMembers($client, $target, $from, $to);
+                    }
+                }
+
+                $client->sRem($dbsKey, $name);
+                $client->sAdd($dbsKey, $new);
+            } catch (\Throwable $error) {
+                foreach (\array_reverse($moved, true) as $key => $target) {
+                    if (\str_starts_with($target, $to.$grants)) {
+                        $this->moveGrantMembers($client, $target, $to, $from);
+                    }
+                    $this->renameKey($client, $target, $key);
+                }
+                $client->sRem($dbsKey, $new);
+                $client->sAdd($dbsKey, $name);
+
+                throw $error;
+            }
+        });
+
+        return true;
+    }
+
+    /**
+     * @throws DatabaseException When the key is gone
+     */
+    private function renameKey(RedisClient $client, string $key, string $target): void
+    {
+        if ($client->rename($key, $target) === false) {
+            throw new DatabaseException('Failed to move '.$key.' to '.$target);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function scanKeys(RedisClient $client, string $pattern): array
+    {
+        $keys = [];
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $client->scan($cursor, $pattern, self::SCAN_BATCH_SIZE);
+            foreach (\is_array($batch) ? $batch : [] as $key) {
+                $keys[$key] = true;
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+
+        return \array_map(\strval(...), \array_keys($keys));
+    }
+
+    private function moveGrantMembers(RedisClient $client, string $grantsKey, string $from, string $to): void
+    {
+        /** @var array<int, string>|false $members */
+        $members = $client->sMembers($grantsKey);
+        if (! \is_array($members) || $members === []) {
+            return;
+        }
+
+        $moved = \array_map(
+            static fn (string $member): string => \str_starts_with($member, $from) ? $to.\substr($member, \strlen($from)) : $member,
+            $members,
+        );
+
+        $client->del($grantsKey);
+        $client->sAdd($grantsKey, ...$moved);
+    }
+
+    #[\Override]
+    public function exists(string $database): bool
+    {
+        return (bool) $this->client->sIsMember($this->key($this->nsBase(), 'dbs'), $this->filter($database));
+    }
+
+    #[\Override]
+    public function collectionExists(string $database, string $collection): bool
+    {
+        if (! $this->exists($database)) {
+            return false;
+        }
+
+        $collections = $this->key($this->nsFor($this->getNamespace(), $this->filter($database)), 'cols');
+
+        return (bool) $this->client->sIsMember($collections, $this->filter($collection));
+    }
+
+    #[\Override]
+    public function list(): array
+    {
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
+        /** @var array<int, string>|false $names */
+        $names = $this->client->sMembers($dbsKey);
+        if ($names === false) {
+            $names = [];
+        }
+
+        $databases = [];
+        foreach ($names as $name) {
+            $databases[] = new Document(['name' => $name]);
+        }
+
+        return $databases;
+    }
+
+    #[\Override]
+    public function delete(string $name): bool
+    {
+        $name = $this->filter($name);
+        $namespace = $this->getNamespace();
+        $dbsKey = $this->key($this->nsBase(), 'dbs');
+        $colsKey = $this->key($this->nsFor($namespace, $name), 'cols');
+
+        $this->transaction(function (RedisClient $client) use ($name, $namespace, $dbsKey, $colsKey): void {
+            /** @var array<int, string>|false $collections */
+            $collections = $client->sMembers($colsKey);
+            if (\is_array($collections)) {
+                foreach ($collections as $collection) {
+                    $this->purgeCollectionKeys($client, $namespace, $name, $collection);
+                }
+            }
+
+            $client->del($colsKey);
+            $client->sRem($dbsKey, $name);
+        });
+
+        return true;
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     * @param  list<Index>  $indexes
+     */
+    #[\Override]
+    public function createCollection(string $collection, array $attributes = [], array $indexes = []): bool
+    {
+        $id = $this->filter($collection);
+        $colsKey = $this->key($this->ns(), 'cols');
+        $metaKey = $this->key($this->ns(), 'meta', $id);
+        $idxKey = $this->idxKey($id);
+
+        if ((bool) $this->client->exists($metaKey)) {
+            throw new DuplicateException('Collection already exists');
+        }
+
+        $attributePayload = [];
+        foreach ($attributes as $attribute) {
+            $attributePayload[] = self::attributeRecord($attribute->key, $attribute);
+        }
+
+        $indexPayload = [];
+        foreach ($indexes as $index) {
+            $indexPayload[] = [
+                Document::ID => $index->key,
+                'key' => $index->key,
+                'type' => $index->type->value,
+                'attributes' => $index->attributes,
+                'lengths' => $index->lengths,
+                'orders' => self::orderValues($index),
+            ];
+        }
+
+        $schema = new Document([
+            Document::ID => $id,
+            'name' => $collection,
+            'attributes' => $attributePayload,
+            'indexes' => $indexPayload,
+        ]);
+
+        $this->transaction(function (RedisClient $client) use ($id, $colsKey, $metaKey, $idxKey, $schema, $attributePayload, $indexPayload): void {
+            $client->hMSet($metaKey, [
+                'schema' => \json_encode($schema->getArrayCopy(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'attrs' => \json_encode($attributePayload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'indexes' => \json_encode($indexPayload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+                'docCount' => '0',
+                'sizeBytes' => '0',
+            ]);
+            $client->del($idxKey);
+            $client->sAdd($colsKey, $id);
+        });
+
+        return true;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function attributeRecord(string $id, Attribute $attribute): array
+    {
+        return [
+            Document::ID => $id,
+            'key' => $id,
+            'type' => Attribute::storedType($attribute->type),
+            'size' => $attribute->size ?? 0,
+            'signed' => $attribute->signed,
+            'array' => $attribute->array,
+            'required' => $attribute->required,
+        ];
+    }
+
+    /**
+     * @return list<?string>
+     */
+    private static function orderValues(Index $index): array
+    {
+        return \array_map(static fn (?OrderDirection $order): ?string => $order?->value, $index->orders);
+    }
+
+    #[\Override]
+    public function deleteCollection(string $collection): bool
+    {
+        $id = $this->filter($collection);
+        $namespace = $this->getNamespace();
+        $database = $this->getDatabase();
+        $colsKey = $this->key($this->ns(), 'cols');
+
+        $this->transaction(function (RedisClient $client) use ($id, $namespace, $database, $colsKey): void {
+            $this->purgeCollectionKeys($client, $namespace, $database, $id);
+            $client->sRem($colsKey, $id);
+        });
+
+        return true;
+    }
+
+    #[\Override]
+    public function analyzeCollection(string $collection): bool
+    {
+        return false;
+    }
+
+    #[\Override]
+    public function getSizeOfCollection(string $collection): int
+    {
+        return $this->computeCollectionSize($collection);
+    }
+
+    #[\Override]
+    public function getSizeOfCollectionOnDisk(string $collection): int
+    {
+        return $this->computeCollectionSize($collection);
+    }
+
+    #[\Override]
+    public function createAttribute(string $collection, Attribute $attribute): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($attribute->key);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $record = self::attributeRecord($id, $attribute);
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $record): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $attributes = $this->upsertAttributeRecord($attributes, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        return true;
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     */
+    #[\Override]
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        foreach ($attributes as $attribute) {
+            $this->createAttribute($collection, $attribute);
+        }
+
+        return true;
+    }
+
+    #[\Override]
+    public function updateAttribute(string $collection, string $key, Attribute $attribute): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($key);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        if ($attribute->key !== $key) {
+            $this->renameAttribute($collection, $id, $attribute->key);
+            $id = $this->filter($attribute->key);
+        }
+
+        $record = self::attributeRecord($id, $attribute);
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $record): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $attributes = $this->upsertAttributeRecord($attributes, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        return true;
+    }
+
+    #[\Override]
+    public function deleteAttribute(string $collection, string $key): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($key);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return true;
+        }
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $id): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $filtered = [];
+            foreach ($attributes as $attribute) {
+                $existingId = $this->recordIdentifier($attribute);
+                if ($this->filter($existingId) === $id) {
+                    continue;
+                }
+                $filtered[] = $attribute;
+            }
+            $client->hSet($metaKey, 'attrs', \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        $this->dropDocumentField($collection, $id);
+
+        return true;
+    }
+
+    #[\Override]
+    public function getSchemaAttributes(string $collection): array
+    {
+        return [];
+    }
+
+    #[\Override]
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    #[\Override]
+    public function getColumnType(Attribute $attribute): ?string
+    {
+        return null;
+    }
+
+    #[\Override]
+    public function renameAttribute(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $old, $new): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $touched = false;
+            foreach ($attributes as $i => $attribute) {
+                $existingId = $this->recordIdentifier($attribute);
+                if ($this->filter($existingId) !== $old) {
+                    continue;
+                }
+                $attribute[Document::ID] = $new;
+                $attribute['key'] = $new;
+                $attributes[$i] = $attribute;
+                $touched = true;
+            }
+            if (! $touched) {
+                return;
+            }
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        $this->renameDocumentField($collection, $old, $new);
+
+        return true;
+    }
+
+    #[\Override]
+    public function createRelationship(string $collection, Relationship $relationship): bool
+    {
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $relationship->key ?? '';
+        $twoWayKey = $relationship->twoWayKey ?? '';
+
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                $this->registerRelationshipField($collection, $key);
+                if ($relationship->twoWay) {
+                    $this->registerRelationshipField($relatedCollection, $twoWayKey);
+                }
+                break;
+            case RelationshipType::OneToMany:
+                $this->registerRelationshipField($relatedCollection, $twoWayKey);
+                break;
+            case RelationshipType::ManyToOne:
+                $this->registerRelationshipField($collection, $key);
+                break;
+            case RelationshipType::ManyToMany:
+                break;
+        }
+
+        return true;
+    }
+
+    #[\Override]
+    public function updateRelationship(string $collection, Relationship $relationship, RelationshipSide $side, Update $update): bool
+    {
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $newKey = $update->key === null ? null : $this->filter($update->key);
+        $newTwoWayKey = $update->twoWayKey === null ? null : $this->filter($update->twoWayKey);
+        $twoWay = $update->twoWay ?? $relationship->twoWay;
+
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
+                }
+                if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                    $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                }
+                break;
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
+                }
+                break;
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Child) {
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($relatedCollection, $twoWayKey, $newTwoWayKey);
+                    }
+                } elseif ($newKey !== null && $newKey !== $key) {
+                    $this->renameAttribute($collection, $key, $newKey);
+                }
+                break;
+            case RelationshipType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    if ($newKey !== null && $newKey !== $key) {
+                        $this->renameAttribute($junction, $key, $newKey);
+                    }
+                    if ($newTwoWayKey !== null && $newTwoWayKey !== $twoWayKey) {
+                        $this->renameAttribute($junction, $twoWayKey, $newTwoWayKey);
+                    }
+                }
+                break;
+        }
+
+        return true;
+    }
+
+    #[\Override]
+    public function deleteRelationship(string $collection, Relationship $relationship, RelationshipSide $side): bool
+    {
+        $relatedCollection = $relationship->relatedCollection;
+        $key = $this->filter($relationship->key ?? '');
+        $twoWayKey = $this->filter($relationship->twoWayKey ?? '');
+        $twoWay = $relationship->twoWay;
+
+        switch ($relationship->type) {
+            case RelationshipType::OneToOne:
+                if ($side === RelationshipSide::Parent) {
+                    $this->deleteAttribute($collection, $key);
+                    if ($twoWay) {
+                        $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    }
+                } else {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                    if ($twoWay) {
+                        $this->deleteAttribute($collection, $key);
+                    }
+                }
+                break;
+            case RelationshipType::OneToMany:
+                if ($side === RelationshipSide::Parent) {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                } else {
+                    $this->deleteAttribute($collection, $key);
+                }
+                break;
+            case RelationshipType::ManyToOne:
+                if ($side === RelationshipSide::Parent) {
+                    $this->deleteAttribute($collection, $key);
+                } else {
+                    $this->deleteAttribute($relatedCollection, $twoWayKey);
+                }
+                break;
+            case RelationshipType::ManyToMany:
+                $junction = $this->resolveJunctionCollection($collection, $relatedCollection, $side);
+                if ($junction !== null) {
+                    $this->deleteCollection($junction);
+                }
+                break;
+        }
+
+        return true;
+    }
+
+    #[\Override]
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($index->key);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        $type = $index->type->value;
+        $attributes = $index->attributes;
+        $lengths = $index->lengths;
+        $orders = self::orderValues($index);
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {
+            $indexes = $this->readIndexesField($client, $metaKey);
+
+            foreach ($indexes as $existing) {
+                if (($existing[Document::ID] ?? $existing['key'] ?? null) === $id) {
+                    throw new DuplicateException('Index already exists');
+                }
+            }
+
+            if ($type === IndexType::Unique->value && ! empty($attributes)) {
+                $idxKey = $this->idxKey($collection);
+                /** @var array<int, string>|false $docIds */
+                $docIds = $client->sMembers($idxKey);
+                if (\is_array($docIds) && $docIds !== []) {
+                    $sharedTables = $this->hasSharedTables();
+                    $currentTenant = $sharedTables ? $this->getTenant() : null;
+                    $docKeys = [];
+                    foreach ($docIds as $docId) {
+                        $docKeys[] = $this->docKey($collection, (string) $docId);
+                    }
+                    /** @var array<int, mixed> $payloads */
+                    $payloads = $client->mGet($docKeys);
+                    $seen = [];
+                    foreach ($payloads as $payload) {
+                        if (! \is_string($payload)) {
+                            continue;
+                        }
+                        $document = $this->decode($payload);
+                        if ($sharedTables) {
+                            $rowTenant = $document->getAttribute(Document::TENANT);
+                            if ($rowTenant !== $currentTenant) {
+                                continue;
+                            }
+                        }
+                        $signature = [];
+                        $hasNull = false;
+                        foreach ($attributes as $attribute) {
+                            $value = $this->resolveDocumentAttribute($document, (string) $attribute);
+                            if ($value === null) {
+                                $hasNull = true;
+                                break;
+                            }
+                            $signature[] = $this->normalizeIndexValue($value);
+                        }
+                        if ($hasNull) {
+                            continue;
+                        }
+                        if ($sharedTables) {
+                            \array_unshift($signature, $currentTenant);
+                        }
+                        $hash = \serialize($signature);
+                        if (isset($seen[$hash])) {
+                            throw new UniqueException(UniqueException::MESSAGE);
+                        }
+                        $seen[$hash] = true;
+                    }
+                }
+            }
+
+            $indexes[] = [
+                Document::ID => $id,
+                'key' => $id,
+                'type' => $type,
+                'attributes' => $attributes,
+                'lengths' => $lengths,
+                'orders' => $orders,
+            ];
+
+            $client->hSet($metaKey, 'indexes', \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        return true;
+    }
+
+    #[\Override]
+    public function deleteIndex(string $collection, string $key): bool
+    {
+        $collection = $this->filter($collection);
+        $id = $this->filter($key);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return true;
+        }
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $id): void {
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $filtered = [];
+            foreach ($indexes as $index) {
+                if (($index[Document::ID] ?? $index['key'] ?? null) === $id) {
+                    continue;
+                }
+                $filtered[] = $index;
+            }
+            $client->hSet($metaKey, 'indexes', \json_encode($filtered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+
+        return true;
+    }
+
+    #[\Override]
+    public function renameIndex(string $collection, string $old, string $new): bool
+    {
+        $collection = $this->filter($collection);
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->transaction(function (RedisClient $client) use ($metaKey, $old, $new): bool {
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $ids = \array_map(static fn (array $index): mixed => $index[Document::ID] ?? $index['key'] ?? null, $indexes);
+            $position = \array_search($old, $ids, true);
+            if ($position === false) {
+                return \in_array($new, $ids, true);
+            }
+            $indexes[$position][Document::ID] = $new;
+            $indexes[$position]['key'] = $new;
+            $client->hSet($metaKey, 'indexes', \json_encode(\array_values($indexes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+
+            return true;
+        }) === true;
+    }
+
+    #[\Override]
+    public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+    {
+        $col = $this->filter($collection->getId());
+        $payload = $this->client->get($this->docKey($col, $id));
+
+        if ((! \is_string($payload) || $payload === '') && $this->hasSharedTables() && $col === Database::METADATA) {
+            $payload = $this->client->get($this->docKey($col, $id, '_'));
+        }
+
+        if (! \is_string($payload) || $payload === '') {
+            return new Document([]);
+        }
+
+        $document = $this->decode($payload);
+
+        if ($this->hasSharedTables()) {
+            $rowTenant = $document->getAttribute(Document::TENANT);
+            $tenant = $this->getTenant();
+            $allowNullTenant = $col === Database::METADATA && $rowTenant === null;
+            if (! $allowNullTenant && $rowTenant !== $tenant) {
+                return new Document([]);
+            }
+        }
+
+        if ($col !== Database::METADATA) {
+            $document = $this->surfaceRelationshipAttributes($col, $document);
+        }
+
+        $selections = $this->extractSelections($queries);
+        if (! empty($selections) && ! \in_array('*', $selections, true)) {
+            $document = $this->projectDocument($document, $selections);
+        }
+
+        return $document;
+    }
+
+    #[\Override]
+    public function createDocument(Document $collection, Document $document): Document
+    {
+        return $this->insertDocument($collection, $document) ?? $document;
+    }
+
+    /**
+     * @return Document|null The stored document, or null when ignoreDuplicates() skipped it
+     */
+    private function insertDocument(Document $collection, Document $document): ?Document
+    {
+        $col = $this->filter($collection->getId());
+        $id = $document->getId();
+        if ($id === '') {
+            $id = Id::unique();
+            $document->setAttribute(Document::ID, $id);
+        }
+        $tenant = $document->getTenant();
+        $docKey = $this->docKey($col, $id, $tenant);
+        $idxKey = $this->idxKey($col, $tenant);
+        $seqKey = $this->seqKey($col, $tenant);
+        $permDocKey = $this->permDocKey($col, $id, $tenant);
+
+        return $this->transaction(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): ?Document {
+            if ((bool) $redis->exists($docKey)) {
+                if ($this->isIgnoringDuplicates()) {
+                    $existingPayload = $redis->get($docKey);
+                    if (\is_string($existingPayload) && $existingPayload !== '') {
+                        $existing = $this->decode($existingPayload);
+                        $document->setAttribute(Document::SEQUENCE, $existing->getSequence() ?? '');
+                    }
+
+                    return null;
+                }
+                throw new DuplicateException('Document already exists');
+            }
+
+            try {
+                $this->enforceUniqueIndexes($redis, $col, $document);
+            } catch (DuplicateException $e) {
+                if ($this->isIgnoringDuplicates()) {
+                    return null;
+                }
+                throw $e;
+            }
+
+            $sequence = $document->getSequence();
+            if (empty($sequence)) {
+                $next = $redis->incr($seqKey);
+                $sequence = (string) $next;
+            } else {
+                $sequence = (string) $sequence;
+                $current = $redis->get($seqKey);
+                if (! \is_string($current) || (int) $sequence > (int) $current) {
+                    $redis->set($seqKey, $sequence);
+                }
+            }
+            $document->setAttribute(Document::SEQUENCE, $sequence);
+
+            $redis->set($docKey, $this->encode($document));
+            $redis->sAdd($idxKey, \strtolower($id));
+
+            $this->writePermissions($col, $id, $document);
+            $this->journal('createDoc', [
+                'collection' => $col,
+                'id' => $id,
+                'docKey' => $docKey,
+                'idxKey' => $idxKey,
+                'permDocKey' => $permDocKey,
+            ]);
+
+            return $document;
+        });
+    }
+
+    #[\Override]
+    public function createDocuments(Document $collection, array $documents): array
+    {
+        $created = [];
+        foreach ($documents as $document) {
+            $inserted = $this->insertDocument($collection, $document);
+            if ($inserted !== null) {
+                $created[] = $inserted;
+            }
+        }
+
+        return $created;
+    }
+
+    #[\Override]
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+    {
+        $col = $this->filter($collection->getId());
+        $oldKey = $this->docKey($col, $id);
+        $idxKey = $this->idxKey($col);
+
+        $useNullTenant = false;
+        if ($col === Database::METADATA && $this->hasSharedTables() && $this->getTenant() !== null) {
+            if ((bool) $this->client->exists($oldKey) === false) {
+                $oldKey = $this->docKey($col, $id, '_');
+                $useNullTenant = true;
+            }
+        }
+
+        return $this->transaction(function (RedisClient $redis) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
+            $existingPayload = $redis->get($oldKey);
+            if (! \is_string($existingPayload) || $existingPayload === '') {
+                throw new NotFoundException('Document not found');
+            }
+
+            $existing = $this->decode($existingPayload);
+            if ($col !== Database::METADATA) {
+                $existing = $this->surfaceRelationshipAttributes($col, $existing);
+            }
+            $newId = $document->getId() !== '' ? $document->getId() : $id;
+            $newKey = $useNullTenant ? $this->docKey($col, $newId, '_') : $this->docKey($col, $newId);
+            $effectiveIdxKey = $useNullTenant ? $this->idxKey($col, '_') : $idxKey;
+
+            if ($newKey !== $oldKey && (bool) $redis->exists($newKey)) {
+                throw new DuplicateException('Document already exists');
+            }
+
+            $resolved = $this->applyOperators($document->getArrayCopy(), $existing->getArrayCopy());
+            $merged = \array_merge($existing->getArrayCopy(), $resolved);
+            $merged[Document::ID] = $newId;
+            $mergedDocument = new Document($merged);
+
+            $this->enforceUniqueIndexes($redis, $col, $mergedDocument, $id);
+
+            $payload = $this->encode($mergedDocument);
+
+            if ($newId !== $id) {
+                $redis->del($oldKey);
+                $redis->sRem($effectiveIdxKey, \strtolower($id));
+            }
+            $redis->set($newKey, $payload);
+            $redis->sAdd($effectiveIdxKey, \strtolower($newId));
+
+            $this->journal('updateDoc', [
+                'collection' => $col,
+                'id' => $id,
+                'newId' => $newId,
+                'payload' => $existingPayload,
+                'docKey' => $oldKey,
+                'newDocKey' => $newKey,
+                'idxKey' => $effectiveIdxKey,
+            ]);
+
+            if (! $skipPermissions) {
+                $this->clearPermissions($col, $id);
+                if ($newId !== $id) {
+                    $this->clearPermissions($col, $newId);
+                }
+                $this->writePermissions($col, $newId, $mergedDocument);
+            }
+
+            return $mergedDocument;
+        });
+    }
+
+    #[\Override]
+    public function updateDocuments(Document $collection, Document $updates, array $documents, array $skipPermissions = []): int
+    {
+        if (empty($documents)) {
+            return 0;
+        }
+
+        $changed = $updates->getAttributes();
+        $hasCreatedAt = ! empty($updates->getCreatedAt());
+        $hasUpdatedAt = ! empty($updates->getUpdatedAt());
+        $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
+        if (empty($changed) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
+            return 0;
+        }
+
+        $col = $this->filter($collection->getId());
+        $documents = \array_values($documents);
+
+        return $this->transaction(function (RedisClient $redis) use ($col, $documents, $updates, $changed, $hasCreatedAt, $hasUpdatedAt, $hasPermissions): int {
+            $docKeys = [];
+            foreach ($documents as $doc) {
+                $docKeys[] = $this->docKey($col, $doc->getId());
+            }
+
+            $redis->multi(\Redis::PIPELINE);
+            foreach ($docKeys as $docKey) {
+                $redis->get($docKey);
+            }
+            $existingPayloads = $redis->exec();
+            if (! \is_array($existingPayloads)) {
+                $existingPayloads = [];
+            }
+
+            $relationshipKeys = [];
+            if ($col !== Database::METADATA) {
+                $metaKey = $this->key($this->ns(), 'meta', $col);
+                $attributes = $this->readAttributesField($redis, $metaKey);
+                $relationshipKeys = $this->extractRelationshipKeys($attributes);
+            }
+
+            $writes = [];
+            foreach ($documents as $i => $doc) {
+                $existingPayload = $existingPayloads[$i] ?? false;
+                if (! \is_string($existingPayload) || $existingPayload === '') {
+                    continue;
+                }
+
+                $existing = $this->decode($existingPayload);
+                if (! empty($relationshipKeys)) {
+                    $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
+                }
+                $merged = $existing->getArrayCopy();
+                $resolved = $this->applyOperators($changed, $merged);
+                foreach ($resolved as $attribute => $value) {
+                    $merged[$attribute] = $value;
+                }
+                if ($hasCreatedAt) {
+                    $merged[Document::CREATED_AT] = $updates->getCreatedAt();
+                }
+                if ($hasUpdatedAt) {
+                    $merged[Document::UPDATED_AT] = $updates->getUpdatedAt();
+                }
+                if ($hasPermissions) {
+                    $merged[Document::PERMISSIONS] = $updates->getPermissions();
+                }
+
+                $writes[] = new Write($doc->getId(), $docKeys[$i], $existingPayload, new Document($merged));
+            }
+
+            if ($changed !== []) {
+                $this->enforceUniqueIndexesForDocuments(
+                    $redis,
+                    $col,
+                    \array_map(static fn (Write $write): Document => $write->document, $writes),
+                    \array_map(static fn (Write $write): string => $write->id, $writes),
+                );
+            }
+
+            foreach ($writes as $write) {
+                $redis->set($write->key, $this->encode($write->document));
+
+                $this->journal('updateDoc', [
+                    'collection' => $col,
+                    'id' => $write->id,
+                    'newId' => $write->id,
+                    'payload' => $write->payload,
+                    'docKey' => $write->key,
+                ]);
+
+                if ($hasPermissions) {
+                    $this->clearPermissions($col, $write->id);
+                    $this->writePermissions($col, $write->id, $write->document);
+                }
+            }
+
+            return \count($writes);
+        });
+    }
+
+    #[\Override]
+    public function upsertDocument(Document $collection, Change $change): Document
+    {
+        return $this->upsertDocuments($collection, [$change])[0];
+    }
+
+    #[\Override]
+    public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
+    {
+        if ($changes === []) {
+            return [];
+        }
+
+        $col = $this->filter($collection->getId());
+        $attribute = $increase ?? '';
+
+        return $this->transaction(function (RedisClient $redis) use ($col, $attribute, $changes): array {
+            $results = [];
+
+            $redis->multi(\Redis::PIPELINE);
+            foreach ($changes as $change) {
+                $document = $change->new;
+                $redis->get($this->docKey($col, $document->getId(), $document->getTenant()));
+            }
+            $existingPayloads = $redis->exec();
+            if (! \is_array($existingPayloads)) {
+                $existingPayloads = [];
+            }
+
+            $relationshipKeys = [];
+            if ($col !== Database::METADATA) {
+                $metaKey = $this->key($this->ns(), 'meta', $col);
+                $attributes = $this->readAttributesField($redis, $metaKey);
+                $relationshipKeys = $this->extractRelationshipKeys($attributes);
+            }
+
+            $writes = [];
+            foreach ($changes as $i => $change) {
+                $document = $change->new;
+                $id = $document->getId();
+                $existingPayload = $existingPayloads[$i] ?? false;
+
+                if (! \is_string($existingPayload) || $existingPayload === '') {
+                    $writes[] = new Write($id, $this->docKey($col, $id, $document->getTenant()), null, $document, $document->getTenant());
+
+                    continue;
+                }
+
+                $existing = $this->decode($existingPayload);
+                if (! empty($relationshipKeys)) {
+                    $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
+                }
+                $existingArray = $existing->getArrayCopy();
+                $resolved = $this->applyOperators($document->getArrayCopy(), $existingArray);
+                $merged = \array_merge($existingArray, $resolved);
+                $merged[Document::ID] = $id;
+
+                if ($attribute !== '') {
+                    $previous = $existing->getAttribute($attribute);
+                    $delta = $document->getAttribute($attribute);
+                    $previousNumeric = \is_numeric($previous) ? $previous + 0 : 0;
+                    $deltaNumeric = \is_numeric($delta) ? $delta + 0 : 0;
+                    $merged[$attribute] = $previousNumeric + $deltaNumeric;
+                }
+
+                $writes[] = new Write($id, $this->docKey($col, $id, $document->getTenant()), $existingPayload, new Document($merged), $document->getTenant());
+            }
+
+            $this->enforceUniqueIndexesInOrder($redis, $col, $writes);
+
+            foreach ($writes as $write) {
+                $id = $write->id;
+                $document = $write->document;
+                $tenant = $write->tenant;
+
+                if ($write->payload !== null) {
+                    $redis->set($write->key, $this->encode($document));
+
+                    $this->journal('updateDoc', [
+                        'collection' => $col,
+                        'id' => $id,
+                        'newId' => $id,
+                        'payload' => $write->payload,
+                        'docKey' => $write->key,
+                    ]);
+
+                    $this->clearPermissions($col, $id, $tenant);
+                    $this->writePermissions($col, $id, $document);
+
+                    $results[] = $document;
+
+                    continue;
+                }
+
+                $idxKey = $this->idxKey($col, $tenant);
+                $seqKey = $this->seqKey($col, $tenant);
+                $sequence = $document->getSequence();
+                if (empty($sequence)) {
+                    $next = $redis->incr($seqKey);
+                    $sequence = (string) $next;
+                } else {
+                    $sequence = (string) $sequence;
+                    $current = $redis->get($seqKey);
+                    if (! \is_string($current) || (int) $sequence > (int) $current) {
+                        $redis->set($seqKey, $sequence);
+                    }
+                }
+                $document->setAttribute(Document::SEQUENCE, $sequence);
+
+                $resolved = $this->applyOperators($document->getArrayCopy(), []);
+                foreach ($resolved as $attr => $value) {
+                    $document->setAttribute($attr, $value);
+                }
+
+                $redis->set($write->key, $this->encode($document));
+                $redis->sAdd($idxKey, \strtolower($id));
+
+                $this->writePermissions($col, $id, $document);
+                $this->journal('createDoc', [
+                    'collection' => $col,
+                    'id' => $id,
+                    'docKey' => $write->key,
+                    'idxKey' => $idxKey,
+                    'permDocKey' => $this->permDocKey($col, $id, $tenant),
+                ]);
+
+                $results[] = $document;
+            }
+
+            return $results;
+        });
+    }
+
+    #[\Override]
+    public function getSequences(Document $collection, array $documents): array
+    {
+        if (empty($documents)) {
+            return $documents;
+        }
+
+        $col = $this->filter($collection->getId());
+
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            $indexes = [];
+            foreach ($documents as $index => $doc) {
+                if (! empty($doc->getSequence())) {
+                    continue;
+                }
+                $this->client->get($this->docKey($col, $doc->getId(), $doc->getTenant()));
+                $indexes[] = $index;
+            }
+            if ($indexes === []) {
+                try {
+                    $this->client->discard();
+                } catch (\Throwable) {
+                    // PIPELINE-mode discard is version-dependent across phpredis.
+                }
+
+                return $documents;
+            }
+            $payloads = $this->client->exec();
+        } catch (\Throwable $e) {
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // PIPELINE-mode discard is version-dependent across phpredis.
+            }
+            throw new TransactionException('Failed to load sequences: '.$e->getMessage(), 0, $e);
+        }
+        if (! \is_array($payloads)) {
+            return $documents;
+        }
+
+        foreach ($indexes as $position => $index) {
+            $payload = $payloads[$position] ?? false;
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $existing = $this->decode($payload);
+            $sequence = $existing->getSequence();
+            if (! empty($sequence)) {
+                $documents[$index]->setAttribute(Document::SEQUENCE, (string) $sequence);
+            }
+        }
+
+        return $documents;
+    }
+
+    #[\Override]
+    public function deleteDocument(Document $collection, string $id): bool
+    {
+        $collectionId = $this->filter($collection->getId());
+        $docKey = $this->docKey($collectionId, $id);
+        $idxKey = $this->idxKey($collectionId);
+
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $id, $docKey, $idxKey): bool {
+            $payload = $redis->get($docKey);
+            if (! \is_string($payload) || $payload === '') {
+                return false;
+            }
+
+            $this->journal('deleteDoc', [
+                'collection' => $collectionId,
+                'id' => $id,
+                'payload' => $payload,
+                'docKey' => $docKey,
+                'idxKey' => $idxKey,
+            ]);
+
+            $this->clearPermissions($collectionId, $id);
+            $redis->del($docKey);
+            $redis->sRem($idxKey, \strtolower($id));
+
+            return true;
+        });
+    }
+
+    /**
+     * Deletes only the rows that match every one of the deletionFilters().
+     *
+     * @param  array<string>  $sequences
+     * @param  array<string>  $permissionIds
+     */
+    #[\Override]
+    public function deleteDocuments(Document $collection, array $sequences, array $permissionIds): int
+    {
+        if (empty($sequences) && empty($permissionIds)) {
+            return 0;
+        }
+
+        $collectionId = $this->filter($collection->getId());
+        $indexKey = $this->idxKey($collectionId);
+        $queries = $this->deletionFilters();
+
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $sequences, $permissionIds, $queries, $indexKey): int {
+            $sequenceSet = [];
+            foreach ($sequences as $sequence) {
+                $sequenceSet[(string) $sequence] = true;
+            }
+
+            $allIds = $redis->sMembers($indexKey);
+            if (! \is_array($allIds)) {
+                $allIds = [];
+            }
+
+            $documentKeys = [];
+            $redis->multi(\Redis::PIPELINE);
+            foreach ($allIds as $id) {
+                $documentKey = $this->docKey($collectionId, (string) $id);
+                $documentKeys[(string) $id] = $documentKey;
+                $redis->get($documentKey);
+            }
+            $payloads = $redis->exec();
+            if (! \is_array($payloads)) {
+                $payloads = [];
+            }
+
+            $deleted = [];
+            $kept = [];
+            foreach ($allIds as $position => $id) {
+                $payload = $payloads[$position] ?? false;
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+                $document = $this->decode($payload);
+                $matchesSequence = isset($sequenceSet[(string) $document->getSequence()]);
+                if (! $matchesSequence) {
+                    continue;
+                }
+                if ($this->filterDocumentsByQueries($collectionId, [$document], $queries) === []) {
+                    $kept[$document->getId()] = true;
+
+                    continue;
+                }
+                $deleted[$document->getId()] = ['payload' => $payload, 'documentKey' => $documentKeys[(string) $id]];
+            }
+
+            foreach ($deleted as $documentId => $deleteEntry) {
+                $deletedKey = $deleteEntry['documentKey'];
+                $this->journal('deleteDoc', [
+                    'collection' => $collectionId,
+                    'id' => (string) $documentId,
+                    'payload' => $deleteEntry['payload'],
+                    'docKey' => $deletedKey,
+                    'idxKey' => $indexKey,
+                ]);
+                $this->clearPermissions($collectionId, (string) $documentId);
+                $redis->del($deletedKey);
+                $redis->sRem($indexKey, \strtolower((string) $documentId));
+            }
+
+            foreach ($permissionIds as $permissionId) {
+                $documentId = (string) $permissionId;
+                if (isset($deleted[$documentId]) || isset($kept[$documentId])) {
+                    continue;
+                }
+                $this->clearPermissions($collectionId, $documentId);
+            }
+
+            return \count($deleted);
+        });
+    }
+
+    #[\Override]
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    {
+        $collectionId = $this->filter($collection->getId());
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->transaction(function (RedisClient $client) use ($collectionId, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission): array {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, $forPermission);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+            $documents = $this->orderDocuments($documents, $orderAttributes, $orderTypes, $cursorDirection);
+            $documents = $this->cursorDocuments($documents, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
+
+            if (! \is_null($offset)) {
+                $documents = \array_slice($documents, $offset);
+            }
+            if (! \is_null($limit)) {
+                $documents = \array_slice($documents, 0, $limit);
+            }
+
+            $selections = $this->extractSelections($queries);
+            if (! empty($selections)) {
+                $projected = [];
+                foreach ($documents as $document) {
+                    $projected[] = $this->projectDocument($document, $selections);
+                }
+                $documents = $projected;
+            }
+
+            if ($cursorDirection === CursorDirection::Before) {
+                $documents = \array_reverse($documents);
+            }
+
+            return $documents;
+        });
+    }
+
+    #[\Override]
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    {
+        $collectionId = $this->filter($collection->getId());
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        return $this->transaction(function (RedisClient $client) use ($collectionId, $attribute, $queries, $max): float|int {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, PermissionType::Read);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+
+            if (! \is_null($max)) {
+                $documents = \array_slice($documents, 0, $max);
+            }
+
+            $integers = 0;
+            $floats = 0.0;
+            $isFloat = false;
+            foreach ($documents as $document) {
+                $value = $this->resolveDocumentAttribute($document, $attribute);
+                if ($value === null || ! \is_numeric($value)) {
+                    continue;
+                }
+                if (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value))) {
+                    $integers = BigInt::add($integers, $value);
+                } else {
+                    $isFloat = true;
+                    $floats += (float) $value;
+                }
+            }
+
+            if ($isFloat) {
+                return $floats + (float) $integers;
+            }
+
+            if (\is_string($integers)) {
+                throw new LimitException('Value out of range');
+            }
+
+            return $integers;
+        });
+    }
+
+    #[\Override]
+    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    {
+        $collectionId = $this->filter($collection->getId());
+        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            throw new NotFoundException('Collection not found');
+        }
+
+        if (
+            empty($queries)
+            && $this->authorization->getStatus() === false
+            && $this->hasSharedTables() === false
+        ) {
+            $idxKey = $this->idxKey($collectionId);
+            $cardinality = $this->client->sCard($idxKey);
+            if (\is_int($cardinality)) {
+                return $max === null ? $cardinality : \min($max, $cardinality);
+            }
+        }
+
+        return $this->transaction(function (RedisClient $client) use ($collectionId, $queries, $max): int {
+            $documents = $this->loadCollectionDocuments($client, $collectionId, PermissionType::Read);
+            $documents = $this->filterDocumentsByQueries($collectionId, $documents, $queries);
+
+            if (! \is_null($max)) {
+                $documents = \array_slice($documents, 0, $max);
+            }
+
+            return \count($documents);
+        });
+    }
+
+    #[\Override]
+    public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
+    {
+        $collectionId = $this->filter($collection->getId());
+        $docKey = $this->docKey($collectionId, $id);
+
+        return $this->transaction(function (RedisClient $redis) use ($collectionId, $id, $attribute, $value, $updatedAt, $min, $max, $docKey): bool {
+            $payload = $redis->get($docKey);
+            if (! \is_string($payload) || $payload === '') {
+                throw new NotFoundException('Document not found');
+            }
+
+            $document = $this->decode($payload);
+            $current = $document->getAttribute($attribute);
+            $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
+                && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
+            if ($exact) {
+                $current = BigInt::toNative($current);
+                $value = BigInt::toNative($value);
+                if (! \is_null($min) && BigInt::compare($current, $min) < 0) {
+                    return false;
+                }
+                if (! \is_null($max) && BigInt::compare($current, $max) > 0) {
+                    return false;
+                }
+                $result = BigInt::add($current, $value);
+            } else {
+                $current = $this->numericOr($current, 0);
+                $value = $this->numericOr($value, 0);
+                if (! \is_null($min) && $current < $min) {
+                    return false;
+                }
+                if (! \is_null($max) && $current > $max) {
+                    return false;
+                }
+                $result = $current + $value;
+            }
+
+            $document->setAttribute($attribute, $result);
+            $document->setAttribute(Document::UPDATED_AT, $updatedAt);
+
+            $redis->set($docKey, $this->encode($document));
+
+            $this->journal('updateDoc', [
+                'collection' => $collectionId,
+                'id' => $id,
+                'newId' => $id,
+                'payload' => $payload,
+                'docKey' => $docKey,
+            ]);
+
+            return true;
+        });
+    }
+
+    #[\Override]
+    public function limits(): Limits
+    {
+        return $this->limits ??= new Limits(
+            string: 4294967295,
+            varchar: 16381,
+            integer: 4294967295,
+            bigInteger: Database::MAX_BIG_INT,
+            attributes: 1017,
+            indexes: 64,
+            defaultAttributes: \count(Database::internalAttributesFor(true)),
+            defaultIndexes: \count(Database::INTERNAL_INDEXES),
+            indexLength: 1024,
+            uidLength: 255,
+            documentSize: 0,
+            minDateTime: new \DateTime('0001-01-01 00:00:00'),
+            maxDateTime: new \DateTime(self::MAX_DATETIME),
+            idType: ColumnType::Integer,
+            keywords: [],
+            internalIndexKeys: [],
+            escalatedStringByteCap: false,
+        );
+    }
+
+    #[\Override]
+    public function getCountOfAttributes(Document $collection): int
+    {
+        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
+    }
+
+    #[\Override]
+    public function getCountOfIndexes(Document $collection): int
+    {
+        return \count(self::collectionIndexes($collection)) + $this->limits()->defaultIndexes;
+    }
+
+    #[\Override]
+    public function getAttributeWidth(Document $collection): int
+    {
+        return 0;
+    }
+
+    #[\Override]
+    public function id(): string
+    {
+        return '0';
+    }
+
+    private function key(string ...$parts): string
+    {
+        return \implode(self::SEP, $parts);
+    }
+
+    private function ns(): string
+    {
+        return $this->nsFor($this->getNamespace(), $this->getDatabase());
+    }
+
+    private function nsFor(string $namespace, string $database): string
+    {
+        return self::KEY_PREFIX.self::SEP.$namespace.self::SEP.$database;
+    }
+
+    private function nsBase(): string
+    {
+        return self::KEY_PREFIX.self::SEP.$this->getNamespace();
+    }
+
+    private function docKey(string $collection, string $id, int|string|null $tenant = null): string
+    {
+        $id = \strtolower($id);
+        if (! $this->hasSharedTables()) {
+            return $this->key($this->ns(), 'doc', $collection, $id);
+        }
+
+        $bucket = $this->bucketFor($tenant);
+
+        return $this->key($this->ns(), 'doc', 't', $bucket, $collection, $id);
+    }
+
+    private function idxKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->hasSharedTables()) {
+            return $this->key($this->ns(), 'idx', $collection);
+        }
+
+        return $this->key($this->ns(), 'idx', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    private function seqKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->hasSharedTables()) {
+            return $this->key($this->ns(), 'seq', $collection);
+        }
+
+        return $this->key($this->ns(), 'seq', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    private function bucketFor(int|string|null $tenant): string
+    {
+        if ($tenant === null) {
+            $tenant = $this->getTenant();
+        }
+
+        return $tenant === null ? '_' : (string) $tenant;
+    }
+
+    private function tenantBucket(int|string|null $tenant = null): ?string
+    {
+        if (! $this->hasSharedTables()) {
+            return null;
+        }
+
+        return $this->bucketFor($tenant);
+    }
+
+    private function permKey(string $collection, string $letter, string $role, int|string|null $tenant = null): string
+    {
+        $bucket = $this->tenantBucket($tenant);
+        if ($bucket !== null) {
+            return $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.$collection.self::SEP.$letter.self::SEP.$role;
+        }
+
+        return $this->ns().self::SEP.'perm'.self::SEP.$collection.self::SEP.$letter.self::SEP.$role;
+    }
+
+    private function permDocKey(string $collection, string $id, int|string|null $tenant = null): string
+    {
+        $id = \strtolower($id);
+        $bucket = $this->tenantBucket($tenant);
+        if ($bucket !== null) {
+            return $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.'doc'.self::SEP.$collection.self::SEP.$id;
+        }
+
+        return $this->ns().self::SEP.'perm'.self::SEP.'doc'.self::SEP.$collection.self::SEP.$id;
+    }
+
+    private function encode(Document $document): string
+    {
+        return \json_encode(
+            $document->getArrayCopy(),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION
+        );
+    }
+
+    private function decode(string $payload): Document
+    {
+        try {
+            /** @var array<string, mixed> $data */
+            $data = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new DatabaseException('Document decode failed: '.$e->getMessage(), 0, $e);
+        }
+
+        return Document::fromStorage($data);
+    }
+
+    /**
+     * @template T
+     * @param callable(RedisClient): T $callback
+     * @return T
+     */
+    protected function transaction(callable $callback): mixed
+    {
+        try {
+            return $callback($this->client);
+        } catch (\RedisException $exception) {
+            throw new TransactionException('Redis transaction failed: '.$exception->getMessage(), 0, $exception);
+        }
+    }
+
+    private function writePermissions(string $collection, string $id, Document $document): void
+    {
+        $id = \strtolower($id);
+        $tenant = $document->getTenant();
+
+        $byRole = [];
+        foreach ([PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete] as $type) {
+            foreach ($document->getPermissionsByType($type) as $role) {
+                $byRole[(string) $role][] = $this->actionLetter($type);
+            }
+        }
+
+        if ($byRole === []) {
+            return;
+        }
+
+        $hashKey = $this->permDocKey($collection, $id, $tenant);
+        $hashFields = [];
+        $writes = [];
+        foreach ($byRole as $role => $letters) {
+            $unique = \array_values(\array_unique($letters));
+            \sort($unique);
+            $hashFields[$role] = \implode(',', $unique);
+            foreach ($unique as $letter) {
+                $writes[] = [$role, $letter, $this->permKey($collection, $letter, $role, $tenant)];
+            }
+        }
+
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            foreach ($writes as [, , $setKey]) {
+                $this->client->sAdd($setKey, $id);
+            }
+            $this->client->hMSet($hashKey, $hashFields);
+            $this->client->sAdd($this->grantsKey($this->ns(), $collection), $hashKey, ...\array_column($writes, 2));
+            $this->client->exec();
+        } catch (\Throwable $e) {
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // ignore
+            }
+            throw $e;
+        }
+
+        foreach ($writes as [$role, $letter, $setKey]) {
+            $this->journal('createPerm', [
+                'collection' => $collection,
+                'id' => $id,
+                'role' => $role,
+                'letter' => $letter,
+                'permKey' => $setKey,
+                'permDocKey' => $hashKey,
+            ]);
+        }
+    }
+
+    private function clearPermissions(string $collection, string $id, int|string|null $tenant = null): void
+    {
+        $id = \strtolower($id);
+        $hashKey = $this->permDocKey($collection, $id, $tenant);
+        /** @var array<string, string>|false $hash */
+        $hash = $this->client->hGetAll($hashKey);
+        if ($hash === false || $hash === []) {
+            return;
+        }
+
+        $removals = [];
+        foreach ($hash as $role => $letterCsv) {
+            if ($letterCsv === '') {
+                continue;
+            }
+            foreach (\explode(',', $letterCsv) as $letter) {
+                $removals[] = [$role, $letter, $this->permKey($collection, $letter, $role, $tenant)];
+            }
+        }
+
+        $this->client->multi(\Redis::PIPELINE);
+        try {
+            foreach ($removals as [, , $setKey]) {
+                $this->client->sRem($setKey, $id);
+            }
+            $this->client->del($hashKey);
+            $this->client->sRem($this->grantsKey($this->ns(), $collection), $hashKey);
+            $this->client->exec();
+        } catch (\Throwable $e) {
+            try {
+                $this->client->discard();
+            } catch (\Throwable) {
+                // ignore
+            }
+            throw $e;
+        }
+
+        foreach ($removals as [$role, $letter, $setKey]) {
+            $this->journal('deletePerm', [
+                'collection' => $collection,
+                'id' => $id,
+                'role' => $role,
+                'letter' => $letter,
+                'previous' => $hash[$role] ?? '',
+                'permKey' => $setKey,
+                'permDocKey' => $hashKey,
+            ]);
+        }
+    }
+
+    /**
+     * @param array<int, string> $ids
+     * @return array<int, string>
+     */
+    private function applyPermissionFilter(string $collection, array $ids, PermissionType $action): array
+    {
+        if ($ids === []) {
+            return $ids;
+        }
+        if ($this->authorization->getStatus() === false) {
+            return $ids;
+        }
+
+        $roles = $this->authorization->getRoles();
+        if ($roles === []) {
+            return [];
+        }
+
+        $letter = $this->actionLetter($action);
+        $keys = [];
+        foreach ($roles as $role) {
+            $keys[] = $this->permKey($collection, $letter, $role);
+        }
+
+        if (\count($keys) === 1) {
+            /** @var array<int, string>|false $allowed */
+            $allowed = $this->client->sMembers($keys[0]);
+        } else {
+            $first = \array_shift($keys);
+            /** @var array<int, string>|false $allowed */
+            $allowed = $this->client->sUnion($first, ...$keys);
+        }
+        if ($allowed === false || $allowed === []) {
+            return [];
+        }
+
+        $allowedSet = \array_flip($allowed);
+
+        return \array_values(\array_filter($ids, static fn (string $id): bool => isset($allowedSet[$id])));
+    }
+
+    private function actionLetter(PermissionType $action): string
+    {
+        return match ($action) {
+            PermissionType::Read => 'r',
+            PermissionType::Create => 'c',
+            PermissionType::Update => 'u',
+            PermissionType::Delete => 'd',
+            PermissionType::Write => 'w',
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    protected function journal(string $operation, array $payload): void
+    {
+        if ($this->inTransaction === 0) {
+            return;
+        }
+        $this->journalStack[\count($this->journalStack) - 1][] = [
+            'op' => $operation,
+            'payload' => $payload,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function payloadString(array $payload, string $key): ?string
+    {
+        $value = $payload[$key] ?? null;
+
+        return \is_string($value) ? $value : null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function payloadStringOr(array $payload, string $key, string $default): string
+    {
+        $value = $payload[$key] ?? null;
+
+        return \is_string($value) ? $value : $default;
+    }
+
+    private function stringOrEmpty(mixed $value): string
+    {
+        return \is_string($value) ? $value : '';
+    }
+
+    private function numericOr(mixed $value, int|float $default): int|float
+    {
+        return \is_numeric($value) ? $value + 0 : $default;
+    }
+
+    private function intOr(mixed $value, int $default): int
+    {
+        return \is_numeric($value) ? (int) $value : $default;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function recordIdentifier(array $record): string
+    {
+        $id = $record[Document::ID] ?? null;
+        if (\is_string($id)) {
+            return $id;
+        }
+        $key = $record['key'] ?? null;
+
+        return \is_string($key) ? $key : '';
+    }
+
+    protected function rollbackJournal(): void
+    {
+        $frame = \array_pop($this->journalStack);
+        if ($frame === null) {
+            return;
+        }
+
+        for ($i = \count($frame) - 1; $i >= 0; $i--) {
+            $entry = $frame[$i];
+            $operation = $entry['op'];
+            $payload = $entry['payload'];
+
+            switch ($operation) {
+                case 'createDoc':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $this->rawDeleteDoc(
+                        $collection,
+                        $id,
+                        $this->payloadString($payload, 'docKey'),
+                        $this->payloadString($payload, 'idxKey'),
+                        $this->payloadString($payload, 'permDocKey'),
+                    );
+                    break;
+
+                case 'deleteDoc':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $beforePayload = $this->payloadStringOr($payload, 'payload', '');
+                    $this->rawRestoreDoc(
+                        $collection,
+                        $id,
+                        $beforePayload,
+                        $this->payloadString($payload, 'docKey'),
+                        $this->payloadString($payload, 'idxKey'),
+                    );
+                    break;
+
+                case 'updateDoc':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $beforePayload = $this->payloadStringOr($payload, 'payload', '');
+                    $docKey = $this->payloadString($payload, 'docKey') ?? $this->docKey($collection, $id);
+                    $this->client->set($docKey, $beforePayload);
+                    $newId = $this->payloadString($payload, 'newId');
+                    if ($newId !== null && $newId !== $id) {
+                        $newDocKey = $this->payloadString($payload, 'newDocKey') ?? $this->docKey($collection, $newId);
+                        if ($newDocKey !== $docKey) {
+                            $this->client->del($newDocKey);
+                        }
+                        $idxKey = $this->payloadString($payload, 'idxKey') ?? $this->idxKey($collection);
+                        $this->client->sRem($idxKey, \strtolower($newId));
+                        $this->client->sAdd($idxKey, \strtolower($id));
+                    }
+                    break;
+
+                case 'createPerm':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $letter = $this->payloadStringOr($payload, 'letter', '');
+                    $role = $this->payloadStringOr($payload, 'role', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $setKey = $this->payloadString($payload, 'permKey') ?? $this->permKey($collection, $letter, $role);
+                    $hashKey = $this->payloadString($payload, 'permDocKey') ?? $this->permDocKey($collection, $id);
+                    $this->client->sRem($setKey, $id);
+                    $this->client->hDel($hashKey, $role);
+                    break;
+
+                case 'deletePerm':
+                    $collection = $this->payloadStringOr($payload, 'collection', '');
+                    $letter = $this->payloadStringOr($payload, 'letter', '');
+                    $role = $this->payloadStringOr($payload, 'role', '');
+                    $id = $this->payloadStringOr($payload, 'id', '');
+                    $setKey = $this->payloadString($payload, 'permKey') ?? $this->permKey($collection, $letter, $role);
+                    $hashKey = $this->payloadString($payload, 'permDocKey') ?? $this->permDocKey($collection, $id);
+                    $this->client->sAdd($setKey, $id);
+                    $previous = $this->payloadString($payload, 'previous');
+                    if ($previous !== null && $previous !== '') {
+                        $this->client->hSet($hashKey, $role, $previous);
+                    }
+                    break;
+
+                default:
+                    throw new TransactionException('Unknown journal op: '.$operation);
+            }
+        }
+    }
+
+    private function rawDeleteDoc(string $collection, string $id, ?string $docKey = null, ?string $idxKey = null, ?string $permDocKey = null): void
+    {
+        $lowerId = \strtolower($id);
+        $this->client->del($docKey ?? $this->docKey($collection, $lowerId));
+        $this->client->sRem($idxKey ?? $this->idxKey($collection), $lowerId);
+        $this->client->del($permDocKey ?? $this->permDocKey($collection, $lowerId));
+    }
+
+    private function rawRestoreDoc(string $collection, string $id, string $payload, ?string $docKey = null, ?string $idxKey = null): void
+    {
+        $lowerId = \strtolower($id);
+        $this->client->set($docKey ?? $this->docKey($collection, $lowerId), $payload);
+        $this->client->sAdd($idxKey ?? $this->idxKey($collection), $lowerId);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function readAttributesField(RedisClient $client, string $metaKey): array
+    {
+        $raw = $client->hGet($metaKey, 'attrs');
+        if (! \is_string($raw) || $raw === '') {
+            return [];
+        }
+        /** @var array<int, array<string, mixed>> $decoded */
+        $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+
+        return \array_values($decoded);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function readIndexesField(RedisClient $client, string $metaKey): array
+    {
+        $raw = $client->hGet($metaKey, 'indexes');
+        if (! \is_string($raw) || $raw === '') {
+            return [];
+        }
+        $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+        if (! \is_array($decoded)) {
+            return [];
+        }
+
+        /** @var array<int, array<string, mixed>> $decoded */
+        return $decoded;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $attributes
+     * @param array<string, mixed> $record
+     * @return array<int, array<string, mixed>>
+     */
+    private function upsertAttributeRecord(array $attributes, array $record): array
+    {
+        $targetId = $this->stringOrEmpty($record[Document::ID] ?? '');
+        $replaced = false;
+        foreach ($attributes as $i => $existing) {
+            $existingId = $this->recordIdentifier($existing);
+            if ($existingId !== $targetId) {
+                continue;
+            }
+            $attributes[$i] = $record;
+            $replaced = true;
+            break;
+        }
+        if (! $replaced) {
+            $attributes[] = $record;
+        }
+
+        return \array_values($attributes);
+    }
+
+    private function enforceUniqueIndexes(RedisClient $client, string $collection, Document $document, ?string $excludeId = null): void
+    {
+        $this->enforceUniqueIndexesForDocuments($client, $collection, [$document], $excludeId === null ? [] : [$excludeId]);
+    }
+
+    /**
+     * Rejects a write when two of its documents share a unique value, or when one shares a
+     * unique value with a stored document it does not replace.
+     *
+     * @param array<int, Document> $documents
+     * @param array<int, string> $replacedIds the stored id each document overwrites, by document position
+     */
+    private function enforceUniqueIndexesForDocuments(RedisClient $client, string $collection, array $documents, array $replacedIds): void
+    {
+        $uniqueIndexes = $this->uniqueIndexAttributes($client, $collection);
+        if ($uniqueIndexes === []) {
+            return;
+        }
+
+        $sharedTables = $this->hasSharedTables();
+        $claimed = [];
+        $replaced = [];
+        $tenants = [];
+        foreach ($documents as $position => $document) {
+            $tenant = $sharedTables ? ($document->getTenant() ?? $this->getTenant()) : null;
+            $idxKey = $this->idxKey($collection, $tenant);
+            $tenants[$idxKey] = $tenant;
+            if (isset($replacedIds[$position])) {
+                $replaced[$idxKey][\strtolower($replacedIds[$position])] = true;
+            }
+            foreach ($this->uniqueSignatures($document, $uniqueIndexes, $tenant) as $index => $signature) {
+                if (isset($claimed[$idxKey][$index][$signature])) {
+                    throw new UniqueException(UniqueException::MESSAGE);
+                }
+                $claimed[$idxKey][$index][$signature] = true;
+            }
+        }
+
+        foreach ($claimed as $idxKey => $signatures) {
+            [$owners] = $this->storedUniqueValues($client, $collection, $idxKey, $tenants[$idxKey], $uniqueIndexes, $replaced[$idxKey] ?? []);
+            foreach ($owners as $index => $values) {
+                if (\array_intersect_key($values, $signatures[$index] ?? []) !== []) {
+                    throw new UniqueException(UniqueException::MESSAGE);
+                }
+            }
+        }
+    }
+
+    /**
+     * Rejects an upsert batch as writing its documents one after another would: each is checked against the stored
+     * documents and the batch documents before it, and a document that replaces a stored one frees its id's values.
+     *
+     * @param list<Write> $writes
+     */
+    private function enforceUniqueIndexesInOrder(RedisClient $client, string $collection, array $writes): void
+    {
+        $uniqueIndexes = $this->uniqueIndexAttributes($client, $collection);
+        if ($uniqueIndexes === []) {
+            return;
+        }
+
+        $sharedTables = $this->hasSharedTables();
+        $owners = [];
+        $held = [];
+        foreach ($writes as $write) {
+            $tenant = $sharedTables ? ($write->document->getTenant() ?? $this->getTenant()) : null;
+            $idxKey = $this->idxKey($collection, $tenant);
+            if (! isset($owners[$idxKey])) {
+                [$owners[$idxKey], $held[$idxKey]] = $this->storedUniqueValues($client, $collection, $idxKey, $tenant, $uniqueIndexes);
+            }
+
+            $id = \strtolower($write->id);
+            $signatures = $this->uniqueSignatures($write->document, $uniqueIndexes, $tenant);
+            foreach ($signatures as $index => $signature) {
+                $owner = $owners[$idxKey][$index][$signature] ?? null;
+                if ($owner !== null && ($write->payload === null || $owner !== $id)) {
+                    throw new UniqueException(UniqueException::MESSAGE);
+                }
+            }
+
+            foreach ($held[$idxKey][$id] ?? [] as $index => $signature) {
+                unset($owners[$idxKey][$index][$signature]);
+            }
+            $held[$idxKey][$id] = $signatures;
+            foreach ($signatures as $index => $signature) {
+                $owners[$idxKey][$index][$signature] = $id;
+            }
+        }
+    }
+
+    /**
+     * The unique values the stored documents of one tenant's bucket hold: by index and value the lowercased id of the
+     * document holding it, and by that id its values.
+     *
+     * @param array<int, array<int, string>> $uniqueIndexes
+     * @param array<string, true> $skipped lowercased ids whose stored documents are left out
+     * @return array{array<int, array<string, string>>, array<string, array<int, string>>}
+     */
+    private function storedUniqueValues(RedisClient $client, string $collection, string $idxKey, int|string|null $tenant, array $uniqueIndexes, array $skipped = []): array
+    {
+        /** @var array<int, string>|false $docIds */
+        $docIds = $client->sMembers($idxKey);
+        $ids = [];
+        $docKeys = [];
+        foreach (\is_array($docIds) ? $docIds : [] as $docId) {
+            $id = \strtolower((string) $docId);
+            if (isset($skipped[$id])) {
+                continue;
+            }
+            $ids[] = $id;
+            $docKeys[] = $this->docKey($collection, (string) $docId, $tenant);
+        }
+        if ($docKeys === []) {
+            return [[], []];
+        }
+
+        $owners = [];
+        $held = [];
+        /** @var array<int, mixed>|false $payloads */
+        $payloads = $client->mGet($docKeys);
+        foreach (\is_array($payloads) ? $payloads : [] as $position => $payload) {
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $existing = $this->decode($payload);
+            if ($this->hasSharedTables() && $existing->getTenant() !== $tenant) {
+                continue;
+            }
+            $id = $ids[$position];
+            $held[$id] = $this->uniqueSignatures($existing, $uniqueIndexes, $tenant);
+            foreach ($held[$id] as $index => $signature) {
+                $owners[$index][$signature] = $id;
+            }
+        }
+
+        return [$owners, $held];
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    private function uniqueIndexAttributes(RedisClient $client, string $collection): array
+    {
+        $uniqueIndexes = [];
+        foreach ($this->readIndexesField($client, $this->key($this->ns(), 'meta', $collection)) as $index) {
+            if (($index['type'] ?? '') !== IndexType::Unique->value) {
+                continue;
+            }
+            $attributes = $index['attributes'] ?? [];
+            if (empty($attributes) || ! \is_array($attributes)) {
+                continue;
+            }
+            $names = [];
+            foreach ($attributes as $attribute) {
+                if (\is_string($attribute) && $attribute !== '') {
+                    $names[] = $attribute;
+                }
+            }
+            if ($names !== []) {
+                $uniqueIndexes[] = $names;
+            }
+        }
+
+        return $uniqueIndexes;
+    }
+
+    /**
+     * Signatures of the unique values a document holds, by index position. An index where the
+     * document holds a null is left out: nulls never collide.
+     *
+     * @param array<int, array<int, string>> $uniqueIndexes
+     * @return array<int, string>
+     */
+    private function uniqueSignatures(Document $document, array $uniqueIndexes, int|string|null $tenant): array
+    {
+        $signatures = [];
+        foreach ($uniqueIndexes as $index => $attributes) {
+            $signature = [];
+            foreach ($attributes as $attribute) {
+                $value = $this->resolveDocumentAttribute($document, $attribute);
+                if ($value === null) {
+                    continue 2;
+                }
+                $signature[] = $this->normalizeIndexValue($value);
+            }
+            if ($this->hasSharedTables()) {
+                \array_unshift($signature, $tenant);
+            }
+            $signatures[$index] = \serialize($signature);
+        }
+
+        return $signatures;
+    }
+
+    private function purgeCollectionKeys(RedisClient $client, string $namespace, string $database, string $collection): void
+    {
+        $collection = $this->filter($collection);
+        $prefix = $this->nsFor($namespace, $database);
+        $grantsKey = $this->grantsKey($prefix, $collection);
+
+        /** @var array<int, string>|false $registered */
+        $registered = $client->sMembers($grantsKey);
+        $keys = \is_array($registered) ? $registered : [];
+
+        $buckets = [null, ...$this->tenantBuckets($client, $prefix, 'idx', $collection), ...$this->tenantBuckets($client, $prefix, 'seq', $collection)];
+        foreach (\array_unique($buckets) as $bucket) {
+            $idxKey = $this->scopedKey($prefix, 'idx', $bucket, $collection);
+            $keys[] = $idxKey;
+            $keys[] = $this->scopedKey($prefix, 'seq', $bucket, $collection);
+
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                continue;
+            }
+
+            $permDocKeys = [];
+            foreach ($docIds as $docId) {
+                $keys[] = $this->scopedKey($prefix, 'doc', $bucket, $collection, (string) $docId);
+                $permDocKeys[] = $this->scopedKey($prefix, 'perm', $bucket, 'doc', $collection, (string) $docId);
+            }
+            \array_push($keys, ...$permDocKeys, ...$this->roleSetKeys($client, $prefix, $bucket, $collection, $permDocKeys));
+        }
+
+        $keys[] = $this->key($prefix, 'meta', $collection);
+        $keys[] = $grantsKey;
+        foreach (\array_chunk(\array_values(\array_unique($keys)), self::SCAN_BATCH_SIZE) as $batch) {
+            $client->del(...$batch);
+        }
+    }
+
+    private function grantsKey(string $prefix, string $collection): string
+    {
+        return $this->key($prefix, 'grants', $collection);
+    }
+
+    /**
+     * @param  array<int, string>  $permDocKeys
+     * @return array<int, string>
+     */
+    private function roleSetKeys(RedisClient $client, string $prefix, ?string $bucket, string $collection, array $permDocKeys): array
+    {
+        if ($permDocKeys === []) {
+            return [];
+        }
+
+        $client->multi(\Redis::PIPELINE);
+        foreach ($permDocKeys as $permDocKey) {
+            $client->hGetAll($permDocKey);
+        }
+        $grantsByDocument = $client->exec();
+
+        $keys = [];
+        foreach (\is_array($grantsByDocument) ? $grantsByDocument : [] as $grants) {
+            foreach (\is_array($grants) ? $grants : [] as $role => $letters) {
+                foreach (\explode(',', \is_string($letters) ? $letters : '') as $letter) {
+                    if ($letter !== '') {
+                        $keys[] = $this->scopedKey($prefix, 'perm', $bucket, $collection, $letter, (string) $role);
+                    }
+                }
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * The registered permission keys of the collection that belong to the tenant bucket. A bucket
+     * never contains the separator, so one bucket's scope is never a prefix of another's.
+     *
+     * @return array<int, string>
+     */
+    private function registeredGrantKeys(RedisClient $client, string $prefix, ?string $bucket, string $collection): array
+    {
+        /** @var array<int, string>|false $registered */
+        $registered = $client->sMembers($this->grantsKey($prefix, $collection));
+        $keys = \is_array($registered) ? $registered : [];
+
+        if ($bucket === null) {
+            return $keys;
+        }
+
+        $scope = $this->scopedKey($prefix, 'perm', $bucket).self::SEP;
+
+        return \array_values(\array_filter($keys, static fn (string $key): bool => \str_starts_with($key, $scope)));
+    }
+
+    private function scopedKey(string $prefix, string $family, ?string $bucket, string ...$parts): string
+    {
+        $scope = $bucket === null ? [] : ['t', $bucket];
+
+        return $this->key($prefix, $family, ...$scope, ...$parts);
+    }
+
+    /**
+     * Tenant buckets that hold a {family}:t:{bucket}:{collection} key. A bucket never contains the
+     * separator, so a key the pattern also matches for another layout is skipped.
+     *
+     * @return array<int, string>
+     */
+    private function tenantBuckets(RedisClient $client, string $prefix, string $family, string $collection): array
+    {
+        $head = $this->key($prefix, $family, 't').self::SEP;
+        $tail = self::SEP.$collection;
+        $buckets = [];
+        $cursor = null;
+        do {
+            /** @var array<int, string>|false $batch */
+            $batch = $client->scan($cursor, $head.'*'.$tail, self::SCAN_BATCH_SIZE);
+            foreach (\is_array($batch) ? $batch : [] as $key) {
+                if (! \str_starts_with($key, $head) || ! \str_ends_with($key, $tail)) {
+                    continue;
+                }
+                $bucket = \substr($key, \strlen($head), -\strlen($tail));
+                if ($bucket !== '' && ! \str_contains($bucket, self::SEP)) {
+                    $buckets[] = $bucket;
+                }
+            }
+        } while ($cursor !== 0 && $cursor !== null);
+
+        return $buckets;
+    }
+
+    private function computeCollectionSize(string $collection): int
+    {
+        $collection = $this->filter($collection);
+        $prefix = $this->ns();
+        $metaKey = $this->key($prefix, 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return 0;
+        }
+
+        $bucket = $this->tenantBucket();
+        $idxKey = $this->idxKey($collection);
+        $keys = [$metaKey, $idxKey];
+
+        /** @var array<int, string>|false $docIds */
+        $docIds = $this->client->sMembers($idxKey);
+        $permDocKeys = [];
+        foreach (\is_array($docIds) ? $docIds : [] as $docId) {
+            $keys[] = $this->docKey($collection, (string) $docId);
+            $permDocKeys[] = $this->permDocKey($collection, (string) $docId);
+        }
+        \array_push(
+            $keys,
+            ...$permDocKeys,
+            ...$this->roleSetKeys($this->client, $prefix, $bucket, $collection, $permDocKeys),
+            ...$this->registeredGrantKeys($this->client, $prefix, $bucket, $collection),
+        );
+
+        $total = 0;
+        foreach (\array_unique($keys) as $key) {
+            $total += $this->measureKey($key);
+        }
+
+        return $total;
+    }
+
+    private function measureKey(string $key): int
+    {
+        try {
+            /** @var int|false|null $usage */
+            $usage = $this->client->rawCommand('MEMORY', 'USAGE', $key);
+            if (\is_int($usage)) {
+                return $usage;
+            }
+        } catch (\Throwable) {
+            // Fall through to the structural fallback below.
+        }
+
+        $type = $this->client->type($key);
+        switch ($type) {
+            case RedisClient::REDIS_STRING:
+                $value = $this->client->get($key);
+
+                return \is_string($value) ? \strlen($value) + \strlen($key) : 0;
+            case RedisClient::REDIS_HASH:
+                $entries = $this->client->hGetAll($key);
+                $bytes = \strlen($key);
+                if (\is_array($entries)) {
+                    foreach ($entries as $field => $value) {
+                        $bytes += \strlen((string) $field) + \strlen((string) $value);
+                    }
+                }
+
+                return $bytes;
+            case RedisClient::REDIS_SET:
+                $members = $this->client->sMembers($key);
+                $bytes = \strlen($key);
+                if (\is_array($members)) {
+                    foreach ($members as $member) {
+                        $bytes += \strlen((string) $member);
+                    }
+                }
+
+                return $bytes;
+            default:
+                return 0;
+        }
+    }
+
+    private function registerRelationshipField(string $collection, string $field): void
+    {
+        $collection = $this->filter($collection);
+        $field = $this->filter($field);
+        $metaKey = $this->key($this->ns(), 'meta', $collection);
+
+        if ((bool) $this->client->exists($metaKey) === false) {
+            return;
+        }
+
+        $record = [
+            Document::ID => $field,
+            'key' => $field,
+            'type' => ColumnType::Relationship->value,
+            'size' => 0,
+            'signed' => true,
+            'array' => false,
+            'required' => false,
+        ];
+
+        $this->transaction(function (RedisClient $client) use ($metaKey, $record): void {
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $attributes = $this->upsertAttributeRecord($attributes, $record);
+            $client->hSet($metaKey, 'attrs', \json_encode($attributes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+        });
+    }
+
+    private function renameDocumentField(string $collection, string $oldKey, string $newKey): void
+    {
+        $collection = $this->filter($collection);
+        $oldKey = $this->filter($oldKey);
+        $newKey = $this->filter($newKey);
+
+        if ($oldKey === $newKey) {
+            return;
+        }
+
+        $idxKey = $this->idxKey($collection);
+
+        $this->transaction(function (RedisClient $client) use ($collection, $oldKey, $newKey, $idxKey): void {
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                return;
+            }
+
+            foreach ($docIds as $docId) {
+                $docKey = $this->docKey($collection, $docId);
+                $payload = $client->get($docKey);
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $decoded */
+                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+                if (! \array_key_exists($oldKey, $decoded)) {
+                    continue;
+                }
+
+                $decoded[$newKey] = $decoded[$oldKey];
+                unset($decoded[$oldKey]);
+
+                $client->set(
+                    $docKey,
+                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
+                );
+            }
+        });
+    }
+
+    private function dropDocumentField(string $collection, string $field): void
+    {
+        $collection = $this->filter($collection);
+        $field = $this->filter($field);
+        $idxKey = $this->idxKey($collection);
+
+        $this->transaction(function (RedisClient $client) use ($collection, $field, $idxKey): void {
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                return;
+            }
+
+            foreach ($docIds as $docId) {
+                $docKey = $this->docKey($collection, $docId);
+                $payload = $client->get($docKey);
+                if (! \is_string($payload) || $payload === '') {
+                    continue;
+                }
+
+                /** @var array<string, mixed> $decoded */
+                $decoded = \json_decode($payload, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
+                if (! \array_key_exists($field, $decoded)) {
+                    continue;
+                }
+
+                unset($decoded[$field]);
+
+                $client->set(
+                    $docKey,
+                    \json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION),
+                );
+            }
+        });
+    }
+
+    private function resolveJunctionCollection(string $collection, string $relatedCollection, RelationshipSide $side): ?string
+    {
+        $collectionDoc = $this->loadMetadataDocument($collection);
+        $relatedDoc = $this->loadMetadataDocument($relatedCollection);
+        if ($collectionDoc === null || $relatedDoc === null) {
+            return null;
+        }
+
+        $collectionSequence = $collectionDoc->getSequence();
+        $relatedSequence = $relatedDoc->getSequence();
+        if ($collectionSequence === null || $relatedSequence === null || $collectionSequence === '' || $relatedSequence === '') {
+            return null;
+        }
+
+        return $side === RelationshipSide::Parent
+            ? '_'.$collectionSequence.'_'.$relatedSequence
+            : '_'.$relatedSequence.'_'.$collectionSequence;
+    }
+
+    private function loadMetadataDocument(string $collection): ?Document
+    {
+        $id = $this->filter($collection);
+        $payload = $this->client->get($this->docKey(Database::METADATA, $id));
+        if ((! \is_string($payload) || $payload === '') && $this->hasSharedTables()) {
+            $payload = $this->client->get($this->docKey(Database::METADATA, $id, '_'));
+        }
+        if (! \is_string($payload) || $payload === '') {
+            return null;
+        }
+
+        return $this->decode($payload);
+    }
+
+    private function surfaceRelationshipAttributes(string $collection, Document $document): Document
+    {
+        if ($collection === Database::METADATA) {
+            return $document;
+        }
+
+        $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+        $attributes = $this->readAttributesField($this->client, $metaKey);
+        $relationshipKeys = $this->extractRelationshipKeys($attributes);
+        if ($relationshipKeys === []) {
+            return $document;
+        }
+
+        return $this->surfaceRelationshipAttributesUsing($relationshipKeys, $document);
+    }
+
+    /**
+     * @param array<int, string> $relationshipKeys
+     */
+    private function surfaceRelationshipAttributesUsing(array $relationshipKeys, Document $document): Document
+    {
+        if ($relationshipKeys === []) {
+            return $document;
+        }
+
+        $payload = $document->getArrayCopy();
+        foreach ($relationshipKeys as $key) {
+            if (! \array_key_exists($key, $payload)) {
+                $document->setAttribute($key, null);
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $attributes
+     * @return array<int, string>
+     */
+    private function extractRelationshipKeys(array $attributes): array
+    {
+        $keys = [];
+        foreach ($attributes as $attribute) {
+            if (($attribute['type'] ?? null) !== ColumnType::Relationship->value) {
+                continue;
+            }
+            $key = $this->recordIdentifier($attribute);
+            if ($key === '') {
+                continue;
+            }
+            $keys[] = $key;
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @return array<int, Document>
+     */
+    private function loadCollectionDocuments(RedisClient $client, string $collection, PermissionType $forPermission): array
+    {
+        $idxKey = $this->idxKey($collection);
+        /** @var array<int, string>|false $ids */
+        $ids = $client->sMembers($idxKey);
+        if (! \is_array($ids) || empty($ids)) {
+            return [];
+        }
+
+        if ($this->authorization->getStatus()) {
+            $ids = $this->applyPermissionFilter($collection, $ids, $forPermission);
+            if (empty($ids)) {
+                return [];
+            }
+        }
+
+        $keys = [];
+        foreach ($ids as $id) {
+            $keys[] = $this->docKey($collection, (string) $id);
+        }
+
+        /** @var array<int, mixed> $payloads */
+        $payloads = $client->mGet($keys);
+        $sharedTables = $this->hasSharedTables();
+        $tenant = $sharedTables ? $this->getTenant() : null;
+        $allowNullTenant = $sharedTables && $collection === Database::METADATA;
+
+        $relationshipKeys = [];
+        if ($collection !== Database::METADATA) {
+            $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+            $attributes = $this->readAttributesField($client, $metaKey);
+            $relationshipKeys = $this->extractRelationshipKeys($attributes);
+        }
+
+        $documents = [];
+        foreach ($payloads as $payload) {
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $document = $this->decode($payload);
+
+            if ($sharedTables) {
+                $rowTenant = $document->getAttribute(Document::TENANT);
+                $crossTenant = $rowTenant !== $tenant
+                    && ! ($allowNullTenant && $rowTenant === null);
+                if ($crossTenant) {
+                    continue;
+                }
+            }
+
+            if (! empty($relationshipKeys)) {
+                $document = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $document);
+            }
+
+            $documents[] = $document;
+        }
+
+        return $documents;
+    }
+
+    /**
+     * @param array<int, Document> $documents
+     * @param array<Query> $queries
+     * @return array<int, Document>
+     */
+    private function filterDocumentsByQueries(string $collection, array $documents, array $queries): array
+    {
+        if (empty($documents)) {
+            return [];
+        }
+
+        $effective = [];
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (\in_array($method, [
+                Method::Select,
+                Method::OrderAsc,
+                Method::OrderDesc,
+                Method::OrderRandom,
+                Method::Limit,
+                Method::Offset,
+                Method::CursorAfter,
+                Method::CursorBefore,
+            ], true)) {
+                continue;
+            }
+            $effective[] = $query;
+        }
+
+        if (empty($effective)) {
+            return \array_values($documents);
+        }
+
+        $output = [];
+        foreach ($documents as $document) {
+            $matched = true;
+            foreach ($effective as $query) {
+                if (! $this->matchesDocument($document, $query)) {
+                    $matched = false;
+                    break;
+                }
+            }
+            if ($matched) {
+                $output[] = $document;
+            }
+        }
+
+        return $output;
+    }
+
+    private function matchesDocument(Document $document, Query $query): bool
+    {
+        $method = $query->getMethod();
+
+        if ($method === Method::And) {
+            foreach ($query->getValues() as $sub) {
+                if (! ($sub instanceof Query) || ! $this->matchesDocument($document, $sub)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if ($method === Method::Or) {
+            foreach ($query->getValues() as $sub) {
+                if ($sub instanceof Query && $this->matchesDocument($document, $sub)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        $attribute = $query->getAttribute();
+        $value = $this->resolveDocumentAttribute($document, $attribute);
+        $values = $query->getValues();
+
+        if ($query->isObjectAttribute() && ! \str_contains($attribute, '.')) {
+            return $this->matchesDocumentObject($value, $query);
+        }
+
+        switch ($method) {
+            case Method::Equal:
+                if ($value === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($candidate === null) {
+                        continue;
+                    }
+                    if ($this->valuesEqual($value, $candidate)) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Method::NotEqual:
+                if ($value === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($candidate === null) {
+                        return false;
+                    }
+                    if ($this->valuesEqual($value, $candidate)) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Method::LessThan:
+                return $value !== null && $value < $values[0];
+
+            case Method::LessThanEqual:
+                return $value !== null && $value <= $values[0];
+
+            case Method::GreaterThan:
+                return $value !== null && $value > $values[0];
+
+            case Method::GreaterThanEqual:
+                return $value !== null && $value >= $values[0];
+
+            case Method::IsNull:
+                return $value === null;
+
+            case Method::IsNotNull:
+                return $value !== null;
+
+            case Method::Between:
+                return $value !== null && $value >= $values[0] && $value <= $values[1];
+
+            case Method::NotBetween:
+                if ($value === null) {
+                    return false;
+                }
+
+                return $value < $values[0] || $value > $values[1];
+
+            case Method::StartsWith:
+                return \is_string($value) && isset($values[0]) && \is_string($values[0]) && \str_starts_with($value, $values[0]);
+
+            case Method::NotStartsWith:
+                if ($value === null) {
+                    return false;
+                }
+
+                return ! \is_string($value) || ! isset($values[0]) || ! \is_string($values[0]) || ! \str_starts_with($value, $values[0]);
+
+            case Method::EndsWith:
+                return \is_string($value) && isset($values[0]) && \is_string($values[0]) && \str_ends_with($value, $values[0]);
+
+            case Method::NotEndsWith:
+                if ($value === null) {
+                    return false;
+                }
+
+                return ! \is_string($value) || ! isset($values[0]) || ! \is_string($values[0]) || ! \str_ends_with($value, $values[0]);
+
+            case Method::Contains:
+            case Method::ContainsAny:
+                $haystack = $this->coerceArrayValue($value);
+                if ($haystack === null && \is_string($value)) {
+                    foreach ($values as $needle) {
+                        if (\is_string($needle) && \stripos($value, $needle) !== false) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+                if (! \is_array($haystack)) {
+                    return false;
+                }
+                foreach ($values as $needle) {
+                    foreach ($haystack as $item) {
+                        if ($this->valuesEqual($item, $needle)) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+
+            case Method::NotContains:
+                if ($value === null) {
+                    return false;
+                }
+
+                return ! $this->matchesDocument($document, new Query(Method::Contains, $attribute, $values));
+
+            case Method::ContainsAll:
+                $haystack = $this->coerceArrayValue($value);
+                if (! \is_array($haystack)) {
+                    return false;
+                }
+                foreach ($values as $needle) {
+                    $found = false;
+                    foreach ($haystack as $item) {
+                        if ($this->valuesEqual($item, $needle)) {
+                            $found = true;
+                            break;
+                        }
+                    }
+                    if (! $found) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Method::Search:
+                if (! \is_string($value)) {
+                    return false;
+                }
+                $needle = $this->stringOrEmpty($values[0] ?? '');
+                if ($needle === '') {
+                    return false;
+                }
+
+                return $this->matchesFulltextRedis($value, $needle);
+
+            case Method::NotSearch:
+                if ($value === null) {
+                    return false;
+                }
+                if (! \is_string($value)) {
+                    return true;
+                }
+                $needle = $this->stringOrEmpty($values[0] ?? '');
+                if ($needle === '') {
+                    return true;
+                }
+
+                return ! $this->matchesFulltextRedis($value, $needle);
+
+            case Method::Regex:
+                if (! \is_string($value)) {
+                    return false;
+                }
+                $pattern = $this->stringOrEmpty($values[0] ?? '');
+                $delimited = '#'.\str_replace('#', '\\#', $pattern).'#u';
+                $matched = @\preg_match($delimited, $value);
+                if ($matched === false && \preg_last_error() === PREG_INTERNAL_ERROR) {
+                    throw new QueryException('Invalid regular expression');
+                }
+
+                return $matched === 1;
+        }
+
+        throw new QueryException('Query method not supported by Redis adapter: '.$method->value);
+    }
+
+    private function matchesDocumentObject(mixed $value, Query $query): bool
+    {
+        $haystack = $this->decodeObjectishValue($value);
+        $values = $query->getValues();
+        $method = $query->getMethod();
+
+        switch ($method) {
+            case Method::Equal:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $candidate)) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Method::NotEqual:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $candidate)) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Method::Contains:
+            case Method::ContainsAny:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $this->wrapScalarObjectCandidate($candidate))) {
+                        return true;
+                    }
+                }
+
+                return false;
+
+            case Method::ContainsAll:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if (! $this->jsonContainment($haystack, $this->wrapScalarObjectCandidate($candidate))) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Method::NotContains:
+                if ($haystack === null) {
+                    return false;
+                }
+                foreach ($values as $candidate) {
+                    if ($this->jsonContainment($haystack, $this->wrapScalarObjectCandidate($candidate))) {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Method::IsNull:
+                return $value === null;
+
+            case Method::IsNotNull:
+                return $value !== null;
+        }
+
+        throw new QueryException('Query method '.$method->value.' not supported for object attributes');
+    }
+
+    /**
+     * @param array<int, Document> $documents
+     * @param array<string> $orderAttributes
+     * @param array<OrderDirection> $orderTypes
+     * @return array<int, Document>
+     */
+    private function orderDocuments(array $documents, array $orderAttributes, array $orderTypes, CursorDirection $cursorDirection): array
+    {
+        foreach ($orderTypes as $type) {
+            if ($type === OrderDirection::Random) {
+                \shuffle($documents);
+
+                return $documents;
+            }
+        }
+
+        $reverse = $cursorDirection === CursorDirection::Before;
+
+        if (empty($orderAttributes)) {
+            \usort($documents, function (Document $a, Document $b) use ($reverse): int {
+                $av = $a->getAttribute(Document::SEQUENCE, 0);
+                $bv = $b->getAttribute(Document::SEQUENCE, 0);
+                $av = \is_numeric($av) ? $av + 0 : 0;
+                $bv = \is_numeric($bv) ? $bv + 0 : 0;
+                if ($av === $bv) {
+                    return 0;
+                }
+                $cmp = ($av < $bv) ? -1 : 1;
+
+                return $reverse ? -$cmp : $cmp;
+            });
+
+            return $documents;
+        }
+
+        $directions = [];
+        foreach ($orderAttributes as $index => $attribute) {
+            $direction = $orderTypes[$index] ?? OrderDirection::Asc;
+            if ($reverse) {
+                $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
+            }
+            $directions[$index] = $direction === OrderDirection::Asc ? 1 : -1;
+        }
+
+        \usort($documents, function (Document $a, Document $b) use ($orderAttributes, $directions): int {
+            foreach ($orderAttributes as $i => $attribute) {
+                $av = $this->resolveDocumentAttribute($a, $attribute);
+                $bv = $this->resolveDocumentAttribute($b, $attribute);
+                if ($av === $bv) {
+                    continue;
+                }
+                if ($av === null) {
+                    $cmp = -1;
+                } elseif ($bv === null) {
+                    $cmp = 1;
+                } else {
+                    $cmp = ($av < $bv) ? -1 : 1;
+                }
+
+                return $cmp * $directions[$i];
+            }
+
+            return 0;
+        });
+
+        return $documents;
+    }
+
+    /**
+     * @param array<int, Document> $documents
+     * @param array<string> $orderAttributes
+     * @param array<OrderDirection> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @return array<int, Document>
+     */
+    private function cursorDocuments(array $documents, array $orderAttributes, array $orderTypes, array $cursor, CursorDirection $cursorDirection): array
+    {
+        if (empty($cursor)) {
+            return $documents;
+        }
+
+        if (empty($orderAttributes)) {
+            $orderAttributes = [Document::SEQUENCE];
+            $orderTypes = [OrderDirection::Asc];
+        }
+
+        $reverse = $cursorDirection === CursorDirection::Before;
+        $resolved = [];
+        foreach ($orderAttributes as $index => $attribute) {
+            $direction = $orderTypes[$index] ?? OrderDirection::Asc;
+            if ($reverse) {
+                $direction = $direction === OrderDirection::Asc ? OrderDirection::Desc : OrderDirection::Asc;
+            }
+            $resolved[] = new CursorBoundary($attribute, $direction, $cursor[$attribute] ?? null);
+        }
+
+        $output = [];
+        foreach ($documents as $document) {
+            foreach ($resolved as $entry) {
+                $current = $this->resolveDocumentAttribute($document, $entry->field);
+                $reference = $entry->reference;
+                $ascending = $entry->direction === OrderDirection::Asc;
+                if ($current === $reference) {
+                    continue;
+                }
+                if ($current === null) {
+                    if (! $ascending) {
+                        $output[] = $document;
+                    }
+
+                    continue 2;
+                }
+                if ($reference === null) {
+                    if ($ascending) {
+                        $output[] = $document;
+                    }
+
+                    continue 2;
+                }
+                if ($ascending ? ($current > $reference) : ($current < $reference)) {
+                    $output[] = $document;
+                }
+
+                continue 2;
+            }
+        }
+
+        return $output;
+    }
+
+    private function resolveDocumentAttribute(Document $document, string $attribute): mixed
+    {
+        if ($document->offsetExists($attribute)) {
+            return $document->getAttribute($attribute);
+        }
+
+        $filtered = $this->filter($attribute);
+        if ($filtered !== $attribute && $document->offsetExists($filtered)) {
+            return $document->getAttribute($filtered);
+        }
+
+        if (! \str_contains($attribute, '.')) {
+            return null;
+        }
+
+        [$head, $rest] = \explode('.', $attribute, 2);
+        $value = $document->getAttribute($head);
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                $value = $decoded;
+            }
+        }
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        return $this->traverseNestedPath($value, $rest);
+    }
+
+    private function traverseNestedPath(mixed $value, string $path): mixed
+    {
+        foreach (\explode('.', $path) as $part) {
+            if ($value instanceof Document) {
+                $value = $value->getArrayCopy();
+            }
+            if (\is_array($value) && \array_key_exists($part, $value)) {
+                $value = $value[$part];
+
+                continue;
+            }
+
+            return null;
+        }
+
+        return $value;
+    }
+
+    private function normalizeIndexValue(mixed $value): mixed
+    {
+        if (\is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+        if (\is_array($value)) {
+            return \json_encode($value);
+        }
+        if (\is_string($value) && \is_numeric($value)) {
+            return $value + 0;
+        }
+
+        return $value;
+    }
+
+    private function valuesEqual(mixed $a, mixed $b): bool
+    {
+        if ($a === $b) {
+            return true;
+        }
+        if (\is_numeric($a) && \is_numeric($b)) {
+            return $a + 0 === $b + 0;
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<mixed>|null
+     */
+    private function coerceArrayValue(mixed $value): ?array
+    {
+        if (\is_array($value)) {
+            return $value;
+        }
+        if (\is_string($value) && $value !== '' && ($value[0] === '[' || $value[0] === '{')) {
+            $decoded = \json_decode($value, true);
+
+            return \is_array($decoded) ? $decoded : null;
+        }
+
+        return null;
+    }
+
+    private function decodeObjectishValue(mixed $value): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (\is_array($value)) {
+            return $value;
+        }
+        if ($value instanceof Document) {
+            return $value->getArrayCopy();
+        }
+        if (\is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return $value;
+    }
+
+    private function jsonContainment(mixed $haystack, mixed $candidate): bool
+    {
+        if (\is_array($haystack) && \array_is_list($haystack)) {
+            if (\is_array($candidate) && \array_is_list($candidate)) {
+                foreach ($candidate as $needle) {
+                    $matched = false;
+                    foreach ($haystack as $item) {
+                        if ($this->jsonContainment($item, $needle)) {
+                            $matched = true;
+                            break;
+                        }
+                    }
+                    if (! $matched) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            foreach ($haystack as $item) {
+                if ($this->jsonContainment($item, $candidate)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        if (\is_array($haystack) && \is_array($candidate)) {
+            foreach ($candidate as $key => $value) {
+                if (! \array_key_exists($key, $haystack)) {
+                    return false;
+                }
+                if (! $this->jsonContainment($haystack[$key], $value)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if ($haystack === $candidate) {
+            return true;
+        }
+        if (\is_numeric($haystack) && \is_numeric($candidate)) {
+            return $haystack + 0 === $candidate + 0;
+        }
+
+        return false;
+    }
+
+    private function wrapScalarObjectCandidate(mixed $candidate): mixed
+    {
+        if (! \is_array($candidate) || \count($candidate) !== 1) {
+            return $candidate;
+        }
+        $key = \array_key_first($candidate);
+        $value = $candidate[$key];
+        if (\is_array($value)) {
+            return $candidate;
+        }
+
+        return [$key => [$value]];
+    }
+
+    private function matchesFulltextRedis(string $haystack, string $needle): bool
+    {
+        if (\preg_match('/^"(.*)"$/u', \trim($needle), $matches) === 1) {
+            $phrase = \mb_strtolower($matches[1]);
+            if ($phrase === '') {
+                return false;
+            }
+
+            return \str_contains(\mb_strtolower($haystack), $phrase);
+        }
+
+        $haystackTokens = $this->tokenizeForSearch($haystack);
+        $needleTokens = $this->tokenizeForSearch($needle);
+        if (empty($needleTokens) || empty($haystackTokens)) {
+            return false;
+        }
+        $set = \array_flip($haystackTokens);
+        foreach ($needleTokens as $token) {
+            if (\str_ends_with($token, '*')) {
+                $prefix = \substr($token, 0, -1);
+                if ($prefix === '') {
+                    continue;
+                }
+                foreach ($haystackTokens as $candidate) {
+                    if (\str_starts_with($candidate, $prefix)) {
+                        return true;
+                    }
+                }
+
+                continue;
+            }
+            if (isset($set[$token])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function tokenizeForSearch(string $text): array
+    {
+        $lower = \mb_strtolower($text);
+        $parts = \preg_split('/[^\p{L}\p{N}*]+/u', $lower) ?: [];
+
+        return \array_values(\array_filter($parts, fn (string $p): bool => $p !== ''));
+    }
+
+    /**
+     * @param array<Query> $queries
+     * @return array<int, string>
+     */
+    protected function extractSelections(array $queries): array
+    {
+        $selections = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Method::Select) {
+                continue;
+            }
+            foreach ($query->getValues() as $value) {
+                if (\is_string($value)) {
+                    $selections[] = $value;
+                }
+            }
+        }
+
+        return $selections;
+    }
+
+    /**
+     * @param array<int, string> $selections
+     */
+    private function projectDocument(Document $document, array $selections): Document
+    {
+        if (\in_array('*', $selections, true)) {
+            return $document;
+        }
+
+        $projected = [];
+        foreach ($document->getArrayCopy() as $field => $value) {
+            if (\str_starts_with($field, '$') || \str_starts_with($field, '_')) {
+                $projected[$field] = $value;
+
+                continue;
+            }
+            if (\in_array($field, $selections, true)) {
+                $projected[$field] = $value;
+            }
+        }
+
+        return new Document($projected);
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     * @param array<string, mixed> $existing
+     * @return array<string, mixed>
+     */
+    protected function applyOperators(array $attributes, array $existing): array
+    {
+        $result = [];
+        foreach ($attributes as $attribute => $value) {
+            if (Operator::isOperator($value)) {
+                /** @var Operator $value */
+                $result[$attribute] = $this->applyOperator($existing[$attribute] ?? null, $value);
+
+                continue;
+            }
+            $result[$attribute] = $value;
+        }
+
+        return $result;
+    }
+
+    protected function applyOperator(mixed $current, Operator $operator): mixed
+    {
+        $values = $operator->getValues();
+        $method = $operator->getMethod();
+        $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
+        if ($exact !== null) {
+            $bound = $values[1] ?? null;
+            if ($method === OperatorType::Modulo || ! \is_numeric($bound) || (\is_float($bound) && ! \is_finite($bound))) {
+                return $exact;
+            }
+
+            $limit = BigInt::integralValue($bound);
+            if ($limit === null) {
+                throw new OperatorException("Cannot apply {$method->value} operator: max/min limit must be a whole number, got {$bound}");
+            }
+
+            return $this->applyNumericLimit(
+                $current ?? 0,
+                $exact,
+                $limit,
+                \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
+            );
+        }
+
+        switch ($method) {
+            case OperatorType::Increment:
+                $by = $this->numericOr($values[0] ?? 1, 1);
+                $max = $values[1] ?? null;
+                $base = $this->numericOr($current, 0);
+
+                return $this->applyNumericLimit($base, $base + $by, $max, true);
+
+            case OperatorType::Decrement:
+                $by = $this->numericOr($values[0] ?? 1, 1);
+                $min = $values[1] ?? null;
+                $base = $this->numericOr($current, 0);
+
+                return $this->applyNumericLimit($base, $base - $by, $min, false);
+
+            case OperatorType::Multiply:
+                $by = $this->numericOr($values[0] ?? 1, 1);
+                $max = $values[1] ?? null;
+                $base = $this->numericOr($current, 0);
+
+                return $this->applyNumericLimit($base, $base * $by, $max, true);
+
+            case OperatorType::Divide:
+                $by = $values[0] ?? 1;
+                $min = $values[1] ?? null;
+                if (! \is_numeric($by) || $by == 0) {
+                    return $current;
+                }
+                $base = $this->numericOr($current, 0);
+
+                return $this->applyNumericLimit($base, $base / ($by + 0), $min, false);
+
+            case OperatorType::Modulo:
+                $by = $values[0] ?? 1;
+                if (! \is_numeric($by) || $by == 0) {
+                    return $current;
+                }
+                $base = \is_numeric($current) ? (int) $current : 0;
+
+                return $base % (int) $by;
+
+            case OperatorType::Power:
+                $by = $this->numericOr($values[0] ?? 1, 1);
+                $max = $values[1] ?? null;
+                $base = $this->numericOr($current, 0);
+                if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) != $by)) {
+                    if (\is_numeric($max)) {
+                        return $base;
+                    }
+
+                    throw new LimitException('Value out of range');
+                }
+
+                $candidate = $base ** $by;
+                if (! \is_finite((float) $candidate)) {
+                    if (\is_numeric($max)) {
+                        return $base;
+                    }
+
+                    throw new LimitException('Value out of range');
+                }
+
+                return $this->applyNumericLimit($base, $candidate, $max, true);
+
+            case OperatorType::StringConcat:
+                return $this->stringOrEmpty($current).$this->stringOrEmpty($values[0] ?? '');
+
+            case OperatorType::StringReplace:
+                $search = $this->stringOrEmpty($values[0] ?? '');
+                $replace = $this->stringOrEmpty($values[1] ?? '');
+                if ($current === null) {
+                    return null;
+                }
+
+                return \str_replace($search, $replace, $this->stringOrEmpty($current));
+
+            case OperatorType::Toggle:
+                return ! (bool) $current;
+
+            case OperatorType::ArrayAppend:
+                $list = $this->coerceArray($current);
+
+                return [...$list, ...\array_values($values)];
+
+            case OperatorType::ArrayPrepend:
+                $list = $this->coerceArray($current);
+
+                return [...\array_values($values), ...$list];
+
+            case OperatorType::ArrayInsert:
+                $list = $this->coerceArray($current);
+                $index = $this->intOr($values[0] ?? 0, 0);
+                $value = $values[1] ?? null;
+                if ($index < 0) {
+                    $index = 0;
+                }
+                if ($index > \count($list)) {
+                    $index = \count($list);
+                }
+                \array_splice($list, $index, 0, [$value]);
+
+                return $list;
+
+            case OperatorType::ArrayRemove:
+                $list = $this->coerceArray($current);
+                $needle = $values[0] ?? null;
+
+                return \array_values(\array_filter($list, fn ($item) => $item !== $needle));
+
+            case OperatorType::ArrayUnique:
+                $list = $this->coerceArray($current);
+
+                return \array_values(\array_unique($list, SORT_REGULAR));
+
+            case OperatorType::ArrayIntersect:
+                $list = $this->coerceArray($current);
+                $other = \array_values($values);
+
+                return \array_values(\array_filter($list, fn ($item) => \in_array($item, $other, false)));
+
+            case OperatorType::ArrayDiff:
+                $list = $this->coerceArray($current);
+                $other = \array_values($values);
+
+                return \array_values(\array_filter($list, fn ($item) => ! \in_array($item, $other, false)));
+
+            case OperatorType::ArrayFilter:
+                $list = $this->coerceArray($current);
+                $condition = $this->stringOrEmpty($values[0] ?? '');
+                $compare = $values[1] ?? null;
+
+                return \array_values(\array_filter($list, fn ($item) => $this->matchesArrayFilter($item, $condition, $compare)));
+
+            case OperatorType::DateAddDays:
+                $days = $this->intOr($values[0] ?? 0, 0);
+
+                return $this->shiftDate($current, $days * 86400);
+
+            case OperatorType::DateSubDays:
+                $days = $this->intOr($values[0] ?? 0, 0);
+
+                return $this->shiftDate($current, -$days * 86400);
+
+            case OperatorType::DateSetNow:
+                return DateTime::now();
+        }
+    }
+
+    protected function applyNumericLimit(mixed $original, mixed $candidate, mixed $bound, bool $isUpper): int|float|string
+    {
+        if (BigInt::isIntegerValue($original) && BigInt::isIntegerValue($candidate) && BigInt::isIntegerValue($bound)) {
+            $crossed = $isUpper
+                ? BigInt::compare($candidate, $bound) > 0
+                : BigInt::compare($candidate, $bound) < 0;
+
+            return $crossed ? BigInt::toNative($original) : BigInt::toNative($candidate);
+        }
+
+        $numericOriginal = \is_numeric($original) ? $original + 0 : 0;
+        $numericCandidate = \is_numeric($candidate) ? $candidate + 0 : 0;
+
+        if (\is_numeric($bound)) {
+            $numericBound = $bound + 0;
+            if (($isUpper && $numericCandidate > $numericBound) || (! $isUpper && $numericCandidate < $numericBound)) {
+                return $numericOriginal;
+            }
+        }
+
+        return $this->preserveNumericType($numericOriginal, $numericCandidate);
+    }
+
+    protected function preserveNumericType(int|float $original, int|float $result): int|float
+    {
+        if (\is_int($original) && \is_float($result) && $result === (float) (int) $result) {
+            return (int) $result;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    protected function coerceArray(mixed $value): array
+    {
+        if (\is_array($value)) {
+            return \array_values($value);
+        }
+        if (\is_string($value) && $value !== '') {
+            $decoded = \json_decode($value, true);
+            if (\is_array($decoded)) {
+                return \array_values($decoded);
+            }
+        }
+
+        return [];
+    }
+
+    protected function matchesArrayFilter(mixed $item, string $condition, mixed $compare): bool
+    {
+        return match ($condition) {
+            Method::Equal->value => $item == $compare,
+            Method::NotEqual->value => $item != $compare,
+            Method::GreaterThan->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 > $compare + 0,
+            Method::GreaterThanEqual->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 >= $compare + 0,
+            Method::LessThan->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 < $compare + 0,
+            Method::LessThanEqual->value => \is_numeric($item) && \is_numeric($compare) && $item + 0 <= $compare + 0,
+            Method::IsNull->value => $item === null,
+            Method::IsNotNull->value => $item !== null,
+            default => true,
+        };
+    }
+
+    protected function shiftDate(mixed $current, int $seconds): ?string
+    {
+        if ($current === null) {
+            return null;
+        }
+        $stringified = $this->stringOrEmpty($current);
+        try {
+            $base = new \DateTime($stringified);
+        } catch (\Throwable) {
+            return $stringified === '' ? null : $stringified;
+        }
+        $base->modify(($seconds >= 0 ? '+' : '').$seconds.' seconds');
+
+        return DateTime::format($base);
+    }
+}

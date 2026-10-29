@@ -1,2 +1,1 @@
-<?php
-// MCP size test stub
+file:///workspace/src/Database/Adapter/Redis.php

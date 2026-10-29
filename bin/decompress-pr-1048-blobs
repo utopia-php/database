@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Decompress gzip+base64 blobs into adapter source files (PR #1048 recovery).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BLOB_DIR="$ROOT/.github/CLOUD-3RAT-blobs"
+
+decode() {
+  local name="$1"
+  local target="$2"
+  base64 -d "$BLOB_DIR/${name}.gz.b64" | gunzip > "$target"
+}
+
+decode Redis.php "$ROOT/src/Database/Adapter/Redis.php"
+decode SQLite.php "$ROOT/src/Database/Adapter/SQLite.php"
+decode DocumentTests.php "$ROOT/tests/e2e/Adapter/Scopes/DocumentTests.php"
+
+echo "Decompressed adapter sources from .github/CLOUD-3RAT-blobs/"

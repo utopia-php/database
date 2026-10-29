@@ -1,1 +1,1 @@
-@/cursor/stores/bot/push_files_arguments.json:$.files[0].content
+data:text/plain;base64,PD9waHA=

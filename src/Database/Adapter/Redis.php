@@ -1,1 +1,1 @@
-$include:/tmp/redis_gzip_cou.json:content
+@/cursor/stores/bot/push_files_arguments.json:$.files[0].content

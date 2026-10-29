@@ -1,1 +1,1 @@
-LOAD_FROM_JSON_FILE
+__FROM_WORKSPACE__/workspace/src/Database/Adapter/Redis.php

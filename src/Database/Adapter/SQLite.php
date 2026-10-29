@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_REPLACE
+data:application/gzip;base64,LOAD_FROM_AGENT_TOOLS

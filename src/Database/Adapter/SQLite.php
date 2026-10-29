@@ -1,1 +1,1 @@
-@file:/tmp/gh_SQLite.php.uri.txt
+data:application/gzip;base64,PLACEHOLDER_REPLACE_WITH_FULL_URI

@@ -1,1 +1,1 @@
-LOAD
+data:application/gzip;base64,LOAD_FROM_/cursor/stores/bot/gzip_tests__e2e__Adapter__Scopes__DocumentTests.php.json

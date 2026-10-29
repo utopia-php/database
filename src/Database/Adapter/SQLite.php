@@ -1,1 +1,1 @@
-PLACEHOLDER
+data:application/gzip;base64,PLACEHOLDER

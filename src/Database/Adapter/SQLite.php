@@ -1,1 +1,1 @@
-data:application/gzip;base64,LOAD_FROM_/cursor/stores/bot/gzip_src__Database__Adapter__SQLite.php.json
+LOAD_FROM_FILE

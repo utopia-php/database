@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_REPLACE
+$READ:/workspace/src/Database/Adapter/SQLite.php

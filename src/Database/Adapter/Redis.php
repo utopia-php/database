@@ -1673,6 +1673,7 @@ class Redis extends Adapter implements
             idType: ColumnType::Integer,
             keywords: [],
             internalIndexKeys: [],
+            escalatedStringByteCap: false,
         );
     }
 

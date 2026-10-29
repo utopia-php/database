@@ -1775,6 +1775,12 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     #[\Override]
+    protected function limitsEscalatedStringByteCap(): bool
+    {
+        return false;
+    }
+
+    #[\Override]
     protected function getSqlType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if ($array === true) {

@@ -1369,4 +1369,131 @@ class StructureTest extends TestCase
         $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('📝', 20000)])), '20,000 emoji are 80,000 bytes and must be rejected by byte length');
         $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
     }
+
+    /**
+     * A string attribute past the varchar limit is stored as TEXT on MySQL/MariaDB, which is byte-capacity limited.
+     */
+    public function testStringEscalatedStorageByteValidation(): void
+    {
+        $collection = new Document([
+            '$id' => Id::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'cursorJson',
+                    'type' => ColumnType::String->value,
+                    'format' => '',
+                    'size' => 20000,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure(
+            $collection,
+            Profiles::of(
+                capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt],
+                string: 4294967295,
+                varchar: 16381,
+            ),
+        );
+
+        $base = [
+            '$collection' => Id::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        $this->assertTrue($validator->isValid(new Document($base + ['cursorJson' => \str_repeat('a', 20000)])));
+
+        $this->assertFalse($validator->isValid(new Document($base + ['cursorJson' => \str_repeat('📝', 20000)])));
+        $this->assertSame(
+            'Invalid document structure: Attribute "cursorJson" has invalid type. Value must be a valid string no longer than 65535 bytes',
+            $validator->getDescription()
+        );
+    }
+
+    public function testStringEscalatedStorageByteValidationDisabledForPostgres(): void
+    {
+        $collection = new Document([
+            '$id' => Id::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'cursorJson',
+                    'type' => ColumnType::String->value,
+                    'format' => '',
+                    'size' => 20000,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure(
+            $collection,
+            Profiles::of(
+                capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt],
+                string: 4294967295,
+                varchar: 16381,
+                escalatedStringByteCap: false,
+            ),
+        );
+
+        $base = [
+            '$collection' => Id::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        $this->assertTrue($validator->isValid(new Document($base + ['cursorJson' => \str_repeat('📝', 20000)])));
+    }
+
+    public function testStringEscalatedStorageByteValidationSkipsArrayElements(): void
+    {
+        $collection = new Document([
+            '$id' => Id::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'tags',
+                    'type' => ColumnType::String->value,
+                    'format' => '',
+                    'size' => 20000,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => true,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure(
+            $collection,
+            Profiles::of(
+                capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt],
+                string: 4294967295,
+                varchar: 16381,
+            ),
+        );
+
+        $base = [
+            '$collection' => Id::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        $this->assertTrue($validator->isValid(new Document($base + ['tags' => [\str_repeat('📝', 20000)]])));
+    }
 }

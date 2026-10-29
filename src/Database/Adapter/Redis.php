@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_REPLACE
+__LOAD__/workspace/src/Database/Adapter/Redis.php

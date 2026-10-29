@@ -1,1 +1,1 @@
-USE_STORE
+__CONTENTFILE__:/workspace/src/Database/Adapter/SQLite.php

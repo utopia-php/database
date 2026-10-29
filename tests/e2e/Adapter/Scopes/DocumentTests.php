@@ -1,1 +1,1 @@
-USE_STORE
+__CONTENTFILE__:/workspace/tests/e2e/Adapter/Scopes/DocumentTests.php

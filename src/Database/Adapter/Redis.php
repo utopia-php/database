@@ -1,1 +1,1 @@
-/cursor/stores/self/mcp/Github/create_or_update_file_src__Database__Adapter__Redis.php.json
+cursor://file/workspace/src/Database/Adapter/Redis.php

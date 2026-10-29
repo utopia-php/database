@@ -1,1 +1,1 @@
-@/tmp/gh_SQLite.php.uri.txt
+file:///tmp/gh_SQLite.php.uri.txt

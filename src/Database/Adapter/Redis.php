@@ -1,1 +1,1 @@
-@file:/tmp/redis_patched.php
+REPLACED_BY_SCRIPT

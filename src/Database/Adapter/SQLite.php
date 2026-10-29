@@ -1,1 +1,1 @@
-LOAD_FROM_FILE:/tmp/mcp_sqlite_content.txt
+data:application/gzip;base64,PLACEHOLDER

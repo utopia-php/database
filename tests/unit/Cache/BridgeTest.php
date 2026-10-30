@@ -104,6 +104,20 @@ final class BridgeTest extends TestCase
         $this->assertContains('final', \array_map(fn (Document $document) => $document->getAttribute('name'), $dual->find('users')));
     }
 
+    public function testRapidWritesWithCloudsGraceWindowKeepBothProtocolsUsable(): void
+    {
+        $cache = new Cache((new RedisCache($this->redis))->setLeaseGraceWindow(1000));
+        foreach (['legacy', 'dual', 'v2'] as $mode) {
+            $database = $this->database($mode, $cache);
+            $database->updateDocuments('users', new Document(['name' => $mode.'-first']));
+            $database->updateDocuments('users', new Document(['name' => $mode.'-second']));
+            $this->assertSame($mode.'-second', $database->getDocument('users', 'user')->getAttribute('name'));
+            if ($mode !== 'v2') {
+                $this->assertSame($mode.'-second', $this->old('get'), 'Legacy readers remain valid during dual invalidation');
+            }
+        }
+    }
+
     public function testSlotZeroRemainsCacheableAcrossEveryPhase(): void
     {
         foreach (['', 'legacy', 'dual', 'v2'] as $mode) {

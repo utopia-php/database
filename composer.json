@@ -51,7 +51,7 @@
         "ext-redis": "*",
         "utopia-php/validators": "^1.0 || ^2.0",
         "utopia-php/console": "^0.1 || ^0.2",
-        "utopia-php/cache": "dev-codex/eviction-safe-cache-leases as 5.2.999",
+        "utopia-php/cache": "dev-codex/eviction-safe-cache-leases as 6.0.999",
         "utopia-php/pools": "^2.0",
         "utopia-php/mongo": "^1.5.4",
         "utopia-php/query": "^0.7.2",

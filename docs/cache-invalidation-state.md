@@ -1,13 +1,11 @@
-# Eviction-safe invalidation
+# Eviction-safe invalidation (breaking change)
 
-Redis and Redis multiplexing use one evictable record per collection for the epoch and live writer registrations. Atomic versioned snapshots replace the independent started/finished counter ledger. Eviction drops the whole record; its replacement gets a fresh random identity. A writer finishing after its registration was evicted still rotates the current epoch, retiring pre-commit fills. A newer writer's registration keeps its own barrier in place.
+The collection's CAS version is its epoch. Its single evictable record contains only writer registrations. Atomic snapshots and CAS replace the started/finished counters, owner sidecars and separately maintained epoch. Eviction creates a fresh identity. Every completion changes the version, including a writer whose registration disappeared, retiring pre-commit fills while preserving newer live writers.
 
-Fill leases also use random identities stored with the cached value. A key evicted and recreated cannot reset to generation zero and accidentally accept an old reader's fill. Snapshot and compare-and-swap operations propagate cache transport failures instead of converting them into missing state.
+The same opaque versions fence document, definition and query fills. CAS returns the exact identity it committed, or false for a version conflict. Errors and open circuit breakers throw; they are never treated as eviction. Expiry checks use the caller's writer timeout; a reader with a shorter timeout does not delete another caller's live registration. Later writer completion still retires fills made after its timeout.
 
-The existing cache is sufficient: no separate state cache, non-evicting store or additional Dragonfly is needed. Adapters and older cache versions without atomic versioned operations retain the previous protocol for compatibility. Their counter state is not made eviction-safe by this change.
+This requires the new cache major release (6.x); the old generation API and compatibility protocol are removed. Redis, Redis multiplexing and Memory support versioning. Database document/query/withCache caching is bypassed on unsupported adapters; ordinary database operations continue. The old cache-5 compatibility CI tier is removed because it is no longer a supported dependency. The temporary development dependency must be replaced with the stable major release before production.
 
-## Upgrade
+No additional Dragonfly or coordination DSN is needed. Drain and stop legacy API/worker/task/migration writers, clear disposable cache data, deploy matching library versions everywhere and resume. Do not mix protocols. Rollback requires the same drain/clear procedure.
 
-Deploy matching cache/database library versions together. Drain and stop legacy API/worker/task/migration writers, clear disposable cache data, deploy the new protocol everywhere and resume. Do not mix old and new protocols while writers are running. Rollback requires the same drain/clear procedure.
-
-The writer timeout still bounds abandoned registrations. A writer completing after that timeout retires any intervening fills. If the cache rejects writes because it is unavailable or out of memory, coordination fails closed; it does not guess an empty owners list. Successful post-commit invalidation is still required. Durable replay of lost invalidations is a separate concern.
+A successful post-commit invalidation remains necessary. Durable replay of completions lost during a cache outage is separate work. A cache timeout/OOM must never be interpreted as an empty writer record.

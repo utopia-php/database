@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1597d70d90cc725c5c09e643fe744dfc",
+    "content-hash": "3e2516143b11dd8164159b23250268b5",
     "packages": [
         {
             "name": "brick/math",
@@ -2011,12 +2011,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "6f28c370c04f70ee971c8b241ae226c555732519"
+                "reference": "2fef3be8b1aee62b831625a03b221c8e041c7328"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/6f28c370c04f70ee971c8b241ae226c555732519",
-                "reference": "6f28c370c04f70ee971c8b241ae226c555732519",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/2fef3be8b1aee62b831625a03b221c8e041c7328",
+                "reference": "2fef3be8b1aee62b831625a03b221c8e041c7328",
                 "shasum": ""
             },
             "require": {
@@ -2063,7 +2063,7 @@
                 "issues": "https://github.com/utopia-php/cache/issues",
                 "source": "https://github.com/utopia-php/cache/tree/codex/eviction-safe-cache-leases"
             },
-            "time": "2026-10-30T14:27:29+00:00"
+            "time": "2026-10-30T21:12:57+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",
@@ -5228,8 +5228,8 @@
         {
             "package": "utopia-php/cache",
             "version": "dev-codex/eviction-safe-cache-leases",
-            "alias": "5.2.999",
-            "alias_normalized": "5.2.999.0"
+            "alias": "6.0.999",
+            "alias_normalized": "6.0.999.0"
         }
     ],
     "minimum-stability": "stable",

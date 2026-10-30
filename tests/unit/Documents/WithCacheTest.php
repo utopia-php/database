@@ -8,7 +8,7 @@ use RuntimeException;
 use Tests\Unit\Support\StderrCapture;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -111,7 +111,7 @@ final class WithCacheTest extends TestCase
             'the epoch is not a string' => ['listEpoch', ''],
             'the value cannot be read' => ['loadValue', 'Warning: Failed to load cache value: the cache refused loadValue'],
             'a rejected value cannot be purged' => ['purge', 'Warning: Failed to purge rejected cache value: the cache refused purge'],
-            'the generation cannot be read' => ['getGeneration', 'Warning: Failed to get cache generation: the cache refused getGeneration'],
+            'the generation cannot be read' => ['getVersion', 'Warning: Failed to get cache version: the cache refused getVersion'],
             'the value cannot be written' => ['saveWithLease', 'Warning: Failed to save cache value: the cache refused saveWithLease'],
         ];
     }
@@ -136,7 +136,7 @@ final class WithCacheTest extends TestCase
 
         $this->assertSame('computed', $value);
         $this->assertSame(1, $this->calls);
-        if ($failure === 'getGeneration') {
+        if ($failure === 'getVersion') {
             StderrCapture::during(function () use ($database): void {
                 $this->cached($database, fn (): string => 'newer');
             });
@@ -164,7 +164,7 @@ final class WithCacheTest extends TestCase
 
     private function failingCache(string $failure): MemoryCache
     {
-        return new class ($failure) extends MemoryCache implements Leasable {
+        return new class ($failure) extends MemoryCache implements Versioned {
             public function __construct(private readonly string $failure)
             {
             }
@@ -191,6 +191,10 @@ final class WithCacheTest extends TestCase
                     return false;
                 }
 
+                if ($this->failure === 'saveWithLease' && \str_starts_with($key, 'reports:summary#') && ! \str_ends_with($key, '#epoch')) {
+                    throw new RuntimeException('the cache refused saveWithLease');
+                }
+
                 return parent::save($key, $data, $hash);
             }
 
@@ -205,28 +209,15 @@ final class WithCacheTest extends TestCase
             }
 
             #[\Override]
-            public function getGeneration(string $key): string
+            public function getVersion(string $key): string
             {
-                if ($this->failure === 'getGeneration' && \str_starts_with($key, 'reports:summary#')) {
-                    throw new RuntimeException('the cache refused getGeneration');
+                if ($this->failure === 'getVersion' && \str_starts_with($key, 'reports:summary#')) {
+                    throw new RuntimeException('the cache refused getVersion');
                 }
 
-                return '0';
+                return parent::getVersion($key);
             }
 
-            /**
-             * @param  array<int|string, mixed>|string  $data
-             * @return bool|string|array<int|string, mixed>
-             */
-            #[\Override]
-            public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-            {
-                if ($this->failure === 'saveWithLease' && \str_starts_with($key, 'reports:summary#')) {
-                    throw new RuntimeException('the cache refused saveWithLease');
-                }
-
-                return parent::save($key, $data, $hash);
-            }
         };
     }
 

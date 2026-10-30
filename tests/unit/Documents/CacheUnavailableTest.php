@@ -179,9 +179,7 @@ final class CacheUnavailableTest extends TestCase
         $database->updateDocuments('webhooks', new Document(['name' => 'updated']), [Query::equal('$id', ['hook'])]);
 
         $collectionKey = $database->getCacheBaseKeys('webhooks')[0];
-        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
-        $this->assertIsString($epoch);
-        $this->assertStringStartsNotWith('blocked', $epoch, 'A blip shorter than the retries must still publish a fresh epoch');
+        $this->assertNotNull((new \Utopia\Database\Cache\Mutation($database->getCache()))->read($collectionKey, 3600)->value);
         $this->assertSame('updated', $this->cached($database));
     }
 
@@ -191,7 +189,7 @@ final class CacheUnavailableTest extends TestCase
         $database = $this->createDatabase($cache);
         $cache->open();
 
-        $this->expectExceptionMessage('Cache purge could not be confirmed');
+        $this->expectException(\Utopia\Cache\Exception\Unavailable::class);
 
         $database->purgeCachedCollection('webhooks');
     }

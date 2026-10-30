@@ -12,7 +12,7 @@ use Tests\Unit\Support\UncachedTwin;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -81,7 +81,7 @@ final class DocumentCacheEpochTest extends TestCase
             $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $this->fail('Document cache block failure was not propagated');
         } catch (\RuntimeException $error) {
-            $this->assertStringContainsString('block document cache epoch', $error->getMessage());
+            $this->assertStringContainsString('Unable to save cache snapshot', $error->getMessage());
         }
 
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
@@ -127,7 +127,7 @@ final class DocumentCacheEpochTest extends TestCase
         ]));
         $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $this->assertSame('original', $database->getDocument('logs', 'log')->getAttribute('name'));
-        $cache->failActivations('collection:webhooks#epoch');
+        $cache->failActivations('collection:webhooks#state');
 
         $database->withTransaction(function () use ($database): void {
             $this->renameDocument($database, 'webhooks', 'hook', 'updated');
@@ -185,13 +185,13 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
-    public function testCacheFlushAfterActivationReadsGenerationsDoesNotFailTheCommittedMutation(): void
+    public function testCacheFlushAfterActivationReadsVersionDoesNotFailTheCommittedMutation(): void
     {
         $cache = new FlushDuringActivationMemory();
         $database = $this->createDatabaseWithCache($cache);
         $this->assertTrue($cache->flush());
         $database->purgeCachedCollection('webhooks');
-        $cache->flushAfterReading('collection:webhooks#finished');
+        $cache->flushAfterReading('collection:webhooks#state');
 
         $database->deleteCollection('webhooks');
         $this->assertNull($database->findCollection('webhooks'));
@@ -268,7 +268,7 @@ final class DocumentCacheEpochTest extends TestCase
                 $this->renameDocument($other, 'webhooks', 'hook', 'updated');
                 $this->fail('The other writer\'s block did not fail');
             } catch (\RuntimeException $error) {
-                $this->assertStringContainsString('block document cache epoch', $error->getMessage());
+                $this->assertStringContainsString('Unable to save cache snapshot', $error->getMessage());
             } finally {
                 $cache->failBlocks(false);
             }
@@ -303,7 +303,7 @@ final class DocumentCacheEpochTest extends TestCase
             '$id' => 'hook',
             'name' => 'original',
         ]));
-        $cache->failFieldPurges();
+        $cache->failCompletions();
 
         $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
 
@@ -586,40 +586,24 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame(0, $adapter->documentReads, 'A registration another worker already released is not a failed release: the write activates and reads are cached again');
     }
 
-    public function testAWriteWhoseOwnerRegistrationKeepsFailingStillBlocksReaders(): void
-    {
-        $cache = new FailingRegistrationCache();
-        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing($cache);
-
-        try {
-            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-            $cache->failRegistrations(\PHP_INT_MAX);
-
-            $writer->withTransaction(function () use ($writer, $reader): void {
-                $this->renameDocument($writer, 'users', 'user', 'updated');
-                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
-            });
-
-            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write whose owner registration failed must still keep readers from caching what they read while it ran');
-        } finally {
-            $this->removeSQLiteFiles($path);
-        }
-    }
-
-    public function testAWriteWhoseOwnerRegistrationKeepsFailingReenablesTheCollection(): void
+    public function testUnregisterableWritesRollBackAndCachingRecovers(): void
     {
         $cache = new FailingRegistrationCache();
         $adapter = new CountingMemory();
         $database = $this->createCountedDatabase($adapter, $cache);
-        $cache->failRegistrations(\PHP_INT_MAX);
-
+        $cache->failRegistrations(PHP_INT_MAX);
+        try {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $this->fail('A write must not proceed without registering its invalidation');
+        } catch (\Utopia\Cache\Exception\Unavailable) {
+            $this->assertSame('original', UncachedTwin::of($database)->getDocument('webhooks', 'hook')->getAttribute('name'));
+        }
+        $cache->failRegistrations(0);
         $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
-
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
         $adapter->reset();
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-        $this->assertSame(0, $adapter->documentReads, 'A write that blocked its collection without an owner registration re-enables it once it activates');
+        $this->assertSame(0, $adapter->documentReads);
     }
 
     public function testAFailedOwnerRegistrationIsRetried(): void
@@ -736,6 +720,8 @@ final class FailDocumentEpochMemory extends MemoryCache
 
     private ?string $activationFailure = null;
 
+    private int $activationFailures = 0;
+
     public function failBlocks(bool $failing = true): void
     {
         $this->failingBlocks = $failing;
@@ -743,21 +729,24 @@ final class FailDocumentEpochMemory extends MemoryCache
 
     public function failActivations(?string $key = null): void
     {
-        $this->activationFailure = $key ?? '#epoch';
+        $this->activationFailure = $key ?? '#state';
+        $this->activationFailures = 3;
     }
 
     #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
-        if (\str_ends_with($key, '#epoch') && \is_string($data)) {
-            if ($this->failingBlocks && \str_starts_with($data, 'blocked:')) {
+        if (\str_ends_with($key, '#state') && \is_array($data)) {
+            if ($this->failingBlocks && ! empty($data['owners'])) {
                 return false;
             }
             if (
                 $this->activationFailure !== null
+                && $this->activationFailures > 0
                 && \str_contains($key, $this->activationFailure)
-                && ! \str_starts_with($data, 'blocked:')
+                && empty($data['owners'])
             ) {
+                $this->activationFailures--;
                 return false;
             }
         }
@@ -766,15 +755,10 @@ final class FailDocumentEpochMemory extends MemoryCache
     }
 }
 
-final class FlushDuringActivationMemory extends MemoryCache implements Leasable
+final class FlushDuringActivationMemory extends MemoryCache
 {
-    /** @var array<string, int> */
-    private array $generations = [];
-
     private bool $flushDuringActivation = false;
-
     private bool $failDuringActivation = false;
-
     private ?string $flushAfterReading = null;
 
     public function flushDuringActivation(): void
@@ -793,51 +777,32 @@ final class FlushDuringActivationMemory extends MemoryCache implements Leasable
     }
 
     #[\Override]
-    public function getGeneration(string $key): string
+    public function loadVersioned(string $key): array
     {
-        $generation = (string) ($this->generations[$key] ?? 0);
+        $snapshot = parent::loadVersioned($key);
         if ($this->flushAfterReading !== null && \str_ends_with($key, $this->flushAfterReading)) {
             $this->flushAfterReading = null;
             $this->flush();
         }
-
-        return $generation;
+        return $snapshot;
     }
 
     #[\Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
     {
-        if ($this->getGeneration($key) !== $generation) {
-            return false;
+        $before = $this->load($key, PHP_INT_MAX);
+        if (\str_ends_with($key, '#state') && \is_array($before) && \is_array($data)
+            && \is_array($before['owners'] ?? null) && \is_array($data['owners'] ?? null)
+            && \count($data['owners']) < \count($before['owners'])) {
+            if ($this->flushDuringActivation) {
+                $this->flushDuringActivation = false;
+                $this->flush();
+            }
+            if ($this->failDuringActivation) {
+                throw new \Utopia\Cache\Exception\Unavailable('Completion unavailable');
+            }
         }
-
-        return $this->save($key, $data, $hash);
-    }
-
-    #[\Override]
-    public function purge(string $key, string $hash = ''): bool
-    {
-        if ($this->flushDuringActivation && \str_ends_with($key, '#finished')) {
-            $this->flushDuringActivation = false;
-
-            return $this->flush();
-        }
-        if ($this->failDuringActivation && \str_ends_with($key, '#finished')) {
-            return false;
-        }
-
-        $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
-        parent::purge($key, $hash);
-
-        return true;
-    }
-
-    #[\Override]
-    public function flush(): bool
-    {
-        $this->generations = [];
-
-        return parent::flush();
+        return parent::compareAndSwap($key, $data, $hash, $version);
     }
 }
 
@@ -845,8 +810,46 @@ final class FlushDuringActivationMemory extends MemoryCache implements Leasable
  * A Redis-like cache that can abandon a write the way a killed worker does: the write stays registered and its
  * collection stays blocked, because the release of its registration is refused and its activation stops there.
  */
-final class AbandoningCache implements CacheAdapter, Leasable
+final class AbandoningCache implements CacheAdapter, Versioned
 {
+    #[\Override]
+    public function supportsVersioning(): bool
+    {
+        return true;
+    }
+    #[\Override]
+    public function getVersion(string $key): string
+    {
+        return $this->cache->getVersion($key);
+    }
+    #[\Override]
+    public function loadVersioned(string $key): array
+    {
+        return ['version' => $this->getVersion($key), 'value' => $this->load($key, PHP_INT_MAX)];
+    }
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        if (\str_ends_with($key, '#state') && \is_array($data)) {
+            $before = $this->cache->load($key, PHP_INT_MAX);
+            $removed = \is_array($before) && \is_array($before['owners'] ?? null) && \is_array($data['owners'] ?? null) ? \array_diff_key($before['owners'], $data['owners']) : [];
+            if ($removed !== [] && $this->abandoning) {
+                $this->abandoning = false;
+                $this->abandoned = (string) \array_key_first($removed);
+            }
+            if ($this->abandoned !== '' && \count($removed) === 1 && isset($removed[$this->abandoned])) {
+                throw new \Utopia\Cache\Exception\Unavailable('Completion unavailable');
+            }
+        }
+        if ($this->getVersion($key) !== $version) {
+            return false;
+        }
+        if ($this->save($key, $data, $hash) === false) {
+            throw new \Utopia\Cache\Exception\Unavailable('Cache write failed');
+        }
+        return $this->cache->getVersion($key);
+    }
+
     private RedisLeasableCache $cache;
 
     private bool $abandoning = false;
@@ -928,17 +931,6 @@ final class AbandoningCache implements CacheAdapter, Leasable
         return 'abandoning';
     }
 
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        return $this->cache->getGeneration($key);
-    }
-
-    #[\Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        return $this->cache->saveWithLease($key, $data, $hash, $generation);
-    }
 }
 
 /**
@@ -958,7 +950,7 @@ final class InterleavingMemory extends MemoryCache
     }
 
     #[\Override]
-    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
     {
         $callback = $this->callback;
         if ($callback !== null && $this->fragment !== null && \str_contains($key, $this->fragment)) {
@@ -966,6 +958,6 @@ final class InterleavingMemory extends MemoryCache
             $callback();
         }
 
-        return parent::save($key, $data, $hash);
+        return parent::compareAndSwap($key, $data, $hash, $version);
     }
 }

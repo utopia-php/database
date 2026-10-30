@@ -3,14 +3,41 @@
 namespace Tests\Unit\Cache;
 
 use Utopia\Cache\Adapter as CacheAdapter;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 
 /**
  * A Redis-like cache that refuses a number of owner registrations while every other read and write succeeds, the way
  * a save that misses its read deadline returns false from an otherwise healthy Redis.
  */
-final class FailingRegistrationCache implements CacheAdapter, Leasable
+final class FailingRegistrationCache implements CacheAdapter, Versioned
 {
+    #[\Override]
+    public function supportsVersioning(): bool
+    {
+        return true;
+    }
+    #[\Override]
+    public function getVersion(string $key): string
+    {
+        return $this->cache->getVersion($key);
+    }
+    #[\Override]
+    public function loadVersioned(string $key): array
+    {
+        return ['version' => $this->getVersion($key), 'value' => $this->load($key, PHP_INT_MAX)];
+    }
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        if ($this->getVersion($key) !== $version) {
+            return false;
+        }
+        if ($this->save($key, $data, $hash) === false) {
+            throw new \Utopia\Cache\Exception\Unavailable('Cache write failed');
+        }
+        return $this->cache->getVersion($key);
+    }
+
     private RedisLeasableCache $cache;
 
     private int $failures = 0;
@@ -41,7 +68,7 @@ final class FailingRegistrationCache implements CacheAdapter, Leasable
     #[\Override]
     public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
-        if ($hash !== '' && \str_ends_with($key, '#owners')) {
+        if (\str_ends_with($key, '#state') && \is_array($data) && ! empty($data['owners'])) {
             $this->registrations++;
             if ($this->failures > 0) {
                 $this->failures--;
@@ -94,17 +121,5 @@ final class FailingRegistrationCache implements CacheAdapter, Leasable
     public function getName(?string $key = null): string
     {
         return 'failing-registration';
-    }
-
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        return $this->cache->getGeneration($key);
-    }
-
-    #[\Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        return $this->cache->saveWithLease($key, $data, $hash, $generation);
     }
 }

@@ -3,23 +3,51 @@
 namespace Tests\Unit\Cache;
 
 use Utopia\Cache\Adapter as CacheAdapter;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 
-/**
- * Mirrors how utopia-php/cache's Redis adapters store keys: every key is a hash whose generation is a reserved
- * field, and purging a key or one of its fields advances that generation instead of deleting the key
- * (LUA_PURGE_BUMP and LUA_PURGE_FIELD). A key, once written, stays behind for good, holding at least its
- * generation, because the adapters never set an expiry.
- */
-final class RedisLeasableCache implements CacheAdapter, Leasable
+/** Hash-backed versioned cache with explicit eviction and transport fault injection. */
+class RedisLeasableCache implements CacheAdapter, Versioned
 {
+    /** @var array<string, string> */
+    private array $versions = [];
+
+    #[\Override]
+    public function supportsVersioning(): bool
+    {
+        return true;
+    }
+    #[\Override]
+    public function getVersion(string $key): string
+    {
+        return $this->versions[$key] ??= \bin2hex(\random_bytes(16));
+    }
+    #[\Override]
+    public function loadVersioned(string $key): array
+    {
+        return ['version' => $this->getVersion($key), 'value' => $this->load($key, PHP_INT_MAX)];
+    }
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        $before = $this->load($key, PHP_INT_MAX);
+        if ($this->failingCompletions && \str_ends_with($key, '#state') && \is_array($before) && \is_array($data) && \is_array($data['owners'] ?? null) && \is_array($before['owners'] ?? null) && \count($data['owners']) < \count($before['owners'])) {
+            throw new \Utopia\Cache\Exception\Unavailable('Completion unavailable');
+        }
+        if ($this->getVersion($key) !== $version || ($this->tombstones[$key] ?? 0.0) > \microtime(true)) {
+            return false;
+        }
+        if ($this->save($key, $data, $hash) === false) {
+            throw new \Utopia\Cache\Exception\Unavailable('Cache write failed');
+        }
+        return $this->versions[$key] = \bin2hex(\random_bytes(16));
+    }
+
     /** @var array<string, array<string, array{time: int, data: array<int|string, mixed>|string}>> */
     private array $fields = [];
 
-    /** @var array<string, int> */
-    private array $generations = [];
-
     private bool $failingFieldPurges = false;
+
+    private bool $failingCompletions = false;
 
     private bool $corruptingFieldWrites = false;
 
@@ -43,35 +71,14 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
             return false;
         }
 
-        if ($hash !== '' && $this->corruptingFieldWrites) {
+        if ($this->corruptingFieldWrites && ($hash !== '' || \str_ends_with($key, '#state'))) {
             $data = 'corrupted';
         }
 
+        $this->versions[$key] = \bin2hex(\random_bytes(16));
         $this->fields[$key][$this->field($key, $hash)] = ['time' => \time(), 'data' => $data];
 
         return $data;
-    }
-
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        return (string) ($this->generations[$key] ?? 0);
-    }
-
-    #[\Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        if ($this->getGeneration($key) !== $generation) {
-            return false;
-        }
-
-        if (($this->tombstones[$key] ?? 0.0) > \microtime(true)) {
-            return false;
-        }
-
-        unset($this->tombstones[$key]);
-
-        return $this->save($key, $data, $hash);
     }
 
     #[\Override]
@@ -101,7 +108,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
             return false;
         }
 
-        $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
+        unset($this->versions[$key]);
         if ($this->leaseGraceWindow > 0) {
             $this->tombstones[$key] = \microtime(true) + $this->leaseGraceWindow / 1000;
         }
@@ -126,7 +133,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     public function flush(): bool
     {
         $this->fields = [];
-        $this->generations = [];
+        $this->versions = [];
         $this->tombstones = [];
 
         return true;
@@ -157,7 +164,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
      */
     public function keys(): array
     {
-        $keys = \array_map(\strval(...), \array_keys($this->fields + $this->generations));
+        $keys = \array_map(\strval(...), \array_keys($this->fields + $this->versions));
         \sort($keys);
 
         return $keys;
@@ -180,6 +187,11 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     /**
      * Fail every purge of a single field, leaving the field in place.
      */
+    public function failCompletions(): void
+    {
+        $this->failingCompletions = true;
+    }
+
     public function failFieldPurges(): void
     {
         $this->failingFieldPurges = true;
@@ -198,7 +210,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
      */
     public function evict(string $key): void
     {
-        unset($this->fields[$key], $this->generations[$key], $this->tombstones[$key]);
+        unset($this->fields[$key], $this->versions[$key], $this->tombstones[$key]);
     }
 
     /**

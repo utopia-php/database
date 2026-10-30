@@ -8,7 +8,7 @@ use RuntimeException;
 use Tests\Unit\Support\StderrCapture;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -66,7 +66,7 @@ final class GetDocumentFallbackTest extends TestCase
         $this->assertInstanceOf(Document::class, $missing);
         $this->assertTrue($missing->isEmpty());
         $this->assertStringContainsString('Warning: Failed to get document from cache: the cache refused load', $log);
-        $this->assertStringContainsString('Warning: Failed to get cache generation: the cache refused getGeneration', $log);
+        $this->assertStringContainsString('Warning: Failed to get cache version: the cache refused getVersion', $log);
         $this->assertSame(0, $fills(), 'A read without a lease must not populate the cache');
     }
 
@@ -98,7 +98,7 @@ final class GetDocumentFallbackTest extends TestCase
      */
     private function failingCache(): array
     {
-        $cache = new class (self::COLLECTION) extends MemoryCache implements Leasable {
+        $cache = new class (self::COLLECTION) extends MemoryCache implements Versioned {
             public bool $failing = false;
 
             public int $fills = 0;
@@ -126,26 +126,11 @@ final class GetDocumentFallbackTest extends TestCase
             }
 
             #[\Override]
-            public function getGeneration(string $key): string
+            public function getVersion(string $key): string
             {
-                $this->refuse('getGeneration', $key);
+                $this->refuse('getVersion', $key);
 
-                return '0';
-            }
-
-            /**
-             * @param  array<int|string, mixed>|string  $data
-             * @return bool|string|array<int|string, mixed>
-             */
-            #[\Override]
-            public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-            {
-                if ($this->failing) {
-                    $this->fills++;
-                }
-                $this->refuse('saveWithLease', $key);
-
-                return parent::save($key, $data, $hash);
+                return parent::getVersion($key);
             }
 
             private function refuse(string $operation, string $key): void

@@ -28,9 +28,6 @@ final class EvictionProtocolTest extends TestCase
     #[\Override]
     protected function setUp(): void
     {
-        if (! \interface_exists(\Utopia\Cache\Feature\Versioned::class)) {
-            $this->markTestSkipped('The older-cache compatibility tier exercises the legacy protocol');
-        }
         $this->redis = new Redis();
         $this->redis->connect(\getenv('DATABASE_TEST_CACHE_HOST') ?: 'redis', (int) (\getenv('DATABASE_TEST_CACHE_PORT') ?: 6379));
         $this->cache = new Cache(new RedisCache($this->redis));
@@ -53,16 +50,12 @@ final class EvictionProtocolTest extends TestCase
         $this->redis->close();
     }
 
-    public function testLostLegacyCountersCannotStrandDocumentCaching(): void
+    public function testLostCollectionStateCannotStrandDocumentCaching(): void
     {
         $adapter = new CountingMemory();
         $database = $this->database($adapter);
         $key = \strtolower($database->getCacheBaseKeys('users')[0]);
-        $this->cache->save($key.'#epoch', 'blocked:old@'.\time());
-        for ($i = 0; $i < 6; $i++) {
-            $this->cache->purge($key.'#started');
-        }
-        $this->redis->del($key.'#finished');
+        $this->redis->del($key.'#state');
         $this->cache->purge($database->getCacheBaseKeys(Database::METADATA, 'users')[1]);
 
         $this->assertSame('original', $database->getDocument('users', 'user')->getAttribute('name'));
@@ -105,7 +98,7 @@ final class EvictionProtocolTest extends TestCase
         $this->redis->del(\strtolower($key.'#state'));
         $entry = $query->getEntry($scope, 'users', []);
         $this->assertNotNull($entry);
-        $this->assertTrue($query->set($entry, [new Document(['$id' => 'pre-commit'])], $query->getGeneration($entry)));
+        $this->assertTrue($query->set($entry, [new Document(['$id' => 'pre-commit'])], $query->getLease($entry)));
         $query->activateCollection($key, $token, 3600);
         $fresh = $query->getEntry($scope, 'users', []);
         $this->assertNotNull($fresh);

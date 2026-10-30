@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "3e2516143b11dd8164159b23250268b5",
+    "content-hash": "e95611681420d2fa5709ac90a368e813",
     "packages": [
         {
             "name": "brick/math",
@@ -2007,7 +2007,7 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "dev-codex/eviction-safe-cache-leases",
+            "version": "6.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
@@ -2061,7 +2061,7 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/codex/eviction-safe-cache-leases"
+                "source": "https://github.com/utopia-php/cache/tree/6.0.0"
             },
             "time": "2026-10-30T21:12:57+00:00"
         },
@@ -5224,18 +5224,9 @@
             "time": "2026-10-08T14:16:57+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "utopia-php/cache",
-            "version": "dev-codex/eviction-safe-cache-leases",
-            "alias": "6.0.999",
-            "alias_normalized": "6.0.999.0"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "utopia-php/cache": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

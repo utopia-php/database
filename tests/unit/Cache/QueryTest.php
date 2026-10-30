@@ -980,14 +980,14 @@ class QueryTest extends TestCase
             }
 
             #[\Override]
-            public function compareAndSwap(string $key, mixed $data, string $version, string $hash = ''): string|false
+            public function compareAndSwap(string $key, array|string $data, string $version): string|false
             {
                 if ($this->armed && \str_ends_with($key, '#state')) {
                     $this->armed = false;
                     $this->flush();
                 }
 
-                return parent::compareAndSwap($key, $data, $version, $hash);
+                return parent::compareAndSwap($key, $data, $version);
             }
         };
         $queryCache = new ResultCache($cache);

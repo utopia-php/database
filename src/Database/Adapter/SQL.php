@@ -336,9 +336,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 try {
                     if ($this->getDriver()->inTransaction()) {
                         $this->getDriver()->rollBack();
-                    } else {
-                        // If no active transaction, this has no effect.
-                        $this->prepareStatement('ROLLBACK')->execute();
                     }
                 } catch (PDOException) {
                     // A pooled connection can report a transaction it no longer

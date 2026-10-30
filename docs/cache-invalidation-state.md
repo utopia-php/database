@@ -10,9 +10,9 @@ A direct upgrade to 9.0 requires draining legacy writers and clearing disposable
 
 A successful post-commit invalidation remains necessary. Durable replay of completions lost during a cache outage is separate work. A cache timeout/OOM must never be interpreted as an empty writer record.
 
-## Rolling migration (database 9.1 / cache 6.1)
+## Rolling migration (database 9.1 / cache 6.1.1)
 
-Pass the same `Cache\Bridge` instance to Database and its query cache. `Bridge::wrap($cache, $mode)` accepts an empty mode for the ordinary v2 path, or one of three migration phases:
+Use cache 6.1.1 or later: ordinary legacy registrations must bypass the conditional-fill grace window. Pass the same `Cache\Bridge` instance to Database and its query cache. `Bridge::wrap($cache, $mode)` accepts an empty mode for the ordinary v2 path, or one of three migration phases:
 
 | Phase | Reads | Mutation registration/completion and purges |
 | --- | --- | --- |

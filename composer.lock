@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b10674454596dd92bc06013a560b0455",
+    "content-hash": "5d299b8d0325e34aee41d67f7bd57ded",
     "packages": [
         {
             "name": "brick/math",
@@ -2007,16 +2007,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "6.1.0",
+            "version": "6.1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "848b2b703cb5ce47809b739e7b0467781e8f9895"
+                "reference": "8d72a5e91baaa11855cd0ebf6c8934b596f2a93a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/848b2b703cb5ce47809b739e7b0467781e8f9895",
-                "reference": "848b2b703cb5ce47809b739e7b0467781e8f9895",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/8d72a5e91baaa11855cd0ebf6c8934b596f2a93a",
+                "reference": "8d72a5e91baaa11855cd0ebf6c8934b596f2a93a",
                 "shasum": ""
             },
             "require": {
@@ -2061,9 +2061,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/6.1.0"
+                "source": "https://github.com/utopia-php/cache/tree/6.1.1"
             },
-            "time": "2026-10-30T23:20:20+00:00"
+            "time": "2026-10-30T23:38:33+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",

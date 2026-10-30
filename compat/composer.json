@@ -1,0 +1,11 @@
+{
+    "name": "utopia-php/database-bridge-compatibility",
+    "description": "Isolated stable cache-5/database-8 runtime for rolling migration tests",
+    "require": {
+        "utopia-php/database": "8.3.15",
+        "utopia-php/cache": "5.2.0"
+    },
+    "config": {
+        "allow-plugins": false
+    }
+}

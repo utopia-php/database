@@ -13,3 +13,5 @@ Makefile
 .vscode
 tmp
 *.sql
+
+/compat/vendor/

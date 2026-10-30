@@ -140,7 +140,7 @@ jobs:
           context: .
           file: Dockerfile
           build-args: |
-            UTOPIA_CACHE_VERSION=^5.1
+            UTOPIA_CACHE_VERSION=5.2.0
           push: false
           tags: ${{ env.IMAGE }}
           load: true

@@ -15,8 +15,7 @@ RUN composer install \
 ARG UTOPIA_CACHE_VERSION=""
 
 RUN if [ -n "$UTOPIA_CACHE_VERSION" ]; then \
-    composer update utopia-php/cache \
-    --with "utopia-php/cache:$UTOPIA_CACHE_VERSION" \
+    composer require "utopia-php/cache:$UTOPIA_CACHE_VERSION" \
     --with-dependencies \
     --ignore-platform-reqs \
     --optimize-autoloader \

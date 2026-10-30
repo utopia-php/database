@@ -49,7 +49,7 @@ final class GetDocumentFallbackTest extends TestCase
 
     public function testACacheThatCannotBeReadOrWrittenFallsBackToTheDatabase(): void
     {
-        [$cache, $fail] = $this->failingCache();
+        [$cache, $fail, $fills] = $this->failingCache();
         $database = $this->database(new Memory(), new Cache($cache));
         $database->createDocument(self::COLLECTION, new Document([Document::ID => 'session', 'owner' => 'ada']));
         $fail();
@@ -67,8 +67,7 @@ final class GetDocumentFallbackTest extends TestCase
         $this->assertTrue($missing->isEmpty());
         $this->assertStringContainsString('Warning: Failed to get document from cache: the cache refused load', $log);
         $this->assertStringContainsString('Warning: Failed to get cache generation: the cache refused getGeneration', $log);
-        $this->assertStringContainsString('Failed to save document to cache: the cache refused saveWithLease', $log);
-        $this->assertStringContainsString('Failed to save empty document to cache: the cache refused saveWithLease', $log);
+        $this->assertSame(0, $fills(), 'A read without a lease must not populate the cache');
     }
 
     public function testACachedDocumentPastItsTimeToLiveReadsAsEmpty(): void
@@ -95,12 +94,14 @@ final class GetDocumentFallbackTest extends TestCase
     }
 
     /**
-     * @return array{MemoryCache, Closure(): void}
+     * @return array{MemoryCache, Closure(): void, Closure(): int}
      */
     private function failingCache(): array
     {
         $cache = new class (self::COLLECTION) extends MemoryCache implements Leasable {
             public bool $failing = false;
+
+            public int $fills = 0;
 
             public function __construct(private readonly string $collection)
             {
@@ -139,6 +140,9 @@ final class GetDocumentFallbackTest extends TestCase
             #[\Override]
             public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
             {
+                if ($this->failing) {
+                    $this->fills++;
+                }
                 $this->refuse('saveWithLease', $key);
 
                 return parent::save($key, $data, $hash);
@@ -154,7 +158,7 @@ final class GetDocumentFallbackTest extends TestCase
 
         return [$cache, static function () use ($cache): void {
             $cache->failing = true;
-        }];
+        }, static fn (): int => $cache->fills];
     }
 
     private function database(Memory $adapter, Cache $cache): Database

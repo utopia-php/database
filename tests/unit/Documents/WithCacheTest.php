@@ -136,6 +136,12 @@ final class WithCacheTest extends TestCase
 
         $this->assertSame('computed', $value);
         $this->assertSame(1, $this->calls);
+        if ($failure === 'getGeneration') {
+            StderrCapture::during(function () use ($database): void {
+                $this->cached($database, fn (): string => 'newer');
+            });
+            $this->assertSame(2, $this->calls, 'A callback result without a lease must not be cached');
+        }
         if ($warning !== '') {
             $this->assertStringContainsString($warning, $log);
         }

@@ -757,6 +757,9 @@ trait Documents
             try {
                 $generation = Mutation::lease($this->cache, $documentKey);
             } catch (Exception $e) {
+                $fillEpoch = null;
+                $fillDefinition = false;
+                $cacheFailed = true;
                 Console::warning('Warning: Failed to get cache generation: '.$e->getMessage());
             }
         }
@@ -4288,11 +4291,12 @@ trait Documents
             }
         }
 
-        $generation = '0';
         try {
             $generation = Mutation::lease($this->cache, $physicalKey);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to get cache generation: '.$error->getMessage());
+
+            return $callback();
         }
 
         $callbackValue = $callback();

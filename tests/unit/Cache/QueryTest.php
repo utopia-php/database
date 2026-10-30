@@ -34,6 +34,32 @@ class QueryTest extends TestCase
         $this->queryCache = new ResultCache($this->cache);
     }
 
+    public function testDataCacheFlushDoesNotEraseAnInFlightWriter(): void
+    {
+        $data = new RedisLeasableCache();
+        $query = new ResultCache(new Cache($data), invalidationCache: new Cache(new RedisLeasableCache()));
+        $scope = new Scope(namespace: 'durable_state');
+        $entry = $query->getEntry($scope, 'users', []);
+        $this->assertNotNull($entry);
+        $this->assertTrue($query->set($entry, [new Document(['$id' => 'old'])], $query->getGeneration($entry)));
+
+        $token = $query->createToken();
+        $key = $query->getCollectionKey($scope, 'users');
+        $query->blockCollection($key, $token);
+        $data->flush();
+        $this->assertNull($query->getEntry($scope, 'users', []), 'Eviction of cached results must not erase the writer barrier');
+
+        $query->activateCollection($key, $token, $scope->writerTimeout);
+        $fresh = $query->getEntry($scope, 'users', []);
+        $this->assertNotNull($fresh);
+        $this->assertNull($query->get($fresh));
+        $this->assertTrue($query->set($fresh, [new Document(['$id' => 'new'])], $query->getGeneration($fresh)));
+        $documents = $query->get($fresh);
+        $this->assertNotNull($documents);
+        $this->assertArrayHasKey(0, $documents);
+        $this->assertSame('new', $documents[0]->getId());
+    }
+
     public function testConstructorWithDefaults(): void
     {
         $queryCache = new ResultCache(self::createCache());

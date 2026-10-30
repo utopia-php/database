@@ -26,6 +26,54 @@ use Utopia\Database\Role;
 
 final class DocumentCacheEpochTest extends TestCase
 {
+    public function testDataCacheEvictionCannotLoseInvalidationCounters(): void
+    {
+        $data = new RedisLeasableCache();
+        $state = new Cache(new RedisLeasableCache());
+        $adapter = new CountingMemory();
+        $database = new Database($adapter, new Cache($data));
+        $database->setInvalidationCache($state)->setDatabase('eviction')->setNamespace('counter_loss');
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->create();
+        $database->createCollection(Collection::create(id: 'users', attributes: [Attribute::string(key: 'name')], permissions: [Permission::read(Role::any()), Permission::create(Role::any()), Permission::update(Role::any())]));
+        $database->createDocument('users', new Document(['$id' => 'user', 'name' => 'original']));
+
+        $key = $database->getCacheBaseKeys('users')[0];
+        // Reproduce independently lost accounting keys, followed by a cold schema read.
+        // With one evicting store this strands the collection behind unequal counters.
+        $data->evict(\strtolower($key.'#finished'));
+        $data->evict(\strtolower($key.'#epoch'));
+        $database->getCache()->purge($database->getCacheBaseKeys(Database::METADATA, 'users')[1]);
+
+        $this->assertSame('original', $database->getDocument('users', 'user')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('original', $database->getDocument('users', 'user')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'A lost data-cache key must not disable document caching');
+
+        $database->updateDocument('users', 'user', new Document(['name' => 'updated']));
+        $this->assertSame('updated', $database->getDocument('users', 'user')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('users', 'user')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'Subsequent writes must still activate the cache');
+    }
+
+    public function testDataCacheFlushDuringTransactionKeepsTheWriterBarrier(): void
+    {
+        $state = new Cache(new RedisLeasableCache());
+        [$writer, $reader, $adapter, $path] = $this->createSharedSQLiteDatabases($state);
+        try {
+            $adapter->pauseNextCommit(function () use ($reader): void {
+                $reader->getCache()->flush();
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            });
+            $writer->updateDocument('users', 'user', new Document(['name' => 'updated']));
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'));
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
     public function testOuterTransactionCannotPublishAStalePointCacheEntryBeforeCommit(): void
     {
         [$writer, $reader, $adapter, $path] = $this->createSharedSQLiteDatabases();
@@ -338,7 +386,7 @@ final class DocumentCacheEpochTest extends TestCase
     /**
      * @return array{Database, Database, PausedDocumentSQLite, string}
      */
-    private function createSharedSQLiteDatabases(): array
+    private function createSharedSQLiteDatabases(?Cache $invalidationCache = null): array
     {
         $path = \tempnam(\sys_get_temp_dir(), 'document-cache-epoch-');
         if ($path === false) {
@@ -365,6 +413,7 @@ final class DocumentCacheEpochTest extends TestCase
         $namespace = 'shared_epoch_'.\uniqid();
         foreach ([$writer, $reader] as $database) {
             $database
+                ->setInvalidationCache($invalidationCache)
                 ->setDatabase('utopiaTests')
                 ->setNamespace($namespace);
             $database->getAuthorization()->addRole(Role::any()->toString());

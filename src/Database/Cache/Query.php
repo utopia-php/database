@@ -40,13 +40,18 @@ class Query
     /** @var array<string, Region> */
     private array $regions = [];
 
+    private readonly Cache $invalidationCache;
+
     /**
      * @param  int  $slots  Results a collection scope keeps at most; queries sharing a slot evict each other
      */
     public function __construct(
         private readonly Cache $cache,
         private readonly int $slots = self::SLOTS,
+        ?Cache $invalidationCache = null,
     ) {
+        $this->invalidationCache = $invalidationCache ?? $cache;
+
         if ($slots < 1) {
             throw new InvalidArgumentException('A query cache needs at least one slot');
         }
@@ -209,15 +214,15 @@ class Query
      */
     public function blockCollection(string $key, string $token): void
     {
-        if (! (new Owners($this->cache))->register($key, $token)) {
+        if (! (new Owners($this->invalidationCache))->register($key, $token)) {
             throw new Unavailable("Failed to register query cache owner for '{$key}'");
         }
 
-        if ($this->cache->save($this->getEpochKey($key), self::BLOCKED_PREFIX.$token.self::SEPARATOR.\time()) === false) {
+        if ($this->invalidationCache->save($this->getEpochKey($key), self::BLOCKED_PREFIX.$token.self::SEPARATOR.\time()) === false) {
             throw new Unavailable("Failed to block query cache epoch for '{$key}'");
         }
 
-        $this->cache->purge($this->getStartedKey($key));
+        $this->invalidationCache->purge($this->getStartedKey($key));
         $this->cache->purge($key, self::BLOCK_FIELD);
     }
 
@@ -229,14 +234,14 @@ class Query
      */
     public function activateCollection(string $key, string $token, int $writerTimeout): void
     {
-        $registration = (new Owners($this->cache))->find($key, $token);
-        $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);
+        $registration = (new Owners($this->invalidationCache))->find($key, $token);
+        $owner = $this->invalidationCache->load($registration->key, self::PERMANENT, $registration->field);
         if ($owner !== false && $owner !== null && $owner !== $token) {
             throw new RuntimeException("Invalid query cache owner for '{$key}'");
         }
         $owned = $owner === $token;
-        if ($owned && ! $this->cache->purge($registration->key, $registration->field)) {
-            $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);
+        if ($owned && ! $this->invalidationCache->purge($registration->key, $registration->field)) {
+            $owner = $this->invalidationCache->load($registration->key, self::PERMANENT, $registration->field);
             if ($owner !== false && $owner !== null) {
                 throw new Unavailable("Failed to release query cache owner for '{$key}'");
             }
@@ -246,9 +251,9 @@ class Query
         $epochKey = $this->getEpochKey($key);
         $startedKey = $this->getStartedKey($key);
         $finishedKey = $this->getFinishedKey($key);
-        $started = $this->cache->getGeneration($startedKey);
-        $finished = $this->cache->getGeneration($finishedKey);
-        $current = $this->cache->load($epochKey, self::PERMANENT);
+        $started = $this->invalidationCache->getGeneration($startedKey);
+        $finished = $this->invalidationCache->getGeneration($finishedKey);
+        $current = $this->invalidationCache->load($epochKey, self::PERMANENT);
         $ours = $this->isTombstoneOf($current, $token);
 
         if ($started === $finished) {
@@ -267,9 +272,9 @@ class Query
             return;
         }
 
-        $this->cache->purge($finishedKey);
-        $nextStarted = $this->cache->getGeneration($startedKey);
-        $nextFinished = $this->cache->getGeneration($finishedKey);
+        $this->invalidationCache->purge($finishedKey);
+        $nextStarted = $this->invalidationCache->getGeneration($startedKey);
+        $nextFinished = $this->invalidationCache->getGeneration($finishedKey);
 
         if ($nextStarted === $nextFinished) {
             $this->publish($key, $nextFinished);
@@ -277,7 +282,7 @@ class Query
             return;
         }
 
-        if ($nextFinished === $finished && $this->isTombstoneOf($this->cache->load($epochKey, self::PERMANENT), $token)) {
+        if ($nextFinished === $finished && $this->isTombstoneOf($this->invalidationCache->load($epochKey, self::PERMANENT), $token)) {
             throw new Unavailable("Failed to finish query cache invalidation for '{$key}'");
         }
 
@@ -302,7 +307,7 @@ class Query
      */
     private function getEpoch(string $key, string $collection, int $writerTimeout): ?string
     {
-        $value = $this->cache->load($this->getEpochKey($key), self::PERMANENT);
+        $value = $this->invalidationCache->load($this->getEpochKey($key), self::PERMANENT);
 
         if ($value === false || $value === null) {
             return $this->cache->getGeneration($key) === self::NEVER_STARTED
@@ -329,8 +334,8 @@ class Query
             return null;
         }
 
-        $started = $this->cache->getGeneration($this->getStartedKey($key));
-        if ($started !== $stamp && $started !== $this->cache->getGeneration($this->getFinishedKey($key))) {
+        $started = $this->invalidationCache->getGeneration($this->getStartedKey($key));
+        if ($started !== $stamp && $started !== $this->invalidationCache->getGeneration($this->getFinishedKey($key))) {
             return null;
         }
 
@@ -351,8 +356,8 @@ class Query
             return null;
         }
 
-        $started = $this->cache->getGeneration($this->getStartedKey($key));
-        $finished = $this->cache->getGeneration($this->getFinishedKey($key));
+        $started = $this->invalidationCache->getGeneration($this->getStartedKey($key));
+        $finished = $this->invalidationCache->getGeneration($this->getFinishedKey($key));
         if ($stamp + ($started === $finished ? $ttl : $writerTimeout) > $now) {
             return null;
         }
@@ -368,7 +373,7 @@ class Query
     {
         $now = \time();
         $abandoned = [];
-        foreach ($this->cache->list($owners) as $token) {
+        foreach ($this->invalidationCache->list($owners) as $token) {
             $created = $this->getTokenTime($token);
             if ($created === null || $created + $writerTimeout > $now) {
                 return false;
@@ -378,7 +383,7 @@ class Query
         }
 
         foreach ($abandoned as $token) {
-            $this->cache->purge($owners, $token);
+            $this->invalidationCache->purge($owners, $token);
         }
 
         return true;
@@ -411,7 +416,7 @@ class Query
     {
         $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::SEPARATOR.$finished;
 
-        if ($this->cache->save($this->getEpochKey($key), $epoch) === false) {
+        if ($this->invalidationCache->save($this->getEpochKey($key), $epoch) === false) {
             throw new Unavailable("Failed to activate query cache for '{$key}'");
         }
     }

@@ -77,7 +77,7 @@ final class InvalidationRestoreFailureTest extends TestCase
             #[\Override]
             public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
-                if (($this->failing)() && \str_ends_with($key, '#epoch') && \is_string($data) && ! \str_starts_with($data, 'blocked:')) {
+                if (($this->failing)() && \str_ends_with($key, '#state') && \is_array($data) && empty($data['owners'])) {
                     throw new RuntimeException('the cache refused the epoch');
                 }
 

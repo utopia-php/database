@@ -4,15 +4,42 @@ namespace Tests\Unit\Cache;
 
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Exception\Unavailable;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 
 /**
  * A Redis-like cache behind utopia-php/cache's circuit breaker. While the circuit is open every call takes its
  * fallback: reads miss and saves report false. A purge the breaker cannot confirm throws instead of reporting
  * nothing to purge. With only writes failing, reads are still served.
  */
-final class UnavailableCache implements CacheAdapter, Leasable
+final class UnavailableCache implements CacheAdapter, Versioned
 {
+    #[\Override]
+    public function supportsVersioning(): bool
+    {
+        return true;
+    }
+    #[\Override]
+    public function getVersion(string $key): string
+    {
+        return $this->cache->getVersion($key);
+    }
+    #[\Override]
+    public function loadVersioned(string $key): array
+    {
+        return ['version' => $this->getVersion($key), 'value' => $this->load($key, PHP_INT_MAX)];
+    }
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        if ($this->getVersion($key) !== $version) {
+            return false;
+        }
+        if ($this->save($key, $data, $hash) === false) {
+            throw new \Utopia\Cache\Exception\Unavailable('Cache write failed');
+        }
+        return $this->cache->getVersion($key);
+    }
+
     private RedisLeasableCache $cache;
 
     private bool $open = false;
@@ -139,17 +166,5 @@ final class UnavailableCache implements CacheAdapter, Leasable
     public function getName(?string $key = null): string
     {
         return 'unavailable';
-    }
-
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        return $this->open ? '0' : $this->cache->getGeneration($key);
-    }
-
-    #[\Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        return $this->writable() ? $this->cache->saveWithLease($key, $data, $hash, $generation) : false;
     }
 }

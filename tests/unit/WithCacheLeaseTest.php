@@ -6,7 +6,6 @@ use Closure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -29,7 +28,7 @@ class WithCacheLeaseTest extends TestCase
     #[\Override]
     protected function setUp(): void
     {
-        $this->cache = new Cache(new LeasableMemoryCache());
+        $this->cache = new Cache(new \Tests\Unit\Cache\RedisLeasableCache());
         $this->adapter = new DatabaseMemory();
         $this->database = new Database($this->adapter, $this->cache);
         $this->database
@@ -103,7 +102,7 @@ class WithCacheLeaseTest extends TestCase
                 return $document;
             }
         };
-        $database = new Database($adapter, new Cache(new LeasableMemoryCache()));
+        $database = new Database($adapter, new Cache(new \Tests\Unit\Cache\RedisLeasableCache()));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('with_cache_in_flight_' . \uniqid());
@@ -180,143 +179,5 @@ class WithCacheLeaseTest extends TestCase
         $this->assertIsArray($cached);
         $this->assertCount(1, $cached);
         $this->assertSame(0, $callbackCalls);
-    }
-}
-
-class LeasableMemoryCache implements Adapter, Leasable
-{
-    private const string GENERATION_FIELD = '__utopia_gen__';
-
-    /**
-     * @var array<string, array<string, array{time: int, data: array<int|string, mixed>|string}>>
-     */
-    private array $store = [];
-
-    #[\Override]
-    public function load(string $key, int $ttl, string $hash = ''): mixed
-    {
-        if ($hash === '') {
-            $hash = $key;
-        }
-
-        if (! isset($this->store[$key][$hash])) {
-            return false;
-        }
-
-        $saved = $this->store[$key][$hash];
-
-        return ($saved['time'] + $ttl > \time()) ? $saved['data'] : false;
-    }
-
-    #[\Override]
-    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
-    {
-        if (empty($key) || empty($data)) {
-            return false;
-        }
-
-        if ($hash === '') {
-            $hash = $key;
-        }
-
-        if ($hash === self::GENERATION_FIELD) {
-            return false;
-        }
-
-        $this->store[$key][$hash] = ['time' => \time(), 'data' => $data];
-
-        return $data;
-    }
-
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        $generation = $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
-
-        return \is_string($generation) ? $generation : '0';
-    }
-
-    #[\Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        if (empty($key) || empty($data)) {
-            return false;
-        }
-
-        if ($this->getGeneration($key) !== $generation) {
-            return false;
-        }
-
-        return $this->save($key, $data, $hash);
-    }
-
-    #[\Override]
-    public function touch(string $key, string $hash = ''): bool
-    {
-        if ($hash === '') {
-            $hash = $key;
-        }
-
-        if (! isset($this->store[$key][$hash])) {
-            return false;
-        }
-
-        $this->store[$key][$hash]['time'] = \time();
-
-        return true;
-    }
-
-    /**
-     * @return string[]
-     */
-    #[\Override]
-    public function list(string $key): array
-    {
-        return \array_values(\array_filter(
-            \array_keys($this->store[$key] ?? []),
-            fn (string $field): bool => $field !== self::GENERATION_FIELD
-        ));
-    }
-
-    #[\Override]
-    public function purge(string $key, string $hash = ''): bool
-    {
-        $generation = (string) (((int) $this->getGeneration($key)) + 1);
-
-        if ($hash !== '' && $hash !== self::GENERATION_FIELD) {
-            unset($this->store[$key][$hash]);
-        } else {
-            $this->store[$key] = [];
-        }
-
-        $this->store[$key][self::GENERATION_FIELD] = ['time' => \time(), 'data' => $generation];
-
-        return true;
-    }
-
-    #[\Override]
-    public function flush(): bool
-    {
-        $this->store = [];
-
-        return true;
-    }
-
-    #[\Override]
-    public function ping(): bool
-    {
-        return true;
-    }
-
-    #[\Override]
-    public function getSize(): int
-    {
-        return \count($this->store);
-    }
-
-    #[\Override]
-    public function getName(?string $key = null): string
-    {
-        return 'leasable-memory';
     }
 }

@@ -82,7 +82,7 @@ final class DatabaseTest extends TestCase
     {
         return [
             'epoch or entry load' => ['load'],
-            'lease' => ['getGeneration'],
+            'lease' => ['getLease'],
             'fill' => ['saveWithLease'],
         ];
     }
@@ -102,11 +102,11 @@ final class DatabaseTest extends TestCase
             }
 
             #[\Override]
-            public function getGeneration(string $key): string
+            public function getLease(string $key): string
             {
-                $this->assertAvailable('getGeneration');
+                $this->assertAvailable('getLease');
 
-                return parent::getGeneration($key);
+                return parent::getLease($key);
             }
 
             #[\Override]
@@ -166,7 +166,7 @@ final class DatabaseTest extends TestCase
         $scope = $this->scope($database);
         $before = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($before);
-        $this->assertTrue($queryCache->set($before, [new Document(['$id' => 'detached'])], $queryCache->getGeneration($before)));
+        $this->assertTrue($queryCache->set($before, [new Document(['$id' => 'detached'])], $queryCache->getLease($before)));
 
         $database->createDocument('users', new Document(['$id' => 'b']));
 
@@ -759,7 +759,7 @@ final class DatabaseTest extends TestCase
             $mutation($database);
             $this->fail('Mandatory invalidation failure was not propagated');
         } catch (\RuntimeException $exception) {
-            $this->assertStringContainsString('query cache epoch', $exception->getMessage());
+            $this->assertInstanceOf(\Utopia\Cache\Exception\Unavailable::class, $exception);
         }
 
         $this->assertSame(
@@ -861,7 +861,7 @@ final class DatabaseTest extends TestCase
         $scope = $this->scope($database);
         $before = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($before);
-        $this->assertTrue($queryCache->set($before, [new Document(['$id' => 'stale'])], $queryCache->getGeneration($before)));
+        $this->assertTrue($queryCache->set($before, [new Document(['$id' => 'stale'])], $queryCache->getLease($before)));
         $this->assertSame(['stale'], $this->ids($queryCache->get($before) ?? []));
 
         $mutation($database);
@@ -869,7 +869,7 @@ final class DatabaseTest extends TestCase
         $after = $queryCache->getEntry($scope, 'users', []);
         $this->assertNotNull($after, 'The mutation must leave the query cache usable');
         $this->assertNull($queryCache->get($after), 'The mutation must retire what was cached before it');
-        $this->assertTrue($queryCache->set($after, [new Document(['$id' => 'fresh'])], $queryCache->getGeneration($after)));
+        $this->assertTrue($queryCache->set($after, [new Document(['$id' => 'fresh'])], $queryCache->getLease($after)));
         $this->assertSame(['fresh'], $this->ids($queryCache->get($after) ?? []), 'The mutation must publish a fresh epoch');
     }
 

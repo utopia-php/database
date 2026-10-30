@@ -16,6 +16,7 @@ use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Aggregation;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Epoch;
+use Utopia\Database\Cache\Mutation;
 use Utopia\Database\Cache\Owners;
 use Utopia\Database\Cache\Registration;
 use Utopia\Database\Cache\Scope;
@@ -754,7 +755,7 @@ trait Documents
         $generation = '0';
         if ($fillEpoch !== null || $fillDefinition) {
             try {
-                $generation = $this->cache->getGeneration($documentKey);
+                $generation = Mutation::lease($this->cache, $documentKey);
             } catch (Exception $e) {
                 Console::warning('Warning: Failed to get cache generation: '.$e->getMessage());
             }
@@ -1064,7 +1065,7 @@ trait Documents
         ], $field, $generation);
 
         if ($saved === false) {
-            $this->definitionFillsFail = $generation === '0' && $this->cache->getGeneration($documentKey) === '0';
+            $this->definitionFillsFail = $generation === '0' && Mutation::lease($this->cache, $documentKey) === '0';
 
             return;
         }
@@ -3687,7 +3688,11 @@ trait Documents
         $now = \time();
 
         try {
-            $record = $this->getInvalidationCache()->load($collectionKey.'#epoch', self::DOCUMENT_CACHE_PERMANENT);
+            if (Mutation::supported($this->cache)) {
+                return (new Mutation($this->cache))->read($collectionKey, $this->cacheWriterTimeout);
+            }
+
+            $record = $this->cache->load($collectionKey.'#epoch', self::DOCUMENT_CACHE_PERMANENT);
             if (! \is_string($record) || $record === '') {
                 return $this->restoreDocumentCacheEpoch($collectionKey, $now);
             }
@@ -3703,15 +3708,15 @@ trait Documents
                 }
 
                 $tombstone = \substr($record, \strlen(self::DOCUMENT_CACHE_BLOCKED_PREFIX));
-                $finished = $this->getInvalidationCache()->getGeneration($collectionKey.'#finished');
+                $finished = $this->cache->getGeneration($collectionKey.'#finished');
 
                 return new Epoch(self::DOCUMENT_CACHE_LAPSED_PREFIX.$tombstone.self::DOCUMENT_CACHE_SEPARATOR.$finished);
             }
 
-            $started = $this->getInvalidationCache()->getGeneration($collectionKey.'#started');
+            $started = $this->cache->getGeneration($collectionKey.'#started');
             if (
                 ($separator !== false && $started === $stamp)
-                || $started === $this->getInvalidationCache()->getGeneration($collectionKey.'#finished')
+                || $started === $this->cache->getGeneration($collectionKey.'#finished')
             ) {
                 return new Epoch($marker);
             }
@@ -3731,15 +3736,15 @@ trait Documents
      */
     private function restoreDocumentCacheEpoch(string $collectionKey, int $now): Epoch
     {
-        $started = $this->getInvalidationCache()->getGeneration($collectionKey.'#started');
-        if ($started !== $this->getInvalidationCache()->getGeneration($collectionKey.'#finished')) {
-            $this->getInvalidationCache()->save($collectionKey.'#epoch', self::DOCUMENT_CACHE_BLOCKED_PREFIX.$this->createDocumentCacheToken().self::DOCUMENT_CACHE_SEPARATOR.$now);
+        $started = $this->cache->getGeneration($collectionKey.'#started');
+        if ($started !== $this->cache->getGeneration($collectionKey.'#finished')) {
+            $this->cache->save($collectionKey.'#epoch', self::DOCUMENT_CACHE_BLOCKED_PREFIX.$this->createDocumentCacheToken().self::DOCUMENT_CACHE_SEPARATOR.$now);
 
             return new Epoch(blockedAt: $now);
         }
 
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
-        if ($this->getInvalidationCache()->save($collectionKey.'#epoch', $epoch.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
+        if ($this->cache->save($collectionKey.'#epoch', $epoch.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
             return new Epoch(blockedAt: $now);
         }
 
@@ -3788,23 +3793,30 @@ trait Documents
      */
     private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): bool
     {
+        if (Mutation::supported($this->cache)) {
+            $this->withRetries(fn () => (new Mutation($this->cache))->begin($collectionKey, $token, $this->cacheWriterTimeout));
+            $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
+
+            return true;
+        }
+
         $epochKey = $collectionKey.'#epoch';
         if (! $this->registerDocumentCacheOwner($collectionKey, $token)) {
-            $epoch = $this->getInvalidationCache()->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
+            $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
             if ($epoch === false || $epoch === null) {
-                $this->withRetries(fn () => $this->getInvalidationCache()->purge($epochKey));
+                $this->withRetries(fn () => $this->cache->purge($epochKey));
 
                 return false;
             }
         }
 
         $this->withRetries(function () use ($epochKey, $token): void {
-            if ($this->getInvalidationCache()->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
+            if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
                 throw new CacheUnavailable("Failed to block document cache epoch '{$epochKey}'");
             }
         });
 
-        $this->withRetries(fn () => $this->getInvalidationCache()->purge($collectionKey.'#started'));
+        $this->withRetries(fn () => $this->cache->purge($collectionKey.'#started'));
         $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
 
         return true;
@@ -3812,7 +3824,7 @@ trait Documents
 
     private function registerDocumentCacheOwner(string $collectionKey, string $token): bool
     {
-        $owners = new Owners($this->getInvalidationCache());
+        $owners = new Owners($this->cache);
         for ($attempt = 0; $attempt < self::DOCUMENT_CACHE_REGISTRATION_ATTEMPTS; $attempt++) {
             if ($owners->register($collectionKey, $token)) {
                 return true;
@@ -3859,8 +3871,15 @@ trait Documents
      */
     private function activateDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): void
     {
-        $registration = (new Owners($this->getInvalidationCache()))->find($collectionKey, $token);
-        $owner = $this->getInvalidationCache()->load($registration->key, self::TTL, $registration->field);
+        if (Mutation::supported($this->cache)) {
+            $this->withRetries(fn () => (new Mutation($this->cache))->finish($collectionKey, $token, $this->cacheWriterTimeout));
+            $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
+
+            return;
+        }
+
+        $registration = (new Owners($this->cache))->find($collectionKey, $token);
+        $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
         if ($owner !== false && $owner !== null && $owner !== $token) {
             throw new RuntimeException("Invalid document cache owner '{$token}' for '{$collectionKey}'");
         }
@@ -3868,10 +3887,10 @@ trait Documents
 
         $startedKey = $collectionKey.'#started';
         $finishedKey = $collectionKey.'#finished';
-        $started = $this->getInvalidationCache()->getGeneration($startedKey);
-        $finished = $this->getInvalidationCache()->getGeneration($finishedKey);
+        $started = $this->cache->getGeneration($startedKey);
+        $finished = $this->cache->getGeneration($finishedKey);
         $epochKey = $collectionKey.'#epoch';
-        $epoch = $this->getInvalidationCache()->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
+        $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
         $blocked = \is_string($epoch) && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX);
         $ours = $blocked && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR);
 
@@ -3895,7 +3914,7 @@ trait Documents
 
         $nextFinished = $this->finishDocumentCacheWrite($collectionKey, $finished, $epoch);
 
-        $nextStarted = $this->getInvalidationCache()->getGeneration($startedKey);
+        $nextStarted = $this->cache->getGeneration($startedKey);
         if ($nextStarted === $nextFinished) {
             $this->publishDocumentCacheEpoch($collectionKey, $nextFinished, $definitionKey);
 
@@ -3920,7 +3939,7 @@ trait Documents
         $epochKey = $collectionKey.'#epoch';
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::DOCUMENT_CACHE_SEPARATOR.$started;
         $this->withRetries(function () use ($epochKey, $epoch): void {
-            if ($this->getInvalidationCache()->save($epochKey, $epoch) === false) {
+            if ($this->cache->save($epochKey, $epoch) === false) {
                 throw new CacheUnavailable("Failed to activate document cache epoch '{$epochKey}'");
             }
         });
@@ -3936,11 +3955,11 @@ trait Documents
     {
         $released = true;
         $this->withRetries(function () use ($registration, $collectionKey, $token, &$released): void {
-            if ($this->getInvalidationCache()->purge($registration->key, $registration->field)) {
+            if ($this->cache->purge($registration->key, $registration->field)) {
                 return;
             }
 
-            $owner = $this->getInvalidationCache()->load($registration->key, self::TTL, $registration->field);
+            $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
             if ($owner !== false && $owner !== null) {
                 throw new CacheUnavailable("Failed to release document cache owner '{$token}' for '{$collectionKey}'");
             }
@@ -3963,18 +3982,18 @@ trait Documents
         $attempted = false;
         $this->withRetries(function () use ($finishedKey, $epochKey, $finished, $epoch, &$next, &$attempted): void {
             if ($attempted) {
-                $next = $this->getInvalidationCache()->getGeneration($finishedKey);
+                $next = $this->cache->getGeneration($finishedKey);
             }
             if ($next === $finished) {
                 $attempted = true;
-                $this->getInvalidationCache()->purge($finishedKey);
+                $this->cache->purge($finishedKey);
             }
 
-            $next = $this->getInvalidationCache()->getGeneration($finishedKey);
+            $next = $this->cache->getGeneration($finishedKey);
             if (
                 $next === $finished
                 && \is_string($epoch)
-                && $this->getInvalidationCache()->load($epochKey, self::DOCUMENT_CACHE_PERMANENT) === $epoch
+                && $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT) === $epoch
             ) {
                 throw new CacheUnavailable("Failed to finish document cache invalidation '{$epochKey}'");
             }
@@ -3991,7 +4010,7 @@ trait Documents
     {
         $now = \time();
         $abandoned = [];
-        foreach ($this->getInvalidationCache()->list($owners) as $token) {
+        foreach ($this->cache->list($owners) as $token) {
             $separator = \strpos($token, self::DOCUMENT_CACHE_TOKEN_SEPARATOR);
             $created = $separator === false ? '' : \substr($token, 0, $separator);
             if (! \ctype_digit($created) || (int) $created + $this->cacheWriterTimeout > $now) {
@@ -4002,7 +4021,7 @@ trait Documents
         }
 
         foreach ($abandoned as $token) {
-            $this->getInvalidationCache()->purge($owners, $token);
+            $this->cache->purge($owners, $token);
         }
 
         return true;
@@ -4271,7 +4290,7 @@ trait Documents
 
         $generation = '0';
         try {
-            $generation = $this->cache->getGeneration($physicalKey);
+            $generation = Mutation::lease($this->cache, $physicalKey);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to get cache generation: '.$error->getMessage());
         }

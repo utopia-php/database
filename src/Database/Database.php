@@ -206,8 +206,6 @@ class Database
 
     protected Cache $cache;
 
-    private ?Cache $invalidationCache = null;
-
     protected string $cacheName = Scope::NAME;
 
     /**
@@ -954,25 +952,6 @@ class Database
         $this->cache = $cache;
 
         return $this;
-    }
-
-    /**
-     * Store epochs, writer registrations and counters outside an evicting data cache.
-     * Configure every reader and writer with the same non-evicting store before use.
-     * Do not wrap this store in a circuit breaker that substitutes missing values.
-     *
-     * @return $this
-     */
-    public function setInvalidationCache(?Cache $cache): static
-    {
-        $this->invalidationCache = $cache;
-
-        return $this;
-    }
-
-    private function getInvalidationCache(): Cache
-    {
-        return $this->invalidationCache ?? $this->cache;
     }
 
     public function getCache(): Cache

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f0a5261ac168d5060c5bcd2e5f5dacf9",
+    "content-hash": "1597d70d90cc725c5c09e643fe744dfc",
     "packages": [
         {
             "name": "brick/math",
@@ -2007,16 +2007,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "5.2.0",
+            "version": "dev-codex/eviction-safe-cache-leases",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "05a631796066a7cf96da289df358909fa2190ebd"
+                "reference": "6f28c370c04f70ee971c8b241ae226c555732519"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/05a631796066a7cf96da289df358909fa2190ebd",
-                "reference": "05a631796066a7cf96da289df358909fa2190ebd",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/6f28c370c04f70ee971c8b241ae226c555732519",
+                "reference": "6f28c370c04f70ee971c8b241ae226c555732519",
                 "shasum": ""
             },
             "require": {
@@ -2061,9 +2061,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/5.2.0"
+                "source": "https://github.com/utopia-php/cache/tree/codex/eviction-safe-cache-leases"
             },
-            "time": "2026-10-19T05:47:09+00:00"
+            "time": "2026-10-30T14:27:29+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",
@@ -5224,9 +5224,18 @@
             "time": "2026-10-08T14:16:57+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/cache",
+            "version": "dev-codex/eviction-safe-cache-leases",
+            "alias": "5.2.999",
+            "alias_normalized": "5.2.999.0"
+        }
+    ],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "utopia-php/cache": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

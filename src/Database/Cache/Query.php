@@ -86,9 +86,10 @@ class Query
             'context' => $context,
         ]));
 
-        $slot = (string) ((int) \hexdec(\substr($field, 0, 8)) % $this->slots);
+        $slot = (int) \hexdec(\substr($field, 0, 8)) % $this->slots;
 
-        return new Entry($key, $collection, $field, $epoch, $slot);
+        // Cache transports alias field '0' to the default field; conditional fills must use the same field.
+        return new Entry($key, $collection, $field, $epoch, $slot === 0 ? '' : (string) $slot);
     }
 
     /**

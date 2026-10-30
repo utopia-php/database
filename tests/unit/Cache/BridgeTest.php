@@ -15,6 +15,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Bridge;
 use Utopia\Database\Cache\Mutation;
 use Utopia\Database\Cache\Query as QueryCache;
+use Utopia\Database\Cache\Scope;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
@@ -101,6 +102,23 @@ final class BridgeTest extends TestCase
         $this->assertSame('final', $dual->getDocument('users', 'user')->getAttribute('name'));
         $this->assertSame('final', $v2->getDocument('users', 'user')->getAttribute('name'));
         $this->assertContains('final', \array_map(fn (Document $document) => $document->getAttribute('name'), $dual->find('users')));
+    }
+
+    public function testSlotZeroRemainsCacheableAcrossEveryPhase(): void
+    {
+        foreach (['', 'legacy', 'dual', 'v2'] as $mode) {
+            $cache = Bridge::wrap($this->cache, $mode);
+            $query = new QueryCache($cache, slots: 1);
+            $scope = new Scope(namespace: $this->namespace.$mode);
+            $entry = $query->getEntry($scope, 'users', []);
+            $this->assertNotNull($entry);
+            $this->assertTrue($query->set($entry, [new Document(['$id' => 'warm'])], $query->getLease($entry)));
+            $next = $query->getEntry($scope, 'users', []);
+            $this->assertNotNull($next);
+            $documents = $query->get($next);
+            $this->assertNotNull($documents, 'The zero slot must load the same field that the lease filled');
+            $this->assertSame('warm', $documents[0]->getId());
+        }
     }
 
     public function testSchemaInvalidationRetiresDefinitionsInBothKeyspaces(): void

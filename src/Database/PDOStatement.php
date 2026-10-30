@@ -108,12 +108,17 @@ class PDOStatement implements \IteratorAggregate
      */
     public function __call(string $method, array $args): mixed
     {
+        $execute = \strcasecmp($method, 'execute') === 0;
+
+        // Read before executing, as PDO::__call() does: a lost connection reports a transaction.
+        $inTransaction = $execute && $this->pdo->inTransaction();
+
         try {
             return $this->statement->{$method}(...$args);
         } catch (\Throwable $e) {
             if (
-                \strcasecmp($method, 'execute') !== 0
-                || $this->pdo->inTransaction()
+                ! $execute
+                || $inTransaction
                 || !Connection::hasError($e)
             ) {
                 throw $e;

@@ -61,7 +61,7 @@ class SwooleAbsentTest extends TestCase
         $directory = (string) \ini_get('extension_dir');
         foreach (['pdo_mysql', 'pdo_pgsql', 'mongodb', 'redis'] as $extension) {
             if (\is_file($directory.'/'.$extension.'.so')) {
-                $flags[] = '-d extension='.$extension;
+                $flags[] = '-d extension='.\escapeshellarg($directory.'/'.$extension.'.so');
             }
         }
 

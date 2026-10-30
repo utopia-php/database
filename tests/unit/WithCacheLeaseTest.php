@@ -28,7 +28,7 @@ class WithCacheLeaseTest extends TestCase
     #[\Override]
     protected function setUp(): void
     {
-        $this->cache = new Cache(new \Utopia\Cache\Adapter\Memory());
+        $this->cache = new Cache(new \Tests\Unit\Cache\RedisLeasableCache());
         $this->adapter = new DatabaseMemory();
         $this->database = new Database($this->adapter, $this->cache);
         $this->database
@@ -102,7 +102,7 @@ class WithCacheLeaseTest extends TestCase
                 return $document;
             }
         };
-        $database = new Database($adapter, new Cache(new \Utopia\Cache\Adapter\Memory()));
+        $database = new Database($adapter, new Cache(new \Tests\Unit\Cache\RedisLeasableCache()));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('with_cache_in_flight_' . \uniqid());

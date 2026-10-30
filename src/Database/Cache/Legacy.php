@@ -50,26 +50,20 @@ final readonly class Legacy
 
             return new Epoch(blockedAt: $now);
         }
-        $this->publish($key, $started);
-        $value = $this->cache->load($key.'#epoch', self::PERMANENT);
-        if (! \is_string($value)) {
-            throw new Unavailable('Failed to restore legacy epoch');
-        }
-
-        return new Epoch(\substr($value, 0, (int) \strrpos($value, '@')));
+        return new Epoch($this->publish($key, $started));
     }
 
     public function begin(string $key, string $token): void
     {
         if ($this->cache->save($key.'#owners', $token, $token) === false) {
-            throw new Unavailable("Failed to register query cache owner for '{$key}'");
+            throw new Unavailable("Failed to register legacy cache owner for '{$key}'");
         }
 
-        if ($this->cache->save($this->getEpochKey($key), self::BLOCKED_PREFIX.$token.self::SEPARATOR.\time()) === false) {
-            throw new Unavailable("Failed to block query cache epoch for '{$key}'");
+        if ($this->cache->save(($key.'#epoch'), self::BLOCKED_PREFIX.$token.self::SEPARATOR.\time()) === false) {
+            throw new Unavailable("Failed to block legacy cache epoch for '{$key}'");
         }
 
-        $this->cache->purge($this->getStartedKey($key));
+        $this->cache->purge(($key.'#started'));
     }
 
     /**
@@ -83,20 +77,20 @@ final readonly class Legacy
         $owners = $key.'#owners';
         $owner = $this->cache->load($owners, self::PERMANENT, $token);
         if ($owner !== false && $owner !== null && $owner !== $token) {
-            throw new RuntimeException("Invalid query cache owner for '{$key}'");
+            throw new RuntimeException("Invalid legacy cache owner for '{$key}'");
         }
         $owned = $owner === $token;
         if ($owned && ! $this->cache->purge($owners, $token)) {
             $owner = $this->cache->load($owners, self::PERMANENT, $token);
             if ($owner !== false && $owner !== null) {
-                throw new Unavailable("Failed to release query cache owner for '{$key}'");
+                throw new Unavailable("Failed to release legacy cache owner for '{$key}'");
             }
             $owned = false;
         }
 
-        $epochKey = $this->getEpochKey($key);
-        $startedKey = $this->getStartedKey($key);
-        $finishedKey = $this->getFinishedKey($key);
+        $epochKey = ($key.'#epoch');
+        $startedKey = ($key.'#started');
+        $finishedKey = ($key.'#finished');
         $started = $this->cache->getLease($startedKey);
         $finished = $this->cache->getLease($finishedKey);
         $current = $this->cache->load($epochKey, self::PERMANENT);
@@ -129,7 +123,7 @@ final readonly class Legacy
         }
 
         if ($nextFinished === $finished && $this->isTombstoneOf($this->cache->load($epochKey, self::PERMANENT), $token)) {
-            throw new Unavailable("Failed to finish query cache invalidation for '{$key}'");
+            throw new Unavailable("Failed to finish legacy cache invalidation for '{$key}'");
         }
 
         if ($this->releaseAbandonedOwners($owners, $writerTimeout)) {
@@ -139,7 +133,7 @@ final readonly class Legacy
 
     public function query(string $key, int $ttl, int $writerTimeout): ?string
     {
-        $value = $this->cache->load($this->getEpochKey($key), self::PERMANENT);
+        $value = $this->cache->load(($key.'#epoch'), self::PERMANENT);
 
         if ($value === false || $value === null) {
             return $this->cache->getLease($key) === self::NEVER_STARTED
@@ -166,8 +160,8 @@ final readonly class Legacy
             return null;
         }
 
-        $started = $this->cache->getLease($this->getStartedKey($key));
-        if ($started !== $stamp && $started !== $this->cache->getLease($this->getFinishedKey($key))) {
+        $started = $this->cache->getLease(($key.'#started'));
+        if ($started !== $stamp && $started !== $this->cache->getLease(($key.'#finished'))) {
             return null;
         }
 
@@ -187,8 +181,8 @@ final readonly class Legacy
             return null;
         }
 
-        $started = $this->cache->getLease($this->getStartedKey($key));
-        $finished = $this->cache->getLease($this->getFinishedKey($key));
+        $started = $this->cache->getLease(($key.'#started'));
+        $finished = $this->cache->getLease(($key.'#finished'));
         if ($stamp + ($started === $finished ? $ttl : $writerTimeout) > $now) {
             return null;
         }
@@ -243,28 +237,21 @@ final readonly class Legacy
         return \is_string($value) && \str_starts_with($value, self::BLOCKED_PREFIX.$token.self::SEPARATOR);
     }
 
-    private function publish(string $key, string $finished): void
+    private function publish(string $key, string $finished): string
     {
-        $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::SEPARATOR.$finished;
+        $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
 
-        if ($this->cache->save($this->getEpochKey($key), $epoch) === false) {
-            throw new Unavailable("Failed to activate query cache for '{$key}'");
+        if ($this->cache->save(($key.'#epoch'), $epoch.self::SEPARATOR.$finished) === false) {
+            throw new Unavailable("Failed to activate legacy cache for '{$key}'");
         }
+
+        return $epoch;
     }
 
-    private function getEpochKey(string $key): string
-    {
-        return $key.'#epoch';
-    }
 
-    private function getFinishedKey(string $key): string
-    {
-        return $key.'#finished';
-    }
 
-    private function getStartedKey(string $key): string
-    {
-        return $key.'#started';
-    }
+
+
+
 
 }

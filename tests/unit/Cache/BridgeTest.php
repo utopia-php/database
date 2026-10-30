@@ -195,7 +195,6 @@ final class BridgeTest extends TestCase
                 $dual->updateDocument('users', 'user', new Document(['name' => 'rolled-back']));
                 throw new \RuntimeException('rollback');
             });
-            $this->fail('Expected rollback');
         } catch (\RuntimeException $error) {
             $this->assertSame('rollback', $error->getMessage());
         }
@@ -221,7 +220,9 @@ final class BridgeTest extends TestCase
             $this->assertSame('Legacy completion unavailable', $error->getMessage());
         }
         $this->assertNotNull($mutation->read($key, 3600)->value, 'V2 completion must run even when legacy completion fails');
-        $this->assertStringStartsWith('blocked:', $this->cache->load($key.'#epoch', PHP_INT_MAX));
+        $legacy = $this->cache->load($key.'#epoch', PHP_INT_MAX);
+        $this->assertIsString($legacy);
+        $this->assertStringStartsWith('blocked:', $legacy);
     }
 
     public function testOpenBreakerAbortsRequiredCoordinationBeforeSQL(): void

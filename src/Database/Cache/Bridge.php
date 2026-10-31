@@ -86,12 +86,7 @@ final class Bridge extends Cache
     #[\Override]
     public function saveMany(string $key, array $data, int $ttl = 0): array|false
     {
-        // Database caching does not batch-fill during the legacy pass.
-        if ($this->mode === 'legacy') {
-            throw new Unavailable('Legacy migration does not support batch fills');
-        }
-
-        return $this->cache->saveMany('v2:'.$key, $data, $ttl);
+        return $this->reader()->saveMany($this->key($key), $data, $ttl);
     }
 
     /** @return array{version: string, value: mixed} */
@@ -138,18 +133,18 @@ final class Bridge extends Cache
     }
 
     /** Rotate caller-owned withCache regions in both keyspaces, including when one is cold. */
-    public function rotate(string $key): void
+    public function rotate(string $key, int $ttl = 0): void
     {
         $this->both(
-            fn () => $this->rotateIn($this->legacy, $key),
-            fn () => $this->rotateIn($this->cache, 'v2:'.$key),
+            fn () => $this->rotateIn($this->legacy, $key, $ttl),
+            fn () => $this->rotateIn($this->cache, 'v2:'.$key, $ttl),
         );
     }
 
-    private function rotateIn(Cache $cache, string $key): void
+    private function rotateIn(Cache $cache, string $key, int $ttl): void
     {
         $cache->purge($key);
-        if ($cache->save($key, \bin2hex(\random_bytes(16))) === false) {
+        if ($cache->save($key, \bin2hex(\random_bytes(16)), ttl: $ttl) === false) {
             throw new Unavailable('Failed to rotate cache region');
         }
     }

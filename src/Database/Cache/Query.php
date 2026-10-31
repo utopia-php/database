@@ -76,7 +76,7 @@ class Query
         }
 
         $key = $this->getCollectionKey($scope, $collection);
-        $epoch = (new Mutation($this->cache))->read($key, $scope->writerTimeout, $this->getRegion($collection)->ttl)->value;
+        $epoch = (new Mutation($this->cache))->read($key, $scope->writerTimeout)->value;
         if ($epoch === null) {
             return null;
         }

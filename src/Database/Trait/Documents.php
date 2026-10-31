@@ -3866,14 +3866,8 @@ trait Documents
         $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
 
         try {
-            if ($this->cache instanceof \Utopia\Database\Cache\Bridge) {
-                $this->cache->rotate($epochKey);
-                $rotated = true;
-            } else {
-                $existing = $this->cache->load($epochKey, self::TTL);
-                $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
-                    && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
-            }
+            $this->cache->purge($epochKey);
+            $rotated = $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
         } catch (Exception $error) {
             Console::warning('Warning: Failed to purge the cached queries: '.$error->getMessage());
             $rotated = false;

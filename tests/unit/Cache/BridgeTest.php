@@ -118,6 +118,26 @@ final class BridgeTest extends TestCase
         }
     }
 
+    public function testApplicationListCacheSupportsExpiringVersionsAndBatchFillsInEveryPhase(): void
+    {
+        foreach (['legacy', 'dual', 'v2'] as $mode) {
+            $cache = Bridge::wrap($this->cache, $mode);
+            $key = $this->namespace.':lists:'.$mode;
+            $this->assertSame('version', $cache->save($key.':version', 'version', ttl: 60));
+            $this->assertSame('version', $cache->load($key.':version', 60));
+            $wireKey = $mode === 'legacy' ? $key : 'v2:'.$key;
+            $this->assertGreaterThan(0, $this->redis->ttl($wireKey.':version'));
+            $cache->rotate($key.':version', 60);
+            $this->assertNotSame('version', $cache->load($key.':version', 60));
+            $this->assertGreaterThan(0, $this->redis->ttl($wireKey.':version'));
+            $fields = ['documents' => ['row'], 'total' => '1'];
+            $this->assertSame($fields, $cache->saveMany($key, $fields));
+            $this->assertSame($fields, $cache->loadMany($key, 60));
+            $cache->purge($key);
+            $this->assertSame([], $cache->loadMany($key, 60));
+        }
+    }
+
     public function testSlotZeroRemainsCacheableAcrossEveryPhase(): void
     {
         foreach (['', 'legacy', 'dual', 'v2'] as $mode) {

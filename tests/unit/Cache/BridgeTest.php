@@ -121,7 +121,7 @@ final class BridgeTest extends TestCase
     public function testApplicationListCacheSupportsExpiringVersionsAndBatchFillsInEveryPhase(): void
     {
         foreach (['legacy', 'dual', 'v2'] as $mode) {
-            $cache = Bridge::wrap($this->cache, $mode);
+            $cache = new Bridge($this->cache, $mode);
             $key = $this->namespace.':lists:'.$mode;
             $this->assertSame('version', $cache->save($key.':version', 'version', ttl: 60));
             $this->assertSame('version', $cache->load($key.':version', 60));

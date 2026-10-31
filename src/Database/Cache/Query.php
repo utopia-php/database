@@ -76,7 +76,7 @@ class Query
         }
 
         $key = $this->getCollectionKey($scope, $collection);
-        $epoch = (new Mutation($this->cache))->read($key, $scope->writerTimeout)->value;
+        $epoch = (new Mutation($this->cache))->read($key, $scope->writerTimeout, $this->getRegion($collection)->ttl)->value;
         if ($epoch === null) {
             return null;
         }
@@ -86,9 +86,10 @@ class Query
             'context' => $context,
         ]));
 
-        $slot = (string) ((int) \hexdec(\substr($field, 0, 8)) % $this->slots);
+        $slot = (int) \hexdec(\substr($field, 0, 8)) % $this->slots;
 
-        return new Entry($key, $collection, $field, $epoch, $slot);
+        // Cache transports alias field '0' to the default field; conditional fills must use the same field.
+        return new Entry($key, $collection, $field, $epoch, $slot === 0 ? '' : (string) $slot);
     }
 
     /**
@@ -184,7 +185,7 @@ class Query
      */
     public function createToken(): string
     {
-        return \bin2hex(\random_bytes(16));
+        return \time().'.'.\bin2hex(\random_bytes(16));
     }
 
     public function blockCollection(string $key, string $token): void

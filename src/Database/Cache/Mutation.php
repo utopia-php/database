@@ -16,19 +16,29 @@ final readonly class Mutation
     {
     }
 
-    public function read(string $key, int $timeout): Epoch
+    public function read(string $key, int $timeout, ?int $ttl = null): Epoch
     {
-        return $this->change($key, $timeout);
+        return $this->cache instanceof Bridge
+            ? $this->cache->epoch($key, $timeout, $ttl)
+            : $this->change($key, $timeout);
     }
 
     public function begin(string $key, string $token, int $timeout): void
     {
-        $this->change($key, $timeout, $token, true);
+        if ($this->cache instanceof Bridge) {
+            $this->cache->begin($key, $token, $timeout);
+        } else {
+            $this->change($key, $timeout, $token, true);
+        }
     }
 
     public function finish(string $key, string $token, int $timeout): void
     {
-        $this->change($key, $timeout, $token);
+        if ($this->cache instanceof Bridge) {
+            $this->cache->finish($key, $token, $timeout);
+        } else {
+            $this->change($key, $timeout, $token);
+        }
     }
 
     private function change(string $key, int $timeout, ?string $token = null, bool $begin = false): Epoch

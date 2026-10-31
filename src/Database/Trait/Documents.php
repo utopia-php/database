@@ -3674,7 +3674,7 @@ trait Documents
      */
     private function createDocumentCacheToken(): string
     {
-        return \bin2hex(\random_bytes(16));
+        return \time().'.'.\bin2hex(\random_bytes(16));
     }
 
     private function advanceDocumentCacheEpoch(string $collectionKey, string $definitionKey): bool
@@ -3746,8 +3746,11 @@ trait Documents
     /** Completion always changes the identity, even if eviction lost this registration. */
     private function activateDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): void
     {
-        $this->withRetries(fn () => (new Mutation($this->cache))->finish($collectionKey, $token, $this->cacheWriterTimeout));
-        $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
+        try {
+            $this->withRetries(fn () => (new Mutation($this->cache))->finish($collectionKey, $token, $this->cacheWriterTimeout));
+        } finally {
+            $this->withRetries(fn () => $this->purgeCachedDefinition($definitionKey));
+        }
     }
 
     /**
@@ -3863,9 +3866,14 @@ trait Documents
         $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
 
         try {
-            $existing = $this->cache->load($epochKey, self::TTL);
-            $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
-                && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+            if ($this->cache instanceof \Utopia\Database\Cache\Bridge) {
+                $this->cache->rotate($epochKey);
+                $rotated = true;
+            } else {
+                $existing = $this->cache->load($epochKey, self::TTL);
+                $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
+                    && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+            }
         } catch (Exception $error) {
             Console::warning('Warning: Failed to purge the cached queries: '.$error->getMessage());
             $rotated = false;

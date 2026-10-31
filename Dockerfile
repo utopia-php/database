@@ -12,6 +12,9 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
+COPY compat/composer.json compat/composer.lock /usr/local/legacy/
+RUN composer install --working-dir=/usr/local/legacy --ignore-platform-reqs --no-dev --no-plugins --no-scripts --prefer-dist
+
 FROM php:8.5.8-cli-alpine AS compile
 
 ENV PHP_REDIS_VERSION="6.3.0" \
@@ -103,6 +106,7 @@ ENV DEBUG=$DEBUG
 WORKDIR /usr/src/code
 
 COPY --from=composer /usr/local/src/vendor /usr/src/code/vendor
+COPY --from=composer /usr/local/legacy/vendor /opt/database-legacy/vendor
 COPY --from=swoole /ext/swoole.so /ext/swoole.so
 COPY --from=redis /ext/redis.so /ext/redis.so
 COPY --from=pcov /ext/pcov.so /ext/pcov.so

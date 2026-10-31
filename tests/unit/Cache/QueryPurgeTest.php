@@ -18,6 +18,25 @@ use Utopia\Database\Validator\Authorization;
 
 final class QueryPurgeTest extends TestCase
 {
+    public function testColdLocalQueryPurgeInvalidatesAWarmRemoteRegion(): void
+    {
+        [$local] = $this->createDatabases('posts_'.\uniqid());
+        $remoteCache = new Cache(new MemoryCache());
+        $remote = new Database(new DatabaseMemory(), $remoteCache);
+        $key = $local->getQueryCacheKey('posts');
+        $this->assertSame('stale', $remote->withCache($key, fn (): string => 'stale'));
+        $local->getCache()->purge($key.'#epoch');
+
+        $purges = $local->getCache()->recordPurges(fn (): bool => $local->purgeCachedQueries('posts'));
+        foreach ($purges as $cacheKey => $fields) {
+            foreach ($fields as $field => $_) {
+                $remoteCache->purge($cacheKey, $field);
+            }
+        }
+
+        $this->assertSame('fresh', $remote->withCache($key, fn (): string => 'fresh'));
+    }
+
     public function testPurgeCachedQueriesDropsTheResultsFindCached(): void
     {
         [$reader, $bypass] = $this->createDatabases('posts_'.\uniqid());

@@ -24,7 +24,11 @@ final class QueryPurgeTest extends TestCase
         $remoteCache = new Cache(new MemoryCache());
         $remote = new Database(new DatabaseMemory(), $remoteCache);
         $key = $local->getQueryCacheKey('posts');
-        $this->assertSame('stale', $remote->withCache($key, fn (): string => 'stale'));
+        $reads = 0;
+        $read = static function () use (&$reads): int {
+            return ++$reads;
+        };
+        $this->assertSame(1, $remote->withCache($key, $read));
         $local->getCache()->purge($key.'#epoch');
 
         $purges = $local->getCache()->recordPurges(fn (): bool => $local->purgeCachedQueries('posts'));
@@ -34,7 +38,7 @@ final class QueryPurgeTest extends TestCase
             }
         }
 
-        $this->assertSame('fresh', $remote->withCache($key, fn (): string => 'fresh'));
+        $this->assertSame(2, $remote->withCache($key, $read));
     }
 
     public function testPurgeCachedQueriesDropsTheResultsFindCached(): void

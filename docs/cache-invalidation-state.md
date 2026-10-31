@@ -4,7 +4,7 @@ The collection's CAS version is its epoch. Its single evictable record contains 
 
 The same opaque versions fence document, definition and query fills. CAS returns the exact identity it committed, or false for a version conflict. Errors and open circuit breakers throw; they are never treated as eviction. Expiry checks use the caller's writer timeout; a reader with a shorter timeout does not delete another caller's live registration. Later writer completion still retires fills made after its timeout.
 
-This requires cache 6.x; the old generation API and compatibility protocol are removed. Redis, Redis multiplexing and Memory support versioning. Database document/query/withCache caching is bypassed on unsupported adapters; ordinary database operations continue. The old cache-5 compatibility CI tier is removed because it is no longer a supported dependency.
+This requires the opaque-version API in cache 6.1.3 or 7.x; the old generation API and compatibility protocol are removed. Redis, Redis multiplexing and Memory support versioning. Database document/query/withCache caching is bypassed on unsupported adapters; ordinary database operations continue. The old cache-5 compatibility CI tier is removed because it is no longer a supported dependency.
 
 A successful post-commit invalidation remains necessary. Durable replay of completions lost during a cache outage is separate work. A cache timeout/OOM must never be interpreted as an empty writer record.
 

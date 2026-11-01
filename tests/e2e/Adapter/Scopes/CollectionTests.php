@@ -267,6 +267,49 @@ trait CollectionTests
         $this->assertLessThan($size2, $size3);
     }
 
+    public function testEstimateCount(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(Collection::create(id: 'estimateTest'));
+        $database->createAttribute('estimateTest', Attribute::string(key: 'name', size: 255, required: true));
+
+        $database->getAuthorization()->skip(function () use ($database) {
+            for ($i = 0; $i < 10; $i++) {
+                $database->createDocument('estimateTest', new Document([
+                    '$id' => 'doc'.$i,
+                    'name' => 'name'.$i,
+                ]));
+            }
+        });
+
+        if (! $this->engineIs(Postgres::class) || $database->getAdapter()->hasSharedTables()) {
+            $this->assertNull($database->estimateCount('estimateTest'));
+
+            return;
+        }
+
+        // Postgres publishes a backend's pending statistics at most once a second, when a transaction ends,
+        // and adds any still pending on top of what ANALYZE records.
+        sleep(2);
+        $database->count('estimateTest');
+        $database->analyzeCollection('estimateTest');
+
+        $this->assertSame(10, $database->estimateCount('estimateTest'));
+
+        $database->getAuthorization()->skip(function () use ($database) {
+            for ($i = 0; $i < 10; $i++) {
+                $database->deleteDocument('estimateTest', 'doc'.$i);
+            }
+        });
+
+        sleep(2);
+        $database->count('estimateTest');
+
+        $this->assertSame(0, $database->estimateCount('estimateTest'));
+    }
+
     public function testSizeCollectionOnDisk(): void
     {
         $this->getDatabase()->createCollection(Collection::create(id: 'sizeTestDisk1'));

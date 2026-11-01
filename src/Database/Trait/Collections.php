@@ -277,6 +277,16 @@ trait Collections
     }
 
     /**
+     * @throws Exception
+     */
+    public function estimateCount(string $collection): ?int
+    {
+        $definition = $this->silent(fn () => $this->getOwnCollection($collection));
+
+        return $this->adapter->estimateCount($definition->getId());
+    }
+
+    /**
      * @throws DatabaseException
      * @throws NotFoundException
      */

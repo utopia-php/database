@@ -398,6 +398,48 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
+     * Live tuples from the statistics collector, which every commit updates. Standbys and a
+     * statistics reset leave it at zero, so reltuples from the last vacuum or analyze stands in.
+     * Shared tables hold every tenant's rows, so they have no per-tenant estimate.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function estimateCount(string $collection): ?int
+    {
+        if ($this->sharedTables) {
+            return null;
+        }
+
+        $name = $this->getTable($this->filter($collection));
+
+        $result = $this->dialectBuilder()
+            ->fromNone()
+            ->selectRaw(
+                'COALESCE(NULLIF(stats.n_live_tup, 0), class.reltuples::bigint) FROM pg_class AS class
+                LEFT JOIN pg_stat_user_tables AS stats ON stats.relid = class.oid
+                WHERE class.oid = to_regclass(?)',
+                [$name]
+            )
+            ->build();
+
+        $statement = $this->executeResult($result, Event::CollectionRead);
+
+        try {
+            $this->execute($statement);
+            $estimate = $statement->fetchColumn();
+        } catch (PDOException $e) {
+            throw new DatabaseException('Failed to estimate collection count: '.$e->getMessage());
+        }
+
+        if (! \is_numeric($estimate) || $estimate < 0) {
+            return null;
+        }
+
+        return (int) $estimate;
+    }
+
+    /**
      * @throws DatabaseException
      */
     #[\Override]

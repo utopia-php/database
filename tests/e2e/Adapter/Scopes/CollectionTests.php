@@ -267,6 +267,36 @@ trait CollectionTests
         $this->assertLessThan($size2, $size3);
     }
 
+    public function testEstimateCount(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(Collection::create(id: 'estimateTest'));
+        $database->createAttribute('estimateTest', Attribute::string(key: 'name', size: 255, required: true));
+
+        $database->getAuthorization()->skip(function () use ($database) {
+            for ($i = 0; $i < 10; $i++) {
+                $database->createDocument('estimateTest', new Document([
+                    '$id' => 'doc'.$i,
+                    'name' => 'name'.$i,
+                ]));
+            }
+        });
+
+        $database->analyzeCollection('estimateTest');
+
+        $estimate = $database->estimateCount('estimateTest');
+
+        if (! $this->engineIs(Postgres::class) || $database->getAdapter()->hasSharedTables()) {
+            $this->assertNull($estimate);
+
+            return;
+        }
+
+        $this->assertSame(10, $estimate);
+    }
+
     public function testSizeCollectionOnDisk(): void
     {
         $this->getDatabase()->createCollection(Collection::create(id: 'sizeTestDisk1'));

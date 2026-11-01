@@ -52,6 +52,52 @@ final class PostgresCollectionSizeTest extends TestCase
         }
     }
 
+    public function testTheEstimateReadsTableStatistics(): void
+    {
+        $adapter = $this->adapter(['3000000']);
+
+        $this->assertSame(3000000, $adapter->estimateCount('books'));
+        $this->assertCount(1, $this->statements);
+        $this->assertStringContainsString('n_live_tup', $this->statements[0]);
+        $this->assertStringContainsString('reltuples', $this->statements[0]);
+    }
+
+    /**
+     * @return iterable<string, array{string|false}>
+     */
+    public static function missingEstimates(): iterable
+    {
+        yield 'never analyzed' => ['-1'];
+        yield 'missing table' => [false];
+    }
+
+    #[DataProvider('missingEstimates')]
+    public function testNoStatisticsIsNoEstimate(string|false $estimate): void
+    {
+        $adapter = $this->adapter([$estimate]);
+
+        $this->assertNull($adapter->estimateCount('books'));
+    }
+
+    public function testSharedTablesHaveNoEstimate(): void
+    {
+        $adapter = $this->adapter(['3000000']);
+        $adapter->setSharedTables(true);
+
+        $this->assertNull($adapter->estimateCount('books'));
+        $this->assertSame([], $this->statements);
+    }
+
+    public function testAFailedEstimateIsADatabaseError(): void
+    {
+        $adapter = $this->adapter(['3000000'], new PDOException('SQLSTATE[08006]: connection failure'));
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Failed to estimate collection count: SQLSTATE[08006]: connection failure');
+
+        $adapter->estimateCount('books');
+    }
+
     private function readSize(Postgres $adapter, string $method): int
     {
         return $method === 'getSizeOfCollectionOnDisk'
@@ -60,7 +106,7 @@ final class PostgresCollectionSizeTest extends TestCase
     }
 
     /**
-     * @param list<string> $sizes
+     * @param list<string|false> $sizes
      */
     private function adapter(array $sizes, ?PDOException $failure = null): Postgres
     {

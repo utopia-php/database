@@ -398,8 +398,8 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
-     * Live tuples from the statistics collector, which every commit updates. Standbys and a
-     * statistics reset leave it at zero, so reltuples from the last vacuum or analyze stands in.
+     * Live tuples from the statistics collector, which every commit on the primary updates.
+     * A standby collects none, so it reads reltuples from the last vacuum or analyze instead.
      * Shared tables hold every tenant's rows, so they have no per-tenant estimate.
      *
      * @throws DatabaseException
@@ -416,20 +416,20 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $result = $this->dialectBuilder()
             ->fromNone()
             ->selectRaw(
-                'COALESCE(NULLIF(stats.n_live_tup, 0), class.reltuples::bigint) FROM pg_class AS class
+                'CASE WHEN pg_is_in_recovery() THEN class.reltuples::bigint
+                ELSE COALESCE(stats.n_live_tup, class.reltuples::bigint) END FROM pg_class AS class
                 LEFT JOIN pg_stat_user_tables AS stats ON stats.relid = class.oid
                 WHERE class.oid = to_regclass(?)',
                 [$name]
             )
             ->build();
 
-        $statement = $this->executeResult($result, Event::CollectionRead);
-
         try {
+            $statement = $this->executeResult($result, Event::CollectionRead);
             $this->execute($statement);
             $estimate = $statement->fetchColumn();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to estimate collection count: '.$e->getMessage());
+            throw new DatabaseException('Failed to estimate collection count: '.$e->getMessage(), $e->getCode(), $e);
         }
 
         if (! \is_numeric($estimate) || $estimate < 0) {

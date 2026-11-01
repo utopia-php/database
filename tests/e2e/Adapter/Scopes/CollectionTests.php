@@ -284,17 +284,30 @@ trait CollectionTests
             }
         });
 
-        $database->analyzeCollection('estimateTest');
-
-        $estimate = $database->estimateCount('estimateTest');
-
         if (! $this->engineIs(Postgres::class) || $database->getAdapter()->hasSharedTables()) {
-            $this->assertNull($estimate);
+            $this->assertNull($database->estimateCount('estimateTest'));
 
             return;
         }
 
-        $this->assertSame(10, $estimate);
+        // Postgres publishes a backend's pending statistics at most once a second, when a transaction ends,
+        // and adds any still pending on top of what ANALYZE records.
+        sleep(2);
+        $database->count('estimateTest');
+        $database->analyzeCollection('estimateTest');
+
+        $this->assertSame(10, $database->estimateCount('estimateTest'));
+
+        $database->getAuthorization()->skip(function () use ($database) {
+            for ($i = 0; $i < 10; $i++) {
+                $database->deleteDocument('estimateTest', 'doc'.$i);
+            }
+        });
+
+        sleep(2);
+        $database->count('estimateTest');
+
+        $this->assertSame(0, $database->estimateCount('estimateTest'));
     }
 
     public function testSizeCollectionOnDisk(): void

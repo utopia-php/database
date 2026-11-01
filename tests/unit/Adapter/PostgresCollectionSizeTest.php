@@ -92,10 +92,13 @@ final class PostgresCollectionSizeTest extends TestCase
     {
         $adapter = $this->adapter(['3000000'], new PDOException('SQLSTATE[08006]: connection failure'));
 
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Failed to estimate collection count: SQLSTATE[08006]: connection failure');
-
-        $adapter->estimateCount('books');
+        try {
+            $adapter->estimateCount('books');
+            $this->fail('An estimate that fails must reach the caller');
+        } catch (DatabaseException $error) {
+            $this->assertSame('Failed to estimate collection count: SQLSTATE[08006]: connection failure', $error->getMessage());
+            $this->assertInstanceOf(PDOException::class, $error->getPrevious());
+        }
     }
 
     private function readSize(Postgres $adapter, string $method): int

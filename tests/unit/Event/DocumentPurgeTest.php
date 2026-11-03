@@ -609,7 +609,7 @@ final class DocumentPurgeTest extends TestCase
             $cache->failing = true;
         };
 
-        $this->assertSame($failure, $this->failureOf(static fn (): mixed => $write($database)));
+        $this->assertNull($this->failureOf(static fn (): mixed => $write($database)), 'A stored write must not be reported as failed because the invalidation after its commit failed');
         $this->assertSame(['posts/first'], $this->purged($recorder));
     }
 

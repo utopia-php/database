@@ -8,7 +8,7 @@ use RuntimeException;
 use Tests\Unit\Support\StderrCapture;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -49,7 +49,7 @@ final class GetDocumentFallbackTest extends TestCase
 
     public function testACacheThatCannotBeReadOrWrittenFallsBackToTheDatabase(): void
     {
-        [$cache, $fail] = $this->failingCache();
+        [$cache, $fail, $fills] = $this->failingCache();
         $database = $this->database(new Memory(), new Cache($cache));
         $database->createDocument(self::COLLECTION, new Document([Document::ID => 'session', 'owner' => 'ada']));
         $fail();
@@ -66,9 +66,8 @@ final class GetDocumentFallbackTest extends TestCase
         $this->assertInstanceOf(Document::class, $missing);
         $this->assertTrue($missing->isEmpty());
         $this->assertStringContainsString('Warning: Failed to get document from cache: the cache refused load', $log);
-        $this->assertStringContainsString('Warning: Failed to get cache generation: the cache refused getGeneration', $log);
-        $this->assertStringContainsString('Failed to save document to cache: the cache refused saveWithLease', $log);
-        $this->assertStringContainsString('Failed to save empty document to cache: the cache refused saveWithLease', $log);
+        $this->assertStringContainsString('Warning: Failed to get cache version: the cache refused getVersion', $log);
+        $this->assertSame(0, $fills(), 'A read without a lease must not populate the cache');
     }
 
     public function testACachedDocumentPastItsTimeToLiveReadsAsEmpty(): void
@@ -95,12 +94,14 @@ final class GetDocumentFallbackTest extends TestCase
     }
 
     /**
-     * @return array{MemoryCache, Closure(): void}
+     * @return array{MemoryCache, Closure(): void, Closure(): int}
      */
     private function failingCache(): array
     {
-        $cache = new class (self::COLLECTION) extends MemoryCache implements Leasable {
+        $cache = new class (self::COLLECTION) extends MemoryCache implements Versioned {
             public bool $failing = false;
+
+            public int $fills = 0;
 
             public function __construct(private readonly string $collection)
             {
@@ -125,23 +126,11 @@ final class GetDocumentFallbackTest extends TestCase
             }
 
             #[\Override]
-            public function getGeneration(string $key): string
+            public function getVersion(string $key): string
             {
-                $this->refuse('getGeneration', $key);
+                $this->refuse('getVersion', $key);
 
-                return '0';
-            }
-
-            /**
-             * @param  array<int|string, mixed>|string  $data
-             * @return bool|string|array<int|string, mixed>
-             */
-            #[\Override]
-            public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-            {
-                $this->refuse('saveWithLease', $key);
-
-                return parent::save($key, $data, $hash);
+                return parent::getVersion($key);
             }
 
             private function refuse(string $operation, string $key): void
@@ -154,7 +143,7 @@ final class GetDocumentFallbackTest extends TestCase
 
         return [$cache, static function () use ($cache): void {
             $cache->failing = true;
-        }];
+        }, static fn (): int => $cache->fills];
     }
 
     private function database(Memory $adapter, Cache $cache): Database

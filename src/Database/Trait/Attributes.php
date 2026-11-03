@@ -296,7 +296,7 @@ trait Attributes
         );
 
         if ($altering) {
-            $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+            $this->purgeCommittedCollection($definition->getId());
         }
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $definition->getId()));
 
@@ -470,7 +470,7 @@ trait Attributes
             operationDescription: "attribute rename '{$old}' to '{$new}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+        $this->purgeCommittedCollection($definition->getId());
 
         $listeners = $this->listens(Event::AttributeRename);
         if ($listeners !== []) {
@@ -965,7 +965,7 @@ trait Attributes
 
     private function purgeCollectionCaches(string $collection): void
     {
-        $this->withRetries(fn () => $this->purgeCachedCollection($collection));
+        $this->purgeCommittedCollection($collection);
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
         $listeners = $this->listens(Event::DocumentPurge);

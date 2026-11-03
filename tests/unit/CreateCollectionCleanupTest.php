@@ -98,10 +98,9 @@ final class CreateCollectionCleanupTest extends TestCase
         $adapter->afterCommit = null;
         $cache->failing = false;
 
-        $this->assertNotNull($error, 'A failed invalidation after the commit must reach the caller');
+        $this->assertNull($error, 'A stored collection must not be reported as failed because the invalidation after its commit failed');
         $this->assertTrue($adapter->collectionExists('cleanup', 'logs'), 'A collection whose definition committed must keep its table');
         $this->assertSame('logs', $database->getCollection('logs')->getId());
-        $this->assertSame($failure, $error, 'The failure after the commit must reach the caller as it was raised');
 
         $database->createDocument('logs', new Document(['message' => 'kept']));
         $this->assertSame(1, $database->count('logs'));

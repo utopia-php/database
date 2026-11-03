@@ -8,7 +8,6 @@ use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -78,7 +77,7 @@ final class NegativeCacheEpochTest extends TestCase
 
     private function createDatabase(InterceptingMemory $adapter): Database
     {
-        $database = new Database($adapter, new Cache(new LeasedMemoryCache()));
+        $database = new Database($adapter, new Cache(new MemoryCache()));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('negative_cache_'.\uniqid());
@@ -132,51 +131,5 @@ final class InterceptingMemory extends CountingMemory
         }
 
         return $document;
-    }
-}
-
-/**
- * A memory cache with the generations of the Leasable contract, so a save that
- * raced a purge is refused as it is on Redis.
- */
-final class LeasedMemoryCache extends MemoryCache implements Leasable
-{
-    /** @var array<string, int> */
-    private array $generations = [];
-
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        return (string) ($this->generations[$key] ?? 0);
-    }
-
-    /**
-     * @param  array<int|string, mixed>|string  $data
-     * @return bool|string|array<int|string, mixed>
-     */
-    #[Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        if ($this->getGeneration($key) !== $generation) {
-            return false;
-        }
-
-        return $this->save($key, $data, $hash);
-    }
-
-    #[Override]
-    public function purge(string $key, string $hash = ''): bool
-    {
-        $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
-
-        return parent::purge($key, $hash);
-    }
-
-    #[Override]
-    public function flush(): bool
-    {
-        $this->generations = [];
-
-        return parent::flush();
     }
 }

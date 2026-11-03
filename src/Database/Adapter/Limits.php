@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use DateTime;
+use Utopia\Database\Database;
 use Utopia\Query\Schema\ColumnType;
 
 /**
@@ -34,6 +35,32 @@ final readonly class Limits
         public ColumnType $idType,
         public array $keywords,
         public array $internalIndexKeys,
+        public bool $escalatedStringByteCap = true,
     ) {
+    }
+
+    /**
+     * Byte capacity for a {@see ColumnType::String} attribute stored outside VARCHAR, matching {@see SQL::getSqlType()}.
+     * Null when the declared size fits in VARCHAR or when escalated TEXT types have no byte cap (PostgreSQL).
+     */
+    public function stringEscalatedStorageByteLimit(int $size): ?int
+    {
+        if ($size <= $this->varchar) {
+            return null;
+        }
+
+        if (! $this->escalatedStringByteCap) {
+            return null;
+        }
+
+        if ($size > 16777215) {
+            return Database::MAX_LONGTEXT_BYTES;
+        }
+
+        if ($size > 65535) {
+            return Database::MAX_MEDIUMTEXT_BYTES;
+        }
+
+        return Database::MAX_TEXT_BYTES;
     }
 }

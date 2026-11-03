@@ -2,11 +2,9 @@
 
 namespace Tests\Unit\Documents;
 
-use Override;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -86,7 +84,7 @@ final class MetadataTenantInvalidationTest extends TestCase
     public function testACollectionIsReadableAfterCreationWithoutSharedTables(): void
     {
         $adapter = new DatabaseMemory();
-        $cache = new Cache(new LeasedMemoryCacheAdapter());
+        $cache = new Cache(new MemoryCache());
         $namespace = '_'.\uniqid();
 
         $databases = [];
@@ -141,7 +139,7 @@ final class MetadataTenantInvalidationTest extends TestCase
     private function databases(): array
     {
         $adapter = new DatabaseMemory();
-        $cache = new Cache(new LeasedMemoryCacheAdapter());
+        $cache = new Cache(new MemoryCache());
         $namespace = 'metadata_tenant_'.\uniqid();
 
         $databases = [];
@@ -160,47 +158,5 @@ final class MetadataTenantInvalidationTest extends TestCase
         $databases[0]->create();
 
         return [$databases[0], $databases[1]];
-    }
-}
-
-final class LeasedMemoryCacheAdapter extends MemoryCache implements Leasable
-{
-    /** @var array<string, int> */
-    private array $generations = [];
-
-    #[\Override]
-    public function getGeneration(string $key): string
-    {
-        return (string) ($this->generations[$key] ?? 0);
-    }
-
-    /**
-     * @param  array<int|string, mixed>|string  $data
-     * @return bool|string|array<int|string, mixed>
-     */
-    #[Override]
-    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-    {
-        if ($this->getGeneration($key) !== $generation) {
-            return false;
-        }
-
-        return $this->save($key, $data, $hash);
-    }
-
-    #[Override]
-    public function purge(string $key, string $hash = ''): bool
-    {
-        $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
-
-        return parent::purge($key, $hash);
-    }
-
-    #[Override]
-    public function flush(): bool
-    {
-        $this->generations = [];
-
-        return parent::flush();
     }
 }

@@ -25,10 +25,11 @@ use Utopia\Database\Role;
 use Utopia\Database\Validator\Authorization;
 
 /**
- * A nested write links or changes a stored related document only with update on it (collection-level, or
- * document-level under document security), whichever relationship type holds the link and whether the document
- * is sent by ID or as a document. A stored document the caller cannot read is refused, never linked, changed or
- * taken for a new one.
+ * A nested write changes a stored related document, or links one where the link writes it or a junction row for
+ * it, only with update on it (collection-level, or document-level under document security), whether the document
+ * is sent by ID or as a document. A link by ID that is only the key on the document being written, a one-way
+ * one-to-one or a many-to-one, needs read. A stored document the caller cannot read is refused, never linked,
+ * changed or taken for a new one.
  */
 final class NestedLinkPermissionsTest extends TestCase
 {
@@ -89,7 +90,9 @@ final class NestedLinkPermissionsTest extends TestCase
         foreach ($adapters as $adapterName => $adapter) {
             foreach ($writes[$adapterName] as $writeName => $transaction) {
                 foreach (['oneToOne', 'oneToOne one-way', 'oneToMany', 'manyToOne', 'manyToMany'] as $type) {
+                    $keySide = \in_array($type, ['oneToOne one-way', 'manyToOne'], true);
                     foreach ($scenarios as $scenario => [$documentSecurity, $collectionPermissions, $documentPermissions, $caller, $byId, $asDocument]) {
+                        $byId = $keySide && $byId === self::NO_UPDATE ? null : $byId;
                         yield "{$adapterName}, {$writeName}, {$type} by ID, {$scenario}" => [$adapter, $type, $documentSecurity, $collectionPermissions, $documentPermissions, $caller, self::ID, $byId, $transaction];
                         yield "{$adapterName}, {$writeName}, {$type} as a document, {$scenario}" => [$adapter, $type, $documentSecurity, $collectionPermissions, $documentPermissions, $caller, self::DOCUMENT, $asDocument, $transaction];
                     }

@@ -1218,14 +1218,16 @@ method as a no-op, so a hook overrides only what it needs:
   `deleteDocument()`, so a related document the caller may not read is deleted with the rest or, under `Restrict`,
   blocks the delete.
 - Linking an existing related document, at any nesting depth of a create or an update, needs update permission on
-  that document, for every relationship type; without it the write throws `Utopia\Database\Exception\Authorization`
-  and nothing is written. In 7.x a many-to-many link needed only read permission on the related document, because
-  the link is a row in the junction collection rather than a column on the related document, and so did a link by
-  id from the side that holds the key: a one-way one-to-one, a many-to-one, and a one-to-many child pointing at its
-  parent. These now need update permission too, whether the value is an id or a document (since 8.0.1; 8.0.0 still
-  linked them with read permission). A related document the same write creates needs no update permission.
-  Relinking a document that is already linked needs only read permission, and removing a link needs no update
-  permission on the unlinked document.
+  that document when the link writes it or a junction row for it: a many-to-many, a two-way one-to-one, and a
+  one-to-many parent or many-to-one child listing it. Without it the write throws
+  `Utopia\Database\Exception\Authorization` and nothing is written. In 7.x a many-to-many link needed only read
+  permission on the related document, because the link is a row in the junction collection rather than a column on
+  the related document. A link from the side that holds the key, a one-way one-to-one, a many-to-one, or a
+  one-to-many child pointing at its parent, writes nothing on the related document and needs only read permission
+  on it, as in 7.x; a related document sent as a document with attributes to change still needs update permission.
+  8.0.1 to 8.3.11 required update permission for these links too. A related document the same write creates needs
+  no update permission. Relinking a document that is already linked needs only read permission, and removing a link
+  needs no update permission on the unlinked document.
 - A stored related document the caller cannot read is refused with `Utopia\Database\Exception\Authorization`, with
   the read check's reason when the value is its id, and with the update check's reason (or the read check's when the
   caller may update it) when the value is a document. 7.x left a one-to-one or many-to-one link to it, dropped it

@@ -126,7 +126,7 @@ trait Indexes
             operationDescription: "index rename '{$old}' to '{$new}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+        $this->purgeCommittedCollection($definition->getId());
 
         $listeners = $this->listens(Event::IndexRename);
         if ($listeners !== []) {
@@ -169,7 +169,7 @@ trait Indexes
             silentRollback: true
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+        $this->purgeCommittedCollection($definition->getId());
 
         $listeners = $this->listens(Event::IndexDelete);
         if ($listeners !== []) {
@@ -225,7 +225,7 @@ trait Indexes
             operationDescription: "index creation '{$keys}'"
         );
 
-        $this->withRetries(fn () => $this->purgeCachedCollection($definition->getId()));
+        $this->purgeCommittedCollection($definition->getId());
 
         $listeners = $this->listens(Event::IndexCreate);
         if ($listeners !== []) {

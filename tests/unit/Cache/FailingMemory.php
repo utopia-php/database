@@ -22,9 +22,9 @@ final class FailingMemory extends MemoryCache
     {
         if (
             $this->failing
-            && \str_ends_with($key, '#epoch')
-            && \is_string($data)
-            && \str_starts_with($data, 'blocked:')
+            && \str_ends_with($key, '#state')
+            && \is_array($data)
+            && ! empty($data['owners'])
         ) {
             return false;
         }

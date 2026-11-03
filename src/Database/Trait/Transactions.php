@@ -294,26 +294,9 @@ trait Transactions
                 $this->documentPurgeEvents[$context],
             );
 
-            $failure = null;
-            try {
-                $this->purgeWrittenDocuments($documents);
-            } catch (Throwable $error) {
-                $failure = $error;
-            }
-            try {
-                $this->activateDocumentInvalidation($documentTokens);
-            } catch (Throwable $error) {
-                $failure ??= $error;
-            }
-            try {
-                $this->activateInvalidation($queryTokens);
-            } catch (Throwable $error) {
-                $failure ??= $error;
-            }
+            $this->invalidateCommitted($documents, $documentTokens, $queryTokens);
 
-            $announcement = $this->announceDocumentPurges($purgeEvents);
-            $failure ??= $announcement;
-
+            $failure = $this->announceDocumentPurges($purgeEvents);
             if ($failure !== null) {
                 $this->committedFailures ??= new WeakMap();
                 $this->committedFailures[$failure] = true;
@@ -325,6 +308,32 @@ trait Transactions
         }
 
         return $result;
+    }
+
+    /**
+     * Invalidate the cache for writes that have committed. The writes are stored whatever the cache answers, and each
+     * step that cannot be confirmed leaves the cache fail-closed: a tombstone left in place lapses into a new epoch,
+     * never back to the old one. A failure is logged, as throwing it would report a stored write as failed.
+     *
+     * @param  array<string, string>  $documents  Collection keys by document key
+     * @param  array<string, string>  $documentTokens
+     * @param  array<string, string>  $queryTokens
+     */
+    private function invalidateCommitted(array $documents, array $documentTokens, array $queryTokens): void
+    {
+        $steps = [
+            fn () => $this->purgeWrittenDocuments($documents),
+            fn () => $this->activateDocumentInvalidation($documentTokens),
+            fn () => $this->activateInvalidation($queryTokens),
+        ];
+
+        foreach ($steps as $step) {
+            try {
+                $step();
+            } catch (Throwable $error) {
+                Console::warning('Warning: Failed to invalidate the cache after a commit: '.$error->getMessage());
+            }
+        }
     }
 
     private function queueDefinitionRefill(string $definitionKey, string $field, string $id): void
@@ -370,7 +379,7 @@ trait Transactions
 
     /**
      * Whether the error was raised after its outermost transaction committed: the writes it
-     * reports on are stored, and only the invalidation or the events after the commit failed.
+     * reports on are stored, and only the events after the commit failed.
      */
     private function failedAfterCommit(Throwable $error): bool
     {

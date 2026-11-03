@@ -905,6 +905,14 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     #[\Override]
+    public function estimateCount(string $collection): ?int
+    {
+        /** @var int|null $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    #[\Override]
     public function getSizeOfCollection(string $collection): int
     {
         /** @var int $result */

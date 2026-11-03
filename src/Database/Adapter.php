@@ -880,6 +880,17 @@ abstract class Adapter
     abstract public function getSizeOfCollectionOnDisk(string $collection): int;
 
     /**
+     * Estimate the number of documents in a collection from engine statistics, without scanning it.
+     * Null when the engine keeps no usable estimate, so the caller counts instead.
+     *
+     * @throws DatabaseException
+     */
+    public function estimateCount(string $collection): ?int
+    {
+        return null;
+    }
+
+    /**
      * Estimate maximum number of bytes required to store a document in $collection.
      * Byte requirement varies based on column type and size.
      * Needed to satisfy MariaDB/MySQL row width limit.

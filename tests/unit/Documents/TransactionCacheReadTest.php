@@ -9,7 +9,7 @@ use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Cache;
-use Utopia\Cache\Feature\Leasable;
+use Utopia\Cache\Feature\Versioned;
 use Utopia\Database\Adapter as DatabaseAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -294,9 +294,36 @@ final class TransactionCacheReadTest extends TestCase
     /**
      * @param  Closure(): void  $onFill  Called on every save to the cache
      */
-    private function fillCountingCache(Closure $onFill): CacheAdapter&Leasable
+    private function fillCountingCache(Closure $onFill): CacheAdapter&Versioned
     {
-        return new class ($onFill) implements CacheAdapter, Leasable {
+        return new class ($onFill) implements CacheAdapter, Versioned {
+            #[\Override]
+            public function supportsVersioning(): bool
+            {
+                return true;
+            }
+            #[\Override]
+            public function getVersion(string $key): string
+            {
+                return $this->cache->getVersion($key);
+            }
+            #[\Override]
+            public function loadVersioned(string $key): array
+            {
+                return ['version' => $this->getVersion($key), 'value' => $this->load($key, PHP_INT_MAX)];
+            }
+            #[\Override]
+            public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+            {
+                if ($this->getVersion($key) !== $version) {
+                    return false;
+                }
+                if ($this->save($key, $data, $hash) === false) {
+                    throw new \Utopia\Cache\Exception\Unavailable('Cache write failed');
+                }
+                return $this->cache->getVersion($key);
+            }
+
             private RedisLeasableCache $cache;
 
             /**
@@ -364,19 +391,6 @@ final class TransactionCacheReadTest extends TestCase
                 return 'fill-counting';
             }
 
-            #[\Override]
-            public function getGeneration(string $key): string
-            {
-                return $this->cache->getGeneration($key);
-            }
-
-            #[\Override]
-            public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
-            {
-                ($this->onFill)();
-
-                return $this->cache->saveWithLease($key, $data, $hash, $generation);
-            }
         };
     }
 

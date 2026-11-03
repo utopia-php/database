@@ -136,6 +136,12 @@ class SQLite extends SQL
         $this->registerUserFunctions();
     }
 
+    #[\Override]
+    protected function limitsEscalatedStringByteCap(): bool
+    {
+        return $this->emulateMySQL;
+    }
+
     #[Override]
     public function reconnect(): void
     {

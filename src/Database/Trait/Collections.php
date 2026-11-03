@@ -291,6 +291,16 @@ trait Collections
     }
 
     /**
+     * @throws Exception
+     */
+    public function estimateCount(string $collection): ?int
+    {
+        $definition = $this->silent(fn () => $this->getOwnCollection($collection));
+
+        return $this->adapter->estimateCount($definition->getId());
+    }
+
+    /**
      * @throws DatabaseException
      * @throws NotFoundException
      */
@@ -340,6 +350,10 @@ trait Collections
             try {
                 $deleted = $this->silent(fn () => $this->deleteDocument(self::METADATA, $collection));
             } catch (Throwable $error) {
+                if ($this->mayHaveCommitted($error)) {
+                    throw $error;
+                }
+
                 if ($schemaDeleted) {
                     try {
                         $this->adapter->createCollection($collection, $currentAttributes, $currentIndexes);
@@ -353,7 +367,7 @@ trait Collections
                 );
             }
 
-            $this->purgeCachedCollection($collection);
+            $this->purgeCommittedCollection($collection);
         }
 
         $listeners = $deleted ? $this->listens(Event::CollectionDelete) : [];

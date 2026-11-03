@@ -160,7 +160,7 @@ final class DocumentFromStorageTest extends TestCase
         $this->assertNotNull($entry);
         $stored = new Document();
         $stored->exchangeArray([Document::ID => 'legacy', Document::PERMISSIONS => [Permission::read(Role::any()), 42]]);
-        $this->assertTrue($queryCache->set($entry, [$stored], $queryCache->getGeneration($entry)));
+        $this->assertTrue($queryCache->set($entry, [$stored], $queryCache->getLease($entry)));
 
         $cached = $queryCache->get($entry);
 

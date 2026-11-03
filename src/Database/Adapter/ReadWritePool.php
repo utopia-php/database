@@ -22,6 +22,7 @@ class ReadWritePool extends Pool
         'getSchemaIndexes',
         'getSizeOfCollection',
         'getSizeOfCollectionOnDisk',
+        'estimateCount',
         'ping',
         'id',
     ];

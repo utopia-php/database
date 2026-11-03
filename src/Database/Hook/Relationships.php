@@ -1151,8 +1151,6 @@ class Relationships implements Attachable, Hook
                                 if ($related->isEmpty()) {
                                     $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                     $document->setAttribute($key, null);
-                                } elseif ($value !== $oldId) {
-                                    $this->authorizeLink($relatedCollection, $related);
                                 }
                             } elseif ($value instanceof Document) {
                                 $relationId = $this->relateDocuments(
@@ -1376,8 +1374,6 @@ class Relationships implements Attachable, Hook
                             if ($related->isEmpty()) {
                                 $this->refuseUnreadable($relatedCollection, $value, PermissionType::Read);
                                 $document->setAttribute($key, null);
-                            } elseif ($value !== $oldId) {
-                                $this->authorizeLink($relatedCollection, $related);
                             }
                             $this->database->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
@@ -1398,8 +1394,6 @@ class Relationships implements Attachable, Hook
                                     $relatedCollection->getId(),
                                     $value
                                 );
-                            } elseif ($value->getId() !== $oldId) {
-                                $this->authorizeLink($relatedCollection, $related);
                             }
 
                             if (! $related->isEmpty() && $related->getAttributes() != $value->getAttributes()) {
@@ -2245,7 +2239,7 @@ class Relationships implements Attachable, Hook
 
         if ($related->isEmpty()) {
             $this->refuseUnreadable($relatedCollection, $relation->getId(), PermissionType::Update);
-        } elseif (! $linked) {
+        } elseif (! $linked && $this->writesRelated($relationType, $twoWay, $side)) {
             $this->authorizeLink($relatedCollection, $related);
         }
 
@@ -2337,7 +2331,7 @@ class Relationships implements Attachable, Hook
         // linking to it links to a document this write creates.
         $creating = isset($prepared?->preparing[$relatedCollection->getId()][$relationId])
             || $this->isRelating($coroutine, $relatedCollection, $relationId);
-        if ($creating && ($this->checkExist->get() || ! $this->writesById($relationType, $twoWay, $side))) {
+        if ($creating && ($this->checkExist->get() || ! $this->writesRelated($relationType, $twoWay, $side))) {
             return;
         }
 
@@ -2353,7 +2347,7 @@ class Relationships implements Attachable, Hook
             if ($this->checkExist->get()) {
                 return;
             }
-        } else {
+        } elseif ($this->writesRelated($relationType, $twoWay, $side)) {
             $this->authorizeLink($relatedCollection, $related);
         }
 
@@ -2390,9 +2384,10 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * Whether relating a document by id writes anything; otherwise it only reads the related document.
+     * Whether linking a related document writes it, or a junction row for it. Otherwise the link is only the key on
+     * the document being written, so linking reads the related document and needs only read permission on it.
      */
-    private function writesById(RelationshipType $relationType, bool $twoWay, RelationshipSide $side): bool
+    private function writesRelated(RelationshipType $relationType, bool $twoWay, RelationshipSide $side): bool
     {
         return match ($relationType) {
             RelationshipType::OneToOne => $twoWay,
@@ -3382,8 +3377,8 @@ class Relationships implements Attachable, Hook
     }
 
     /**
-     * Linking an existing document to another one needs update permission on it, whichever
-     * relationship type holds the link.
+     * Linking an existing document needs update permission on it when the link writes it or a junction row for it;
+     * see writesRelated().
      *
      * @throws AuthorizationException
      */
@@ -3563,9 +3558,10 @@ class Relationships implements Attachable, Hook
     /**
      * Check, without writing, that the caller may relate the related documents $document carries the way writing it
      * relates them, as deep as a write relates them: create on the related collection for a new document, update
-     * (collection-level, or document-level under document security) to link a stored one or to change one sent as a
-     * document, and never a stored document the caller cannot read. With $old, the stored document an update
-     * changes, a related document $old already links is not linked again, so only changing it needs update.
+     * (collection-level, or document-level under document security) to change one sent as a document or to link a
+     * stored one where the link writes it or a junction row for it, read to link any other stored one, and never a
+     * stored document the caller cannot read. With $old, the stored document an update changes, a related document
+     * $old already links is not linked again, so only changing it needs update.
      *
      * With $resolve, every related document is judged as a later write would find it: $resolve(collection, ID)
      * returns the document as it will be when the write runs, with its permissions and without the caller's read
@@ -3612,6 +3608,7 @@ class Relationships implements Attachable, Hook
             }
 
             $linked = self::relatedIds($old?->getAttribute($key));
+            $writes = $attribute->side === null || $this->writesRelated($relationship->type, $relationship->twoWay, $attribute->side);
             $value = $document->getAttribute($key);
             if ($value instanceof Operator) {
                 $value = $value->isArrayOperation() ? $this->applyRelationshipOperator($value, $linked) : [];
@@ -3619,30 +3616,31 @@ class Relationships implements Attachable, Hook
 
             foreach (self::relatedValues($value) as $related) {
                 if (\is_string($related)) {
-                    $this->authorizeLinkById($relatedCollection, $related, $linked, $resolve);
+                    $this->authorizeLinkById($relatedCollection, $related, $linked, $writes, $resolve);
 
                     continue;
                 }
 
-                $this->authorizeRelatedDocument($collection, $relatedCollection, $related, $linked, $writeStack, $resolve);
+                $this->authorizeRelatedDocument($collection, $relatedCollection, $related, $linked, $writes, $writeStack, $resolve);
             }
         }
     }
 
     /**
      * @param  list<string>  $linked
+     * @param  bool  $writes  Whether the link writes the related document or a junction row
      * @param  (Closure(string, string): ?Document)|null  $resolve
      *
      * @throws AuthorizationException
      */
-    private function authorizeLinkById(Document $relatedCollection, string $id, array $linked, ?Closure $resolve): void
+    private function authorizeLinkById(Document $relatedCollection, string $id, array $linked, bool $writes, ?Closure $resolve): void
     {
         if (\in_array($id, $linked, true)) {
             return;
         }
 
         $stored = $this->viewRelated($relatedCollection, $id, PermissionType::Read, $resolve, [Query::select([Document::ID])]);
-        if ($stored->isEmpty()) {
+        if ($stored->isEmpty() || ! $writes) {
             return;
         }
 
@@ -3651,13 +3649,14 @@ class Relationships implements Attachable, Hook
 
     /**
      * @param  list<string>  $linked
+     * @param  bool  $writes  Whether the link writes the related document or a junction row
      * @param  list<string>  $writeStack
      * @param  (Closure(string, string): ?Document)|null  $resolve
      *
      * @throws AuthorizationException
      * @throws RelationshipException
      */
-    private function authorizeRelatedDocument(Document $collection, Document $relatedCollection, Document $related, array $linked, array $writeStack, ?Closure $resolve): void
+    private function authorizeRelatedDocument(Document $collection, Document $relatedCollection, Document $related, array $linked, bool $writes, array $writeStack, ?Closure $resolve): void
     {
         $id = $related->getId();
         $stored = $id === ''
@@ -3676,7 +3675,7 @@ class Relationships implements Attachable, Hook
         }
 
         $changes = \array_diff(\array_keys($related->getArrayCopy()), [Document::ID]) !== [];
-        if (! \in_array($id, $linked, true) || $changes) {
+        if ($changes || ($writes && ! \in_array($id, $linked, true))) {
             $this->authorizeLink($relatedCollection, $stored);
         }
 

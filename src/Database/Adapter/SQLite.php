@@ -2376,7 +2376,7 @@ class SQLite extends SQL
 
         if (! empty($attribute)) {
             $updateColumns = [
-                $getUpdateClause($attribute, increment: true),
+                $getUpdateClause($this->writableColumn($attribute), increment: true),
                 $getUpdateClause(Storage::UPDATED_AT),
             ];
         } else {

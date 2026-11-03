@@ -1616,9 +1616,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $document->removeAttribute(Document::SEQUENCE);
 
-        /** @var array<string, mixed> $documentArray */
-        $documentArray = (array) $document;
-        $record = $this->replaceCharacters('$', '_', $documentArray);
+        $record = $this->replaceCharacters('$', '_', $this->withoutStorageKeys((array) $document));
         $record = $this->decorateRow($record, $document);
 
         if (! empty($sequence)) {
@@ -1663,9 +1661,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 throw new DatabaseException('All documents must have an sequence if one is set');
             }
 
-            /** @var array<string, mixed> $documentArr */
-            $documentArr = (array) $document;
-            $record = $this->replaceCharacters('$', '_', $documentArr);
+            $record = $this->replaceCharacters('$', '_', $this->withoutStorageKeys((array) $document));
             $record = $this->decorateRow($record, $document);
 
             if (! empty($sequence)) {
@@ -1757,8 +1753,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
-        $record = $document->getArrayCopy();
-        $record = $this->replaceCharacters('$', '_', $record);
+        $record = $this->replaceCharacters('$', '_', $this->withoutStorageKeys($document->getArrayCopy()));
 
         $filters = [Storage::UID => $id];
         $filters = $this->applyTenantFilter($filters, $collection->getId());
@@ -1804,8 +1799,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $filters = $this->buildFilters($queries);
         $filters = $this->applyTenantFilter($filters, $collection->getId());
 
-        $record = $updates->getArrayCopy();
-        $record = $this->replaceCharacters('$', '_', $record);
+        $record = $this->replaceCharacters('$', '_', $this->withoutStorageKeys($updates->getArrayCopy()));
 
         try {
             $pipeline = $this->buildOperatorPipeline($record);
@@ -2167,15 +2161,14 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         try {
             $name = $this->getNamespace().'_'.$this->filter($collection->getId());
-            $attribute = $this->filter($increase ?? '');
+            $attribute = $this->writableColumn($increase ?? '');
 
             $operations = [];
             $hasPipeline = false;
             foreach ($changes as $change) {
                 $document = $change->new;
                 $oldDocument = $change->old;
-                /** @var array<string, mixed> $attributes */
-                $attributes = $document->getAttributes();
+                $attributes = $this->withoutStorageKeys($document->getAttributes());
                 $attributes[Storage::UID] = $document->getId();
                 $attributes[Storage::CREATED_AT] = $document[Document::CREATED_AT];
                 $attributes[Storage::UPDATED_AT] = $document[Document::UPDATED_AT];
@@ -2343,7 +2336,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $min = $min === null ? null : $this->normalizeAtomicNumber($min, 'minimum');
         $max = $max === null ? null : $this->normalizeAtomicNumber($max, 'maximum');
 
-        $attribute = $this->filter($attribute);
+        $attribute = $this->writableColumn($attribute);
         $current = ['$ifNull' => ['$'.$attribute, 0]];
         $filters = [Storage::UID => $id];
         $filters = $this->applyTenantFilter($filters, $collectionId);
@@ -3275,6 +3268,19 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     public function castDatetime(string $value): mixed
     {
         return new UTCDateTime(new NativeDateTime($value));
+    }
+
+    /**
+     * A document's fields without those named like a storage field. A schemaless document holds any key, and one
+     * such as `_id`, `_tenant` or `_permissions` would otherwise be written over the field the storage keeps for the
+     * document's own $sequence, $tenant or $permissions.
+     *
+     * @param  array<mixed>  $fields
+     * @return array<mixed>
+     */
+    private function withoutStorageKeys(array $fields): array
+    {
+        return \array_diff_key($fields, Storage::columnMap());
     }
 
     /**

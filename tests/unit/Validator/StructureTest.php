@@ -12,6 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Id;
 use Utopia\Database\Operator;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 
@@ -341,6 +342,27 @@ class StructureTest extends TestCase
         ])));
 
         $this->assertEquals('Invalid document structure: Unknown attribute: "titlex"', $validator->getDescription());
+    }
+
+    public function test_reserved_keys_without_defined_attributes(): void
+    {
+        $validator = new Structure(
+            new Document($this->collection),
+            Profiles::of(capabilities: [Capability::UnsignedBigInt]),
+        );
+        $document = [
+            '$collection' => Id::custom('posts'),
+            'titlex' => 'Any key is a field without defined attributes',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        $this->assertTrue($validator->isValid(new Document($document)), $validator->getDescription());
+
+        foreach ([Storage::SEQUENCE, Storage::UID, Storage::TENANT, Storage::PERMISSIONS, Storage::CREATED_AT, Storage::COLLECTION] as $key) {
+            $this->assertFalse($validator->isValid(new Document([...$document, $key => 'stored over the document\'s own field'])), $key);
+            $this->assertSame('Invalid document structure: Reserved attribute: "'.$key.'"', $validator->getDescription());
+        }
     }
 
     public function test_integer_as_string(): void

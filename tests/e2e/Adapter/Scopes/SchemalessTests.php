@@ -20,6 +20,7 @@ use Utopia\Database\Index;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
+use Utopia\Database\Storage;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
 
@@ -251,6 +252,58 @@ trait SchemalessTests
 
         $allDocs = $database->find($colName);
         $this->assertCount(4, $allDocs);
+
+        $database->deleteCollection($colName);
+    }
+
+    /**
+     * Any key is a field of a schemaless document, except one named like a field the storage keeps for the document
+     * itself: `_id` would choose its $sequence, `_permissions` would set its permissions past their validation and
+     * `_tenant` its tenant. The structure refuses such a key, and the adapter never writes one, even with validation
+     * skipped.
+     */
+    public function testSchemalessDocumentCannotWriteAStorageField(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $colName = uniqid('schemaless_storage');
+        $database->createCollection(Collection::create(
+            id: $colName,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+        ));
+
+        foreach ([Storage::SEQUENCE, Storage::UID, Storage::TENANT, Storage::PERMISSIONS] as $key) {
+            try {
+                $database->createDocument($colName, new Document(['$id' => 'refused', $key => 'stored']));
+                $this->fail("A document with a {$key} field must be refused");
+            } catch (StructureException $e) {
+                $this->assertSame('Invalid document structure: Reserved attribute: "'.$key.'"', $e->getMessage());
+            }
+        }
+
+        $kept = $database->createDocument($colName, new Document(['$id' => 'kept', 'title' => 'kept']));
+
+        $database->skipValidation(function () use ($database, $colName): void {
+            $database->createDocument($colName, new Document(['$id' => 'skipped', Storage::SEQUENCE => 'chosen', Storage::PERMISSIONS => ['delete("any")']]));
+            $database->updateDocuments($colName, new Document([Storage::PERMISSIONS => ['delete("any")'], Storage::UID => 'renamed']));
+        });
+
+        $skipped = $database->getDocument($colName, 'skipped');
+        $this->assertSame('skipped', $skipped->getId());
+        $this->assertNotSame('chosen', $skipped->getSequence(), 'An _id field must not choose the $sequence');
+        $this->assertSame([], $skipped->getPermissions());
+
+        $updated = $database->getDocument($colName, 'kept');
+        $this->assertSame('kept', $updated->getId(), 'A bulk update must not rename the document');
+        $this->assertSame($kept->getSequence(), $updated->getSequence());
+        $this->assertSame([], $updated->getPermissions(), 'A bulk update must not write the permissions field');
 
         $database->deleteCollection($colName);
     }

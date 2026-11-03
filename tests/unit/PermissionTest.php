@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Id;
 use Utopia\Database\Permission;
 use Utopia\Database\PermissionType;
@@ -328,5 +330,199 @@ class PermissionTest extends TestCase
             'update("user:123")',
             'delete("user:123")',
         ], $parsed);
+    }
+
+    /**
+     * A permission may name one column, and then covers that column alone. Naming none
+     * covers every column, which is what every permission has always meant.
+     *
+     * @throws \Exception
+     */
+    public function test_column_scope(): void
+    {
+        $permission = Permission::parse('read("any", "salary")');
+        $this->assertEquals('read', $permission->getPermission());
+        $this->assertEquals('any', $permission->getRole());
+        $this->assertEquals('salary', $permission->getColumn());
+        $this->assertFalse($permission->isForAllColumns());
+        $this->assertEquals('read("any", "salary")', $permission->toString());
+
+        $permission = Permission::parse('read("any")');
+        $this->assertEquals(Permission::ALL_COLUMNS, $permission->getColumn());
+        $this->assertTrue($permission->isForAllColumns());
+
+        // The column does not disturb the role grammar either side of it.
+        $permission = Permission::parse('update("team:123/admin", "salary")');
+        $this->assertEquals('team', $permission->getRole());
+        $this->assertEquals('123', $permission->getIdentifier());
+        $this->assertEquals('admin', $permission->getDimension());
+        $this->assertEquals('salary', $permission->getColumn());
+        $this->assertEquals('update("team:123/admin", "salary")', $permission->toString());
+
+        $permission = Permission::parse('read("user:123", "name")');
+        $this->assertEquals('user', $permission->getRole());
+        $this->assertEquals('123', $permission->getIdentifier());
+        $this->assertEmpty($permission->getDimension());
+        $this->assertEquals('name', $permission->getColumn());
+    }
+
+    /**
+     * The role ends at its closing quote, whatever spacing the caller put after the comma.
+     *
+     * These strings arrive from API clients, not only from toString(). Matching the canonical
+     * spacing alone read read("any","name") as the role any","name -- a role matching nobody,
+     * reported as "Role "any","name" is not allowed" for input that is perfectly reasonable.
+     *
+     * @throws \Exception
+     */
+    #[DataProvider('spacings')]
+    public function test_column_tolerates_spacing(string $permission): void
+    {
+        $parsed = Permission::parse($permission);
+
+        $this->assertEquals('any', $parsed->getRole());
+        $this->assertEquals('name', $parsed->getColumn());
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function spacings(): array
+    {
+        return [
+            'canonical' => ['read("any", "name")'],
+            'no space' => ['read("any","name")'],
+            'space before the comma' => ['read("any" , "name")'],
+            'two spaces after' => ['read("any",  "name")'],
+        ];
+    }
+
+    /**
+     * A second argument that is not a quoted column is malformed, not a role with a quote in it.
+     *
+     * @throws \Exception
+     */
+    public function test_a_malformed_second_argument_is_rejected(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid permission');
+
+        Permission::parse('read("any" "name")');
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_column_must_not_be_empty(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Column must not be empty');
+
+        Permission::parse('read("any", "")');
+    }
+
+    /**
+     * Every builder takes the column, so a caller never has to assemble the string by hand.
+     */
+    public function test_column_builders(): void
+    {
+        $this->assertEquals('read("any", "name")', Permission::read(Role::any(), 'name'));
+        $this->assertEquals('update("any", "name")', Permission::update(Role::any(), 'name'));
+
+        $this->assertEquals('read("any")', Permission::read(Role::any()));
+
+        // create(), delete() and write() take the argument too -- a builder renders what it is
+        // handed -- but the validator refuses all three, because a column narrows neither a row
+        // brought into being nor one removed.
+        $this->assertEquals('create("any", "name")', Permission::create(Role::any(), 'name'));
+        $this->assertEquals('delete("any", "name")', Permission::delete(Role::any(), 'name'));
+        $this->assertEquals('write("any", "name")', Permission::write(Role::any(), 'name'));
+    }
+
+    /**
+     * Expanding write() keeps the column: the aggregate is the same grant, narrowed the same way.
+     *
+     * @throws \Exception
+     */
+    /**
+     * Expanding a grant keeps its column. Shown through write(), which is the only type that
+     * expands -- the validator refuses a scoped write, so this is about the transform, not
+     * about a set anyone can store.
+     *
+     * @throws \Exception
+     */
+    public function test_aggregation_keeps_the_column(): void
+    {
+        $parsed = Permission::aggregate([Permission::write(Role::any(), 'salary')]);
+
+        $this->assertEquals([
+            'create("any", "salary")',
+            'update("any", "salary")',
+            'delete("any", "salary")',
+        ], $parsed);
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_a_wildcard_column_is_rejected(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Wildcard column "*" is not supported');
+
+        Permission::parse('read("any", "*")');
+    }
+
+    /**
+     * The form a read gate matches against: every grant with its column dropped.
+     *
+     * @throws \Exception
+     */
+    public function test_without_columns(): void
+    {
+        $this->assertSame(
+            ['read("any")', 'read("team:hr")', 'create("any")'],
+            Permission::withoutColumns([
+                'read("any", "name")',
+                'read("team:hr", "salary")',
+                'create("any")',
+            ]),
+        );
+    }
+
+    /**
+     * Two grants narrowing the same role to different columns admit that role once.
+     *
+     * @throws \Exception
+     */
+    public function test_without_columns_deduplicates(): void
+    {
+        $this->assertSame(
+            ['read("any")'],
+            Permission::withoutColumns(['read("any", "name")', 'read("any", "salary")']),
+        );
+    }
+
+    /**
+     * A set naming no column is its own projection, so a collection that does not use the
+     * feature stores exactly what it stores today.
+     *
+     * @throws \Exception
+     */
+    public function test_without_columns_leaves_unscoped_permissions_alone(): void
+    {
+        $permissions = ['read("any")', 'update("user:alice")', 'create("users")'];
+
+        $this->assertSame($permissions, Permission::withoutColumns($permissions));
+    }
+
+    /**
+     * @throws \Exception
+     */
+    public function test_has_columns(): void
+    {
+        $this->assertTrue(Permission::hasColumns(['create("any")', 'read("any", "name")']));
+        $this->assertFalse(Permission::hasColumns(['create("any")', 'read("any")']));
+        $this->assertFalse(Permission::hasColumns([]));
     }
 }

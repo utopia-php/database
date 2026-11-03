@@ -183,6 +183,8 @@ class Database
 
     private const string COLLECTION_DOCUMENT_SECURITY = Collection::DOCUMENT_SECURITY;
 
+    private const string COLLECTION_COLUMN_PERMISSIONS = Collection::COLUMN_PERMISSIONS;
+
     private const string INDEX_ATTRIBUTES = 'attributes';
 
     /**
@@ -200,6 +202,7 @@ class Database
         self::COLLECTION_ATTRIBUTES => true,
         self::COLLECTION_INDEXES => true,
         self::COLLECTION_DOCUMENT_SECURITY => true,
+        self::COLLECTION_COLUMN_PERMISSIONS => true,
     ];
 
     protected Adapter $adapter;
@@ -267,6 +270,9 @@ class Database
 
     /** @var Value<bool>|null */
     private ?Value $validation = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $columnPermissions = null;
 
     /** @var Value<bool>|null */
     private ?Value $datePreservation = null;
@@ -1351,6 +1357,29 @@ class Database
     }
 
     /**
+     * Run the callback accepting collection permissions that name a column.
+     *
+     * Off by default, and deliberately so until the column is enforced. A grant naming a column
+     * is recorded, and the role it names is admitted to the row -- which is what every gate
+     * matches -- but nothing yet limits that role to the column. So a grant written to narrow
+     * access currently widens it, and the only safe thing to do with a feature in that state is
+     * to make it unreachable by accident.
+     *
+     * Scoped to the callback rather than stored, because this gates writing such a grant, not
+     * holding one: a collection created through here keeps its grant, and keeps widening, until
+     * masking and query refusal land and the gate comes off.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withColumnPermissions(callable $callback): mixed
+    {
+        return $this->columnPermissions()->with(true, $callback);
+    }
+
+    /**
      * Run the callback without validation for the calling coroutine and the coroutines it starts.
      *
      * @template T
@@ -1635,6 +1664,7 @@ class Database
             preserveDates: $this->datePreservation()->get(),
             preserveSequence: $this->sequencePreservation()->get(),
             ignoreDuplicates: $this->ignoringDuplicates()->get(),
+            columnPermissions: $this->columnPermissions()->get(),
             requestTimestamp: $this->requestTimestamp()->get(),
             checkGrants: $this->grantChecking()->get(),
             rewriting: $this->rewriting()->get(),
@@ -1681,7 +1711,8 @@ class Database
         $rewritten = fn (): mixed => $this->rewriting()->with($snapshot->rewriting, $callback);
         $checked = fn (): mixed => $this->grantChecking()->with($snapshot->checkGrants, $rewritten);
         $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $checked);
-        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $timestamped);
+        $scoped = fn (): mixed => $this->columnPermissions()->with($snapshot->columnPermissions, $timestamped);
+        $deduplicated = fn (): mixed => $this->ignoringDuplicates()->with($snapshot->ignoreDuplicates, $scoped);
         $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
         $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
         $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);
@@ -1733,6 +1764,22 @@ class Database
     private function validation(): Value
     {
         return $this->validation ??= new Value(true);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function columnPermissions(): Value
+    {
+        return $this->columnPermissions ??= new Value(false);
+    }
+
+    /**
+     * Whether a collection's permissions may name one of its columns.
+     */
+    public function hasColumnPermissions(): bool
+    {
+        return $this->columnPermissions()->get();
     }
 
     /**
@@ -2657,6 +2704,7 @@ class Database
                 Attribute::string(self::COLLECTION_ATTRIBUTES, 1_000_000, filters: [Filter::Json]),
                 Attribute::string(self::COLLECTION_INDEXES, 1_000_000, filters: [Filter::Json]),
                 Attribute::boolean(self::COLLECTION_DOCUMENT_SECURITY, required: true),
+                Attribute::string(self::COLLECTION_COLUMN_PERMISSIONS, 1_000_000, default: [], filters: [Filter::Json]),
             ],
             documentSecurity: false,
             metadata: [Document::COLLECTION => self::METADATA],

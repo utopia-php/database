@@ -30,7 +30,7 @@ final class CollectionDefinitionTest extends TestCase
         $this->assertSame(Database::METADATA, $definition->getId());
         $this->assertSame(Database::METADATA, $definition->getAttribute(Document::COLLECTION));
         $this->assertSame('collections', $definition->name());
-        $this->assertSame(['name', 'attributes', 'indexes', 'documentSecurity'], $this->keys($definition));
+        $this->assertSame(['name', 'attributes', 'indexes', 'documentSecurity', 'columnPermissions'], $this->keys($definition));
     }
 
     public function testCollectionDefinitionAttributeTypes(): void

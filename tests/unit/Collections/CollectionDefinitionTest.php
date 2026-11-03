@@ -36,6 +36,7 @@ final class CollectionDefinitionTest extends TestCase
             'attributes' => [ColumnType::String, 1_000_000, false, ['json']],
             'indexes' => [ColumnType::String, 1_000_000, false, ['json']],
             'documentSecurity' => [ColumnType::Boolean, null, true, []],
+            'columnPermissions' => [ColumnType::String, 1_000_000, false, ['json']],
         ], $attributes);
     }
 
@@ -48,7 +49,7 @@ final class CollectionDefinitionTest extends TestCase
         $second = Database::collectionDefinition();
 
         $this->assertSame('collections', $second->name());
-        $this->assertCount(4, $second->attributes());
+        $this->assertCount(5, $second->attributes());
     }
 
     public function testGetCollectionReturnsTheDefinitionForTheMetadataCollection(): void

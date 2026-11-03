@@ -4,6 +4,7 @@ namespace Utopia\Database\Builder;
 
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Query\Builder\Statement;
+use Utopia\Query\Method;
 use Utopia\Query\Query;
 
 /**
@@ -82,6 +83,32 @@ trait ScopesCollections
         $this->requireUnbound("insert into table '{$table}'");
 
         return parent::into($table);
+    }
+
+    /**
+     * The scope's tenant condition is ANDed with every raw condition, so a raw condition is enclosed in parentheses:
+     * an OR in it would otherwise bind looser than that AND and read or change another tenant's rows.
+     *
+     * @param  list<mixed>  $bindings
+     */
+    #[\Override]
+    public function whereRaw(string $expression, array $bindings = []): static
+    {
+        return parent::whereRaw('('.$expression.')', $bindings);
+    }
+
+    #[\Override]
+    public function compileFilter(Query $query): string
+    {
+        return $this->enclose($query, parent::compileFilter($query));
+    }
+
+    /**
+     * A raw filter enclosed in parentheses, for the same reason as whereRaw().
+     */
+    private function enclose(Query $query, string $sql): string
+    {
+        return $query->getMethod() === Method::Raw && $query->getAttribute() !== '' ? '('.$sql.')' : $sql;
     }
 
     #[\Override]

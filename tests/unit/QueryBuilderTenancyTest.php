@@ -242,6 +242,50 @@ final class QueryBuilderTenancyTest extends TestCase
         );
     }
 
+    /**
+     * The tenant condition is ANDed with a raw condition, and AND binds tighter than an OR inside it: unless the raw
+     * condition is enclosed, `name = 'one-a1' OR name = 'two-a1'` also reads tenant two's author.
+     */
+    public function testAnOrInARawConditionReadsOnlyTheSelectedTenantsRows(): void
+    {
+        $database = $this->shared();
+        $database->setTenant(self::FIRST);
+        $condition = 'name = ? OR name = ?';
+        $names = ['one-a1', 'two-a1'];
+
+        $whereRaw = $database->getAuthorization()->skip(
+            fn () => $this->builder($database)->select(['name'])->whereRaw($condition, $names)->execute(),
+        );
+        $filter = $database->getAuthorization()->skip(
+            fn () => $this->builder($database)->select(['name'])->filter([Query::raw($condition, $names)])->execute(),
+        );
+
+        $this->assertSame(['one-a1'], $this->names($whereRaw), 'whereRaw()');
+        $this->assertSame(['one-a1'], $this->names($filter), 'A raw filter');
+    }
+
+    public function testARawDeleteWithAnOrRemovesOnlyTheSelectedTenantsRows(): void
+    {
+        $database = $this->shared();
+        $database->setTenant(self::FIRST);
+
+        $deleted = $database->getAuthorization()->skip(
+            fn () => $this->builder($database, self::REVIEWS)->whereRaw('stars = ? OR stars = ?', [5, 1])->delete()->execute(),
+        );
+
+        $this->assertSame(1, $deleted, 'Only tenant one\'s "r1" has 5 stars; tenant two\'s "r1" has 1');
+        $this->assertSame(
+            [
+                'r1' => [self::SECOND => 1],
+                'r2' => [self::FIRST => 4],
+                'r3' => [self::FIRST => 3],
+                'r4' => [self::FIRST => 2],
+                'stale' => [self::NO_TENANT => 9],
+            ],
+            $this->stored(self::REVIEWS, 'stars'),
+        );
+    }
+
     public function testWithoutATenantTheBuilderReadsAndWritesNothing(): void
     {
         $database = $this->shared();
@@ -580,6 +624,26 @@ final class QueryBuilderTenancyTest extends TestCase
         \sort($rows);
 
         return $rows;
+    }
+
+    /**
+     * The authors' names a read returned, sorted.
+     *
+     * @return list<string>
+     */
+    private function names(mixed $documents): array
+    {
+        $this->assertIsArray($documents);
+        $names = [];
+        foreach ($documents as $document) {
+            $this->assertInstanceOf(Document::class, $document);
+            $name = $document->getAttribute('name');
+            $this->assertIsString($name);
+            $names[] = $name;
+        }
+        \sort($names);
+
+        return $names;
     }
 
     /**

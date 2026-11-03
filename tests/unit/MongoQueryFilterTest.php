@@ -294,6 +294,45 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertSame(['a__dot__b'], $this->fieldNames($this->calls['aggregate'][0] ?? []), 'count() must address the stored field name of a dotted attribute in every group and exists');
     }
 
+    public function testDollarNamesInExistsAndElemMatchAreMatchedAsFields(): void
+    {
+        $queries = [
+            Query::exists(['$comment', '$id']),
+            Query::elemMatch('$where', [Query::equal('n', [1])]),
+        ];
+
+        $adapter = $this->createAdapter();
+        $adapter->find(new Document(['$id' => self::COLLECTION]), $queries);
+        $adapter->count(new Document(['$id' => self::COLLECTION]), $queries);
+
+        foreach (['find' => $this->calls['find'][0] ?? [], 'count' => $this->calls['aggregate'][0] ?? []] as $method => $filter) {
+            $this->assertSame(
+                ['_comment', '_uid', '_where', 'n'],
+                $this->fieldNames($filter),
+                $method.'() must match a field named with a $, never run it as the query operator of that name',
+            );
+        }
+    }
+
+    public function testACursorComparesTheValuesOfItsEarlierOrdersAsValues(): void
+    {
+        $this->createAdapter()->find(
+            new Document(['$id' => self::COLLECTION]),
+            orderAttributes: ['name', '$sequence'],
+            orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
+            cursor: ['name' => ['$gt' => ''], '$sequence' => 'sequence'],
+        );
+
+        $this->assertSame(
+            [
+                ['$and' => [['name' => ['$gt' => ['$gt' => '']]]]],
+                ['$and' => [['name' => ['$eq' => ['$gt' => '']]], ['_id' => ['$gt' => 'sequence']]]],
+            ],
+            $this->calls['find'][0]['$or'] ?? null,
+            'A stored value shaped like an operator must be compared, not run as the operator',
+        );
+    }
+
     public function testRandomOrderIsRejectedAsAQueryError(): void
     {
         $this->expectException(QueryException::class);

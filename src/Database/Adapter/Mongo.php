@@ -2459,8 +2459,9 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                     $originalPrev = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
                     $tmp = $cursor[$originalPrev];
+                    // $eq, so a stored value shaped like {"$gt": ""} is compared, not run as an operator
                     $andConditions[] = [
-                        $prevAttr => $tmp,
+                        $prevAttr => ['$eq' => $tmp],
                     ];
                 }
 
@@ -3506,7 +3507,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                     /** @var array<Query> $elemMatchValues */
                     $elemMatchValues = $query->getValues();
                     $filters[$separator][] = [
-                        $query->getAttribute() => [
+                        $this->filterField($query->getAttribute()) => [
                             '$elemMatch' => $this->buildFilters($elemMatchValues, $separator),
                         ],
                     ];
@@ -3550,22 +3551,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $query->setValues($values);
         }
 
-        if ($query->getAttribute() === Document::ID) {
-            $query->setAttribute(Storage::UID);
-        } elseif ($query->getAttribute() === Document::SEQUENCE) {
-            $query->setAttribute(Storage::SEQUENCE);
-            $values = $query->getValues();
-            foreach ($values as $k => $v) {
-                $values[$k] = $v;
-            }
-            $query->setValues($values);
-        } elseif ($query->getAttribute() === Document::CREATED_AT) {
-            $query->setAttribute(Storage::CREATED_AT);
-        } elseif ($query->getAttribute() === Document::UPDATED_AT) {
-            $query->setAttribute(Storage::UPDATED_AT);
-        } elseif (\str_starts_with($query->getAttribute(), '$')) {
-            $query->setAttribute($this->escapeMongoFieldName($query->getAttribute()));
-        }
+        $query->setAttribute($this->filterField($query->getAttribute()));
 
         $attribute = $query->getAttribute();
         $operator = $this->getQueryOperator($query->getMethod());
@@ -3684,7 +3670,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $existsOr = \is_array($filter['$or'] ?? null) ? $filter['$or'] : [];
             foreach ($query->getValues() as $existsAttribute) {
                 $existsAttrStr = \is_string($existsAttribute) ? $existsAttribute : (\is_scalar($existsAttribute) ? (string) $existsAttribute : '');
-                $existsOr[] = [$existsAttrStr => [$operator => $value]];
+                $existsOr[] = [$this->filterField($existsAttrStr) => [$operator => $value]];
             }
             $filter['$or'] = $existsOr;
         } else {
@@ -3695,6 +3681,22 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         }
 
         return $filter;
+    }
+
+    /**
+     * The stored field a filter names: $id, $sequence and the timestamps by their storage fields, and any other name
+     * starting with $ escaped, so it is matched as a field and never read as a query operator such as $where or
+     * $comment.
+     */
+    private function filterField(string $attribute): string
+    {
+        return match ($attribute) {
+            Document::ID => Storage::UID,
+            Document::SEQUENCE => Storage::SEQUENCE,
+            Document::CREATED_AT => Storage::CREATED_AT,
+            Document::UPDATED_AT => Storage::UPDATED_AT,
+            default => \str_starts_with($attribute, '$') ? $this->escapeMongoFieldName($attribute) : $attribute,
+        };
     }
 
     /**

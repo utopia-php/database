@@ -73,6 +73,9 @@ class SQLite extends SQL
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const string FTS_TABLE_SUFFIX = '_fts';
 
+    /** Length of the hashed attribute set between the FTS5 table prefix and suffix. */
+    private const int FTS_TABLE_KEY_LENGTH = 16;
+
     /** AFTER INSERT trigger suffix on the parent collection. */
     private const string FTS_TRIGGER_INSERT = 'ai';
 
@@ -669,7 +672,7 @@ class SQLite extends SQL
 
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
-            $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
+            $sql = 'DROP TABLE IF EXISTS '.$this->quote($ftsTable);
             $this->execute($this->prepare($sql, event: Event::CollectionDelete));
         }
 
@@ -935,7 +938,7 @@ class SQLite extends SQL
     {
         $names = \array_map($this->filter(...), \is_array($attributes) ? $attributes : [$attributes]);
         \sort($names);
-        $key = \substr(\hash('sha1', \implode("\0", $names)), 0, 16);
+        $key = \substr(\hash('sha1', \implode("\0", $names)), 0, self::FTS_TABLE_KEY_LENGTH);
 
         return $this->getFulltextTablePrefix($collection) . $key . self::FTS_TABLE_SUFFIX;
     }
@@ -1105,9 +1108,9 @@ class SQLite extends SQL
         $this->startTransaction();
         try {
             foreach ($triggerSuffixes as $suffix) {
-                $this->execute($this->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`", event: $event));
+                $this->execute($this->prepare('DROP TRIGGER IF EXISTS '.$this->quote($ftsTable.'_'.$suffix), event: $event));
             }
-            $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
+            $sql = 'DROP TABLE IF EXISTS '.$this->quote($ftsTable);
             $this->execute($this->prepare($sql, event: $event));
             $this->commitTransaction();
         } catch (\Throwable $e) {
@@ -1168,14 +1171,18 @@ class SQLite extends SQL
     {
         // ESCAPE '\\' so the literal `_` separators in the prefix don't
         // act as LIKE wildcards (e.g. `db_users_` matching `db_usersA_`).
+        // One unescaped `_` per character of the hashed key, never `%`: the
+        // prefix of collection `a` also starts the tables of collection
+        // `a_b`, which a search on `a` would otherwise read and a delete of
+        // `a` would otherwise drop.
         $statement = $this->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
-              AND name LIKE :_prefix ESCAPE '\\'
-              AND name LIKE :_suffix ESCAPE '\\'
+              AND name LIKE :_name ESCAPE '\\'
         ");
-        $statement->bindValue(':_prefix', $this->escapeLikePattern($this->getFulltextTablePrefix($collection)) . '%');
-        $statement->bindValue(':_suffix', '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
+        $statement->bindValue(':_name', $this->escapeLikePattern($this->getFulltextTablePrefix($collection))
+            . \str_repeat('_', self::FTS_TABLE_KEY_LENGTH)
+            . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX));
         $statement->execute();
         $tables = $statement->fetchAll(PDO::FETCH_COLUMN);
         $statement->closeCursor();
@@ -1697,7 +1704,8 @@ class SQLite extends SQL
             );
         }
 
-        $subquery = "{$quotedAlias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
+        $quotedTable = $this->quote($ftsTable);
+        $subquery = "{$quotedAlias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM {$quotedTable} WHERE {$quotedTable} MATCH ?)";
 
         return new Expression(
             $method === Method::Search ? $subquery : "NOT ({$subquery})",
@@ -2700,7 +2708,7 @@ class SQLite extends SQL
      */
     private function getIndexColumns(string $index): array
     {
-        $statement = $this->prepare("PRAGMA index_info(`{$index}`)", event: Event::CollectionRead);
+        $statement = $this->prepare('PRAGMA index_info('.$this->quote($index).')', event: Event::CollectionRead);
         $this->execute($statement);
         $rows = $statement->fetchAll();
         $statement->closeCursor();
@@ -2735,7 +2743,7 @@ class SQLite extends SQL
 
         $indexes = [];
         foreach ($tables as $fulltextTable) {
-            $statement = $this->prepare("PRAGMA table_info(`{$fulltextTable}`)");
+            $statement = $this->prepare('PRAGMA table_info('.$this->quote($fulltextTable).')');
             $statement->execute();
             $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
             $statement->closeCursor();
@@ -2830,7 +2838,7 @@ class SQLite extends SQL
     {
         $map = [];
         foreach ($this->findFulltextTables($collection) as $table) {
-            $info = $this->prepare("PRAGMA table_info(`{$table}`)");
+            $info = $this->prepare('PRAGMA table_info('.$this->quote($table).')');
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);
             $info->closeCursor();

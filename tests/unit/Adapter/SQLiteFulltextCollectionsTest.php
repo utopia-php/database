@@ -72,6 +72,28 @@ final class SQLiteFulltextCollectionsTest extends TestCase
         $this->assertSame(['second', 'third'], $this->database->getAuthorization()->skip(fn () => $this->search('notes_private', 'secret')));
     }
 
+    public function testDeletingACollectionKeepsACollectionNamedLikeItsIndex(): void
+    {
+        $lookalike = 'notes_0123456789abcdef_fts';
+        $this->database->createCollection(Collection::create(
+            id: $lookalike,
+            attributes: [Attribute::string('body', size: 128)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $this->database->createDocument($lookalike, new Document(['$id' => 'kept', 'body' => 'an ordinary row']));
+
+        $this->assertSame(['first', 'second'], $this->search('notes', 'public'));
+
+        $this->database->deleteCollection('notes');
+
+        $this->assertSame(
+            ['kept'],
+            \array_map(static fn (Document $document): string => $document->getId(), $this->database->find($lookalike)),
+            'Only an FTS5 table is an index of notes, never an ordinary table that shares the shape of its name',
+        );
+    }
+
     /**
      * @return list<string>
      */

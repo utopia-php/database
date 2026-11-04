@@ -12,6 +12,7 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Builder\Postgres as PostgresBuilder;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -262,6 +263,17 @@ final class QueryBuilderTenancyTest extends TestCase
 
         $this->assertSame(['one-a1'], $this->names($whereRaw), 'whereRaw()');
         $this->assertSame(['one-a1'], $this->names($filter), 'A raw filter');
+    }
+
+    public function testAnOrInAPostgresRawFilterIsEnclosed(): void
+    {
+        $statement = (new PostgresBuilder())
+            ->from(self::AUTHORS)
+            ->select(['name'])
+            ->filter([Query::raw('name = ? OR name = ?', ['one-a1', 'two-a1']), Query::equal(Storage::TENANT, [self::FIRST])])
+            ->build();
+
+        $this->assertSame('SELECT "name" FROM "authors" WHERE (name = ? OR name = ?) AND "_tenant" IN (?)', $statement->query);
     }
 
     public function testARawDeleteWithAnOrRemovesOnlyTheSelectedTenantsRows(): void

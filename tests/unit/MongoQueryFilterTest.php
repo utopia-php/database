@@ -333,6 +333,51 @@ final class MongoQueryFilterTest extends TestCase
         );
     }
 
+    public function testDollarNamesInOrdersCursorsAndSelectionsAreTheirStoredFields(): void
+    {
+        $this->createAdapter()->find(
+            new Document(['$id' => self::COLLECTION]),
+            [Query::select(['$rank', 'title'])],
+            orderAttributes: ['$rank', '$sequence'],
+            orderTypes: [OrderDirection::Desc, OrderDirection::Asc],
+            cursor: ['$rank' => 2, '$sequence' => 'sequence'],
+        );
+
+        $options = $this->calls['findOptions'][0] ?? [];
+
+        $this->assertSame(['_rank' => -1, '_id' => 1], $options['sort'] ?? null, 'A $-prefixed order must sort by the field it is stored as');
+        $this->assertSame(
+            [
+                ['$and' => [['_rank' => ['$lt' => 2]]]],
+                ['$and' => [['_rank' => ['$eq' => 2]], ['_id' => ['$gt' => 'sequence']]]],
+            ],
+            $this->calls['find'][0]['$or'] ?? null,
+            'A cursor must compare a $-prefixed order by the field it is stored as',
+        );
+        $projection = $options['projection'] ?? null;
+        $this->assertIsArray($projection);
+        $this->assertArrayHasKey('_rank', $projection, 'A $-prefixed selection must project the field it is stored as');
+        $this->assertArrayNotHasKey('$rank', $projection);
+        $this->assertArrayHasKey('title', $projection);
+    }
+
+    public function testABulkUpdateNeverSetsAStorageFieldByItsDollarName(): void
+    {
+        $this->createAdapter()->updateDocuments(
+            new Document(['$id' => self::COLLECTION]),
+            new Document(['$uid' => 'renamed', '_tenant' => 2, '$where' => 'kept', 'title' => 'updated']),
+            [new Document(['$sequence' => 'sequence'])],
+        );
+
+        $set = $this->calls['update'][0]['$set'] ?? null;
+        $this->assertIsArray($set);
+
+        $this->assertArrayNotHasKey('_uid', $set, 'A $uid update must not rename the documents');
+        $this->assertArrayNotHasKey('_tenant', $set);
+        $this->assertSame('kept', $set['_where'] ?? null, 'Any other $-prefixed field is still written');
+        $this->assertSame('updated', $set['title'] ?? null);
+    }
+
     public function testRandomOrderIsRejectedAsAQueryError(): void
     {
         $this->expectException(QueryException::class);
@@ -474,6 +519,7 @@ final class MongoQueryFilterTest extends TestCase
             public function find(string $collection, array $filters = [], array $options = []): stdClass
             {
                 ($this->record)('find', $filters);
+                ($this->record)('findOptions', $options);
 
                 return (object) ['cursor' => (object) ['firstBatch' => $this->rows, 'id' => 0]];
             }

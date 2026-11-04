@@ -308,6 +308,92 @@ trait SchemalessTests
         $database->deleteCollection($colName);
     }
 
+    /**
+     * A `$`-prefixed key is stored with its `$` swapped for `_`, so `$uid` would land on the `_uid` field that holds the
+     * document's own $id, with validation on, since the structure only refuses the stored names themselves.
+     */
+    public function testSchemalessDocumentCannotWriteAStorageFieldThroughItsDollarName(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $colName = uniqid('schemaless_storage_alias');
+        $database->createCollection(Collection::create(
+            id: $colName,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+        ));
+
+        $created = $database->createDocument($colName, new Document(['$id' => 'kept', '$uid' => 'created', 'title' => 'kept']));
+        $this->assertSame('kept', $created->getId());
+        $this->assertFalse($created->offsetExists('$uid'), 'A created document must not report a field that was never stored');
+        $database->createDocument($colName, new Document(['$id' => 'other', 'title' => 'other']));
+
+        $database->updateDocuments($colName, new Document(['$uid' => 'renamed', 'title' => 'updated']));
+
+        $this->assertTrue($database->getDocument($colName, 'renamed')->isEmpty(), 'A bulk update must not rename the documents');
+        foreach (['kept', 'other'] as $id) {
+            $updated = $database->getDocument($colName, $id);
+            $this->assertSame($id, $updated->getId());
+            $this->assertSame('updated', $updated->getAttribute('title'));
+        }
+
+        $database->upsertDocuments($colName, [
+            new Document(['$id' => 'kept', '$uid' => 'moved', 'title' => 'upserted']),
+            new Document(['$id' => 'fresh', '$uid' => 'elsewhere', 'title' => 'fresh']),
+        ]);
+
+        $this->assertTrue($database->getDocument($colName, 'moved')->isEmpty(), 'An upsert must not rename an existing document');
+        $this->assertTrue($database->getDocument($colName, 'elsewhere')->isEmpty(), 'An upsert must not insert a document under another id');
+        $this->assertSame('upserted', $database->getDocument($colName, 'kept')->getAttribute('title'));
+        $this->assertSame('fresh', $database->getDocument($colName, 'fresh')->getAttribute('title'));
+        $this->assertSame(3, $database->count($colName));
+
+        $database->deleteCollection($colName);
+    }
+
+    /**
+     * A `$`-prefixed field is stored as `_`-prefixed, and orders, cursors and selections must read it by that name.
+     */
+    public function testSchemalessDollarFieldIsOrderedPagedAndSelectedByItsStoredName(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $colName = uniqid('schemaless_dollar_field');
+        $database->createCollection(Collection::create(
+            id: $colName,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        foreach (['b' => 2, 'c' => 3, 'a' => 1] as $id => $rank) {
+            $database->createDocument($colName, new Document(['$id' => $id, '$rank' => $rank]));
+        }
+
+        $ordered = $database->find($colName, [Query::orderDesc('$rank')]);
+        $this->assertSame(['c', 'b', 'a'], \array_map(fn (Document $document) => $document->getId(), $ordered));
+
+        $first = $database->getDocument($colName, 'a');
+        $paged = $database->find($colName, [Query::orderAsc('$rank'), Query::cursorAfter($first)]);
+        $this->assertSame(['b', 'c'], \array_map(fn (Document $document) => $document->getId(), $paged));
+
+        $selected = $database->getDocument($colName, 'b', [Query::select(['$rank'])]);
+        $this->assertSame(2, $selected->getAttribute('$rank'));
+
+        $database->deleteCollection($colName);
+    }
+
     public function testSchemalessDecrement(): void
     {
         /** @var Database $database */

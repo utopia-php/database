@@ -1616,7 +1616,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $document->removeAttribute(Document::SEQUENCE);
 
-        $record = $this->replaceCharacters('$', '_', $this->withoutStorageKeys((array) $document));
+        $record = $this->replaceCharacters('$', '_', (array) $this->withoutStorageAttributes($document));
         $record = $this->decorateRow($record, $document);
 
         if (! empty($sequence)) {
@@ -1661,7 +1661,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 throw new DatabaseException('All documents must have an sequence if one is set');
             }
 
-            $record = $this->replaceCharacters('$', '_', $this->withoutStorageKeys((array) $document));
+            $record = $this->replaceCharacters('$', '_', (array) $this->withoutStorageAttributes($document));
             $record = $this->decorateRow($record, $document);
 
             if (! empty($sequence)) {
@@ -2431,8 +2431,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         $sortOptions = [];
 
         foreach ($orderAttributes as $i => $originalAttribute) {
-            $attribute = $this->getInternalKeyForAttribute($originalAttribute);
-            $attribute = $this->filter($attribute);
+            $attribute = $this->orderField($originalAttribute);
 
             $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
             $direction = $orderType;
@@ -2457,7 +2456,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 $andConditions = [];
                 for ($j = 0; $j < $i; $j++) {
                     $originalPrev = $orderAttributes[$j];
-                    $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
+                    $prevAttr = $this->orderField($originalPrev);
                     $tmp = $cursor[$originalPrev];
                     // $eq, so a stored value shaped like {"$gt": ""} is compared, not run as an operator
                     $andConditions[] = [
@@ -3272,16 +3271,39 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
-     * A document's fields without those named like a storage field. A schemaless document holds any key, and one
-     * such as `_id`, `_tenant` or `_permissions` would otherwise be written over the field the storage keeps for the
-     * document's own $sequence, $tenant or $permissions.
+     * A document's fields without those stored over a storage field. A schemaless document holds any key, and one
+     * such as `_id`, `_tenant` or `_permissions`, or `$uid`, which the `$` to `_` swap stores as `_uid`, would
+     * otherwise be written over the field the storage keeps for the document's own $id, $sequence, $tenant or
+     * $permissions.
      *
      * @param  array<mixed>  $fields
      * @return array<mixed>
      */
     private function withoutStorageKeys(array $fields): array
     {
-        return \array_diff_key($fields, Storage::columnMap());
+        return \array_filter($fields, $this->isWritableField(...), \ARRAY_FILTER_USE_KEY);
+    }
+
+    private function isWritableField(int|string $key): bool
+    {
+        if (isset(Storage::attributeMap()[$key])) {
+            return true;
+        }
+
+        $stored = \array_key_first($this->replaceCharacters('$', '_', [$key => null]));
+
+        return ! Storage::isReserved((string) $stored);
+    }
+
+    private function withoutStorageAttributes(Document $document): Document
+    {
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (! $this->isWritableField($key)) {
+                $document->removeAttribute((string) $key);
+            }
+        }
+
+        return $document;
     }
 
     /**
@@ -3699,6 +3721,11 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         };
     }
 
+    private function orderField(string $attribute): string
+    {
+        return $this->filter($this->filterField($attribute));
+    }
+
     /**
      * @throws Exception
      */
@@ -3808,7 +3835,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
                 continue;
             }
 
-            $projection[$selection] = 1;
+            $projection[$this->filterField($selection)] = 1;
         }
 
         $projection[Storage::UID] = 1;

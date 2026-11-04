@@ -365,6 +365,43 @@ class StructureTest extends TestCase
         }
     }
 
+    public function test_reserved_keys_with_defined_attributes(): void
+    {
+        $collection = $this->collection;
+        /** @var array<int, array<string, mixed>> $attributes */
+        $attributes = $collection['attributes'];
+        $attributes[] = [
+            '$id' => Storage::TENANT,
+            'type' => ColumnType::String->value,
+            'size' => 64,
+            'required' => false,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ];
+        $collection['attributes'] = $attributes;
+
+        $validator = new Structure(
+            new Document($collection),
+            Profiles::of(capabilities: [Capability::DefinedAttributes, Capability::UnsignedBigInt]),
+        );
+
+        $this->assertFalse($validator->isValid(new Document([
+            '$collection' => Id::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            Storage::TENANT => 'declared, but stored over the document\'s own tenant',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ])));
+        $this->assertSame('Invalid document structure: Reserved attribute: "'.Storage::TENANT.'"', $validator->getDescription());
+    }
+
     public function test_integer_as_string(): void
     {
         $validator = new Structure(

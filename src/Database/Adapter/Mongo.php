@@ -3726,6 +3726,12 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
         return $this->filter($this->filterField($attribute));
     }
 
+    #[\Override]
+    protected function writableColumn(string $attribute): string
+    {
+        return parent::writableColumn($this->filterField($attribute));
+    }
+
     /**
      * @throws Exception
      */

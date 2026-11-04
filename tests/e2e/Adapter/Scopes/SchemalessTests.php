@@ -354,11 +354,17 @@ trait SchemalessTests
         $this->assertSame('fresh', $database->getDocument($colName, 'fresh')->getAttribute('title'));
         $this->assertSame(3, $database->count($colName));
 
+        $database->updateDocument($colName, 'other', new Document(['$uid' => 'renamed', 'title' => 'single']));
+
+        $this->assertTrue($database->getDocument($colName, 'renamed')->isEmpty(), 'A single update must not rename the document');
+        $this->assertSame('single', $database->getDocument($colName, 'other')->getAttribute('title'));
+
         $database->deleteCollection($colName);
     }
 
     /**
-     * A `$`-prefixed field is stored as `_`-prefixed, and orders, cursors and selections must read it by that name.
+     * A `$`-prefixed field is stored as `_`-prefixed, and orders, cursors, selections and increases must address it by
+     * that name.
      */
     public function testSchemalessDollarFieldIsOrderedPagedAndSelectedByItsStoredName(): void
     {
@@ -374,7 +380,7 @@ trait SchemalessTests
         $colName = uniqid('schemaless_dollar_field');
         $database->createCollection(Collection::create(
             id: $colName,
-            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
         ));
 
         foreach (['b' => 2, 'c' => 3, 'a' => 1] as $id => $rank) {
@@ -390,6 +396,12 @@ trait SchemalessTests
 
         $selected = $database->getDocument($colName, 'b', [Query::select(['$rank'])]);
         $this->assertSame(2, $selected->getAttribute('$rank'));
+
+        $database->increaseDocumentAttribute($colName, 'a', '$rank', 10);
+        $this->assertSame(11, $database->getDocument($colName, 'a')->getAttribute('$rank'), 'An increase must change the stored field');
+
+        $database->upsertDocuments($colName, [new Document(['$id' => 'c', '$rank' => 5])], increase: '$rank');
+        $this->assertSame(8, $database->getDocument($colName, 'c')->getAttribute('$rank'), 'An upsert increase must add to the stored field');
 
         $database->deleteCollection($colName);
     }

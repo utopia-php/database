@@ -10,6 +10,7 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
@@ -378,6 +379,40 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertSame('updated', $set['title'] ?? null);
     }
 
+    public function testAnIncreaseOfADollarNameChangesTheFieldItIsStoredAs(): void
+    {
+        $this->createAdapter()->increaseDocumentAttribute(
+            new Document(['$id' => self::COLLECTION]),
+            'record',
+            '$rank',
+            1,
+            '2000-01-01 00:00:00.000',
+        );
+
+        $updates = $this->calls['query'][0]['updates'] ?? null;
+        $this->assertIsArray($updates);
+        $this->assertIsArray($updates[0]);
+        $this->assertIsArray($updates[0]['u']);
+        $this->assertIsArray($updates[0]['u'][0]);
+        $set = $updates[0]['u'][0]['$set'] ?? null;
+        $this->assertIsArray($set);
+        $this->assertArrayHasKey('_rank', $set, 'A $-prefixed field must be increased where it is stored');
+        $this->assertArrayNotHasKey('rank', $set);
+    }
+
+    public function testAnIncreaseOfADollarAliasOfAStorageFieldIsRefused(): void
+    {
+        $this->expectException(NotFoundException::class);
+
+        $this->createAdapter()->increaseDocumentAttribute(
+            new Document(['$id' => self::COLLECTION]),
+            'record',
+            '$uid',
+            1,
+            '2000-01-01 00:00:00.000',
+        );
+    }
+
     public function testRandomOrderIsRejectedAsAQueryError(): void
     {
         $this->expectException(QueryException::class);
@@ -589,6 +624,8 @@ final class MongoQueryFilterTest extends TestCase
             #[\Override]
             public function query(array $command, ?string $db = null): stdClass
             {
+                ($this->record)('query', $command);
+
                 return (object) ['cursor' => (object) ['firstBatch' => $this->created]];
             }
         };

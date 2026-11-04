@@ -1179,7 +1179,7 @@ class SQLite extends SQL
             SELECT name FROM sqlite_master
             WHERE type='table'
               AND name LIKE :_name ESCAPE '\\'
-              AND sql LIKE 'CREATE VIRTUAL TABLE %'
+              AND sql LIKE 'CREATE VIRTUAL TABLE % USING fts5(%'
         ");
         $statement->bindValue(':_name', $this->escapeLikePattern($this->getFulltextTablePrefix($collection))
             . \str_repeat('_', self::FTS_TABLE_KEY_LENGTH)

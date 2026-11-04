@@ -28,13 +28,16 @@ final class SQLiteFulltextCollectionsTest extends TestCase
 
     private Database $database;
 
+    private PDO $pdo;
+
     #[\Override]
     protected function setUp(): void
     {
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
 
-        $this->database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $this->pdo = new PDO('sqlite::memory:');
+        $this->database = new Database(new SQLite($this->pdo), new Cache(new NoCache()));
         $this->database
             ->setDatabase(self::NAMESPACE)
             ->setNamespace(self::NAMESPACE)
@@ -84,14 +87,45 @@ final class SQLiteFulltextCollectionsTest extends TestCase
         $this->database->createDocument($lookalike, new Document(['$id' => 'kept', 'body' => 'an ordinary row']));
 
         $this->assertSame(['first', 'second'], $this->search('notes', 'public'));
+        $this->assertCount(1, $this->fulltextTables('notes'));
 
         $this->database->deleteCollection('notes');
 
+        $this->assertSame([], $this->fulltextTables('notes'), 'Deleting notes must drop its own index');
         $this->assertSame(
             ['kept'],
             \array_map(static fn (Document $document): string => $document->getId(), $this->database->find($lookalike)),
             'Only an FTS5 table is an index of notes, never an ordinary table that shares the shape of its name',
         );
+    }
+
+    public function testDeletingACollectionKeepsAnotherVirtualTableNamedLikeItsIndex(): void
+    {
+        $lookalike = self::NAMESPACE.'_notes_0123456789abcdef_fts';
+        $this->pdo->exec('CREATE VIRTUAL TABLE "'.$lookalike.'" USING rtree(id, low, high)');
+
+        $this->database->deleteCollection('notes');
+
+        $this->assertSame([], $this->fulltextTables('notes'));
+        $statement = $this->pdo->query("SELECT name FROM sqlite_master WHERE name = '{$lookalike}'");
+        $this->assertNotFalse($statement);
+        $this->assertSame([$lookalike], $statement->fetchAll(PDO::FETCH_COLUMN), 'Only an FTS5 table is an index of notes');
+    }
+
+    /**
+     * The FTS5 tables left for a collection, by the shape of their name.
+     *
+     * @return list<mixed>
+     */
+    private function fulltextTables(string $collection): array
+    {
+        $statement = $this->pdo->query(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND sql LIKE 'CREATE VIRTUAL TABLE % USING fts5(%'"
+            ." AND name LIKE '".self::NAMESPACE.'\\_'.$collection.'\\_'.\str_repeat('_', 16)."\\_fts' ESCAPE '\\'",
+        );
+        $this->assertNotFalse($statement);
+
+        return \array_values($statement->fetchAll(PDO::FETCH_COLUMN));
     }
 
     /**

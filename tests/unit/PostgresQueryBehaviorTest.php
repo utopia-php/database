@@ -119,7 +119,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame(0.25, $documents[0]->getAttribute(Document::DISTANCE));
         $this->assertMatchesRegularExpression('/SELECT \*, .*::text AS "'.Storage::DISTANCE.'"/', $sql);
-        $this->assertStringContainsString('WHERE "table_main"."embedding" IS NOT NULL', $sql);
+        $this->assertStringContainsString('WHERE ("table_main"."embedding" IS NOT NULL)', $sql);
         $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "'.Storage::SEQUENCE.'" ASC/', $sql);
         $this->assertSame([
             [1, '[1,0,0]', \PDO::PARAM_STR],
@@ -172,7 +172,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."'.Storage::SEQUENCE.'" > ?))',
+            '("table_main"."embedding" IS NOT NULL) AND (((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."'.Storage::SEQUENCE.'" > ?)))',
             $sql,
         );
         $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "'.Storage::SEQUENCE.'" ASC/', $sql);
@@ -234,7 +234,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) < ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."'.Storage::SEQUENCE.'" < ?))',
+            '("table_main"."embedding" IS NOT NULL) AND (((("table_main"."embedding" <=> ?::vector)) < ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."'.Storage::SEQUENCE.'" < ?)))',
             $sql,
         );
         $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\) DESC, "'.Storage::SEQUENCE.'" DESC/', $sql);

@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Operator;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Operator as OperatorValidator;
 use Utopia\Query\Schema\ColumnType;
@@ -236,9 +237,20 @@ class Structure extends Validator
      */
     protected function checkForUnknownAttributes(array $structure, array $definitions): bool
     {
+        // A key named like a column the storage keeps for the document itself, even one declared as an attribute,
+        // would be written over the document's own $sequence, $tenant or $permissions.
+        foreach (\array_keys($structure) as $key) {
+            if (Storage::isReserved((string) $key)) {
+                $this->message = 'Reserved attribute: "'.$key.'"';
+
+                return false;
+            }
+        }
+
         if (! $this->supportForAttributes) {
             return true;
         }
+
         foreach ($structure as $key => $value) {
             if (! isset($definitions[$key])) {
                 $this->message = 'Unknown attribute: "'.$key.'"';

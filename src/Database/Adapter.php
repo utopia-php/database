@@ -995,6 +995,24 @@ abstract class Adapter
     }
 
     /**
+     * The column an attribute a caller names is written to. filter() keeps underscores, so a name such as `_tenant`
+     * or `_ten.ant` would reach a column the storage keeps for the document itself and move the document to another
+     * tenant, or rewrite its id or timestamps.
+     *
+     * @throws NotFoundException When the attribute names a reserved column
+     */
+    protected function writableColumn(string $attribute): string
+    {
+        $column = $this->filter($attribute);
+
+        if (Storage::isReserved($column)) {
+            throw new NotFoundException('Attribute not found');
+        }
+
+        return $column;
+    }
+
+    /**
      * The row as every write hook decorates a row written for the document.
      *
      * @param  array<string, mixed>  $row

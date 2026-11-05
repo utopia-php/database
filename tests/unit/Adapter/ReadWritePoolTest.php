@@ -20,6 +20,7 @@ use Utopia\Database\Cache\Query;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Index;
@@ -346,8 +347,12 @@ class ReadWritePoolTest extends TestCase
         $readAdapter->method('hasFeature')->willReturnCallback(
             static fn (string $feature): bool => $feature === Feature\Timeouts::class,
         );
-        $readAdapter->expects($this->once())
-            ->method('clearTimeout');
+        $cleared = [];
+        $readAdapter->method('clearTimeout')->willReturnCallback(
+            static function (Event $event = Event::All) use (&$cleared): void {
+                $cleared[] = $event;
+            },
+        );
         $readAdapter->expects($this->once())
             ->method('ping')
             ->willReturn(true);
@@ -361,6 +366,7 @@ class ReadWritePoolTest extends TestCase
         $pool->setAuthorization(new Authorization());
 
         $this->assertTrue($pool->delegate('ping', []));
+        $this->assertSame(Event::cases(), $cleared);
     }
 
     public function testNonReadNonStandardMethodGoesToWritePool(): void

@@ -623,7 +623,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
@@ -671,27 +671,27 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
             $context = $this->writeContext();
             try {
                 $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));
-            } catch (PDOException $e) {
-                $isOrphanedPermission = $e->getCode() === '23000'
-                    && isset($e->errorInfo[1])
-                    && $e->errorInfo[1] === 1062
-                    && \str_contains($e->getMessage(), Storage::INDEX_1);
+            } catch (PDOException $exception) {
+                $isOrphanedPermission = $exception->getCode() === '23000'
+                    && isset($exception->errorInfo[1])
+                    && $exception->errorInfo[1] === 1062
+                    && \str_contains($exception->getMessage(), Storage::INDEX_1);
 
                 if (! $isOrphanedPermission) {
-                    throw $e;
+                    throw $exception;
                 }
 
                 // Clean up orphaned permissions from a previous failed delete, then retry
                 $cleanupBuilder = $this->newBuilder(Storage::permissionsTable($name));
                 $cleanupBuilder->filter([BaseQuery::equal(Storage::PERMISSIONS_DOCUMENT, [$document->getId()])]);
                 $cleanupResult = $cleanupBuilder->delete();
-                $cleanupStmt = $this->executeResult($cleanupResult, Event::PermissionsDelete);
-                $this->execute($cleanupStmt);
+                $cleanupStatement = $this->executeResult($cleanupResult, Event::PermissionsDelete);
+                $this->execute($cleanupStatement);
 
                 $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $context));
             }
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $exception) {
+            throw $this->processException($exception);
         }
 
         return $document;
@@ -711,7 +711,7 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());

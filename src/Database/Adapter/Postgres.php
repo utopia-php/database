@@ -1106,7 +1106,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
@@ -1171,7 +1171,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());

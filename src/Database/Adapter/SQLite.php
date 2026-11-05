@@ -1213,7 +1213,7 @@ class SQLite extends SQL
             $this->syncWriteHooks();
 
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
@@ -1272,7 +1272,7 @@ class SQLite extends SQL
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
@@ -2249,6 +2249,7 @@ class SQLite extends SQL
      *
      * @param  string  $name  The filtered collection name
      * @param  array<Change>  $changes  The changes to upsert
+     * @param  array<array{operators: array<string, Operator>, updates: array<string, mixed>}>  $extractions  Each change's writable attributes split into operators and updates, keyed as $changes
      * @param  array<string>  $spatialAttributes  Spatial column names
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
@@ -2260,6 +2261,7 @@ class SQLite extends SQL
     protected function executeUpsertBatch(
         string $name,
         array $changes,
+        array $extractions,
         array $spatialAttributes,
         string $attribute,
         array $operators,
@@ -2272,13 +2274,12 @@ class SQLite extends SQL
         $allColumnNames = [];
         $documentsData = [];
 
-        foreach ($changes as $change) {
+        foreach ($changes as $index => $change) {
             $document = $change->new;
+            $currentRegularAttributes = $extractions[$index]['updates'];
 
             if ($hasOperators) {
-                $extracted = Operator::extractOperators($document->getAttributes());
-                $currentRegularAttributes = $extracted['updates'];
-                $extractedOperators = $extracted['operators'];
+                $extractedOperators = $extractions[$index]['operators'];
 
                 if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
@@ -2295,7 +2296,6 @@ class SQLite extends SQL
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
             } else {
-                $currentRegularAttributes = $document->getAttributes();
                 $currentRegularAttributes[Storage::UID] = $document->getId();
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DatabaseDateTime::setTimezone($document->getCreatedAt()) : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DatabaseDateTime::setTimezone($document->getUpdatedAt()) : null;
@@ -2309,15 +2309,15 @@ class SQLite extends SQL
 
             $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $document);
 
-            foreach (\array_keys($currentRegularAttributes) as $colName) {
-                $allColumnNames[$colName] = true;
+            foreach (\array_keys($currentRegularAttributes) as $column) {
+                $allColumnNames[$column] = true;
             }
 
             $documentsData[] = ['regularAttributes' => $currentRegularAttributes];
         }
 
-        foreach (\array_keys($operators) as $colName) {
-            $allColumnNames[$colName] = true;
+        foreach (\array_keys($operators) as $column) {
+            $allColumnNames[$column] = true;
         }
 
         $allColumnNames = \array_keys($allColumnNames);
@@ -2358,8 +2358,8 @@ class SQLite extends SQL
         }
 
         $regularAttributes = [];
-        foreach ($allColumnNames as $colName) {
-            $regularAttributes[$colName] = null;
+        foreach ($allColumnNames as $column) {
+            $regularAttributes[$column] = null;
         }
         foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
             $regularAttributes[$key] = $value;

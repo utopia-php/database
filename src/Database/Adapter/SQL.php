@@ -908,7 +908,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         foreach ($documents as $document) {
-            foreach ($document->getAttributes() as $key => $value) {
+            foreach ($this->writableAttributes($document) as $key => $value) {
                 $attributeKeySet[$key] = true;
             }
         }
@@ -1134,7 +1134,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
-        $attributes = $updates->getAttributes();
+        $attributes = $this->writableAttributes($updates);
 
         if (! empty($updates->getUpdatedAt())) {
             $attributes[Storage::UPDATED_AT] = $updates->getUpdatedAt();
@@ -1156,9 +1156,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $builder = $this->newBuilder($name);
 
-        // Single pass over update attributes, bucketing into regular / spatial /
-        // operator and applying JSON / boolean conversions inline. Hoisted
-        // guards keep the hot path branch-light.
         $spatialMap = \array_fill_keys($spatialAttributes, true);
         $intBools = $this->supports(Capability::IntegerBooleans);
 
@@ -1262,33 +1259,25 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $collection = $collection->getId();
             $name = $this->filter($collection);
 
+            $extractions = \array_map(
+                fn (Change $change): array => Operator::extractOperators($this->writableAttributes($change->new)),
+                $changes
+            );
             $hasOperators = false;
-            $firstChange = $changes[0];
-            $firstDoc = $firstChange->new;
-            $firstExtracted = Operator::extractOperators($firstDoc->getAttributes());
-
-            if (! empty($firstExtracted['operators'])) {
-                $hasOperators = true;
-            } else {
-                foreach ($changes as $change) {
-                    $doc = $change->new;
-                    $extracted = Operator::extractOperators($doc->getAttributes());
-                    if (! empty($extracted['operators'])) {
-                        $hasOperators = true;
-                        break;
-                    }
+            foreach ($extractions as $extracted) {
+                if (! empty($extracted['operators'])) {
+                    $hasOperators = true;
+                    break;
                 }
             }
 
             if (! $hasOperators) {
-                $this->executeUpsertBatch($name, $changes, $spatialAttributes, $increase ?? '', [], $attributeDefaults, false);
+                $this->executeUpsertBatch($name, $changes, $extractions, $spatialAttributes, $increase ?? '', [], $attributeDefaults, false);
             } else {
                 $groups = [];
 
-                foreach ($changes as $change) {
-                    $document = $change->new;
-                    $extracted = Operator::extractOperators($document->getAttributes());
-                    $operators = $extracted['operators'];
+                foreach ($changes as $index => $change) {
+                    $operators = $extractions[$index]['operators'];
 
                     if (empty($operators)) {
                         $signature = 'no_ops';
@@ -1303,23 +1292,25 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
                     if (! isset($groups[$signature])) {
                         $groups[$signature] = [
-                            'documents' => [],
+                            'changes' => [],
+                            'extractions' => [],
                             'operators' => $operators,
                         ];
                     }
 
-                    $groups[$signature]['documents'][] = $change;
+                    $groups[$signature]['changes'][$index] = $change;
+                    $groups[$signature]['extractions'][$index] = $extractions[$index];
                 }
 
                 foreach ($groups as $group) {
-                    $this->executeUpsertBatch($name, $group['documents'], $spatialAttributes, '', $group['operators'], $attributeDefaults, true);
+                    $this->executeUpsertBatch($name, $group['changes'], $group['extractions'], $spatialAttributes, '', $group['operators'], $attributeDefaults, true);
                 }
             }
 
             $context = $this->writeContext();
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpsert($name, $changes, $context));
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $exception) {
+            throw $this->processException($exception);
         }
 
         return \array_map(static fn (Change $change): Document => $change->new, $changes);
@@ -3900,6 +3891,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  string  $name  The filtered collection name
      * @param  array<Change>  $changes  The changes to upsert
+     * @param  array<array{operators: array<string, Operator>, updates: array<string, mixed>}>  $extractions  Each change's writable attributes split into operators and updates, keyed as $changes
      * @param  list<string>  $spatialAttributes  Spatial column names
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
@@ -3910,6 +3902,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function executeUpsertBatch(
         string $name,
         array $changes,
+        array $extractions,
         array $spatialAttributes,
         string $attribute,
         array $operators,
@@ -3932,13 +3925,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $allColumnNames = [];
         $documentsData = [];
 
-        foreach ($changes as $change) {
+        foreach ($changes as $index => $change) {
             $document = $change->new;
+            $currentRegularAttributes = $extractions[$index]['updates'];
 
             if ($hasOperators) {
-                $extracted = Operator::extractOperators($document->getAttributes());
-                $currentRegularAttributes = $extracted['updates'];
-                $extractedOperators = $extracted['operators'];
+                $extractedOperators = $extractions[$index]['operators'];
 
                 if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
@@ -3951,7 +3943,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
             } else {
-                $currentRegularAttributes = $document->getAttributes();
                 $currentRegularAttributes[Storage::UID] = $document->getId();
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DateTime::setTimezone($document->getCreatedAt()) : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DateTime::setTimezone($document->getUpdatedAt()) : null;
@@ -6535,7 +6526,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      */
     protected function buildDocumentRow(Document $document, array $attributeKeys, array $spatialMap = [], ?bool $intBools = null): array
     {
-        $attributes = $document->getAttributes();
+        $attributes = $this->writableAttributes($document);
         $row = [
             Storage::UID => $document->getId(),
             Storage::CREATED_AT => $document->getCreatedAt(),

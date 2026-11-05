@@ -3080,16 +3080,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $main = $schema->table($this->getTableRaw($id))->drop();
         $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
-        try {
-            return $this->executeStatements([$main->query, $permissions->query], Event::CollectionDelete);
-        } catch (PDOException $e) {
-            $error = $this->processException($e);
-            if ($error instanceof NotFoundException && $this->inTransaction === 0) {
-                $this->executeStatement($permissions->query, Event::CollectionDelete);
-            }
-
-            throw $error;
-        }
+        return $this->executeConvergingStatements([$main->query, $permissions->query], Event::CollectionDelete, NotFoundException::class);
     }
 
     /**
@@ -3145,7 +3136,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             RelationshipType::ManyToMany => [],
         };
 
-        return $this->executeStatements($statements, Event::AttributeCreate);
+        return $this->executeConvergingStatements($statements, Event::AttributeCreate, DuplicateException::class);
     }
 
     /**
@@ -3277,7 +3268,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 break;
         }
 
-        return $this->executeStatements($statements, Event::AttributeDelete);
+        return $this->executeConvergingStatements($statements, Event::AttributeDelete, NotFoundException::class);
     }
 
     /**
@@ -3879,6 +3870,43 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             if (! $this->executeStatement($statement, $event)) {
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    /**
+     * Run DDL that a failed earlier attempt may have partly applied: a statement refused with $applied is taken as
+     * already applied and the rest still run, then that refusal is thrown so the caller knows the schema held part
+     * of it. Inside a transaction the first refusal is thrown at once, since PostgreSQL refuses every later
+     * statement of an aborted transaction.
+     *
+     * @param  list<string>  $statements
+     * @param  class-string<DatabaseException>  $applied
+     *
+     * @throws DatabaseException
+     */
+    protected function executeConvergingStatements(array $statements, Event $event, string $applied): bool
+    {
+        $refusal = null;
+
+        foreach ($statements as $statement) {
+            try {
+                if (! $this->executeStatement($statement, $event)) {
+                    return false;
+                }
+            } catch (PDOException $exception) {
+                $error = $this->processException($exception);
+                if (! $error instanceof $applied || $this->inTransaction > 0) {
+                    throw $error;
+                }
+
+                $refusal ??= $error;
+            }
+        }
+
+        if ($refusal !== null) {
+            throw $refusal;
         }
 
         return true;

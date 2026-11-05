@@ -2487,7 +2487,7 @@ class SQLite extends SQL
             RelationshipType::ManyToMany => [],
         };
 
-        return $this->executeStatements($statements, Event::AttributeCreate);
+        return $this->executeConvergingStatements($statements, Event::AttributeCreate, DuplicateException::class);
     }
 
     #[\Override]
@@ -2588,7 +2588,7 @@ class SQLite extends SQL
                 break;
         }
 
-        return $this->executeStatements($statements, Event::AttributeDelete);
+        return $this->executeConvergingStatements($statements, Event::AttributeDelete, NotFoundException::class);
     }
 
     /**

@@ -316,8 +316,8 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
         try {
             return $this->executeStatements([$main->query, $permissions->query], Event::CollectionDelete);
-        } catch (PDOException $e) {
-            $error = $this->processException($e);
+        } catch (PDOException $exception) {
+            $error = $this->processException($exception);
             if ($error instanceof NotFoundException) {
                 $this->executeStatement($permissions->query, Event::CollectionDelete);
             }

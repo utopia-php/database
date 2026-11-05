@@ -3876,10 +3876,8 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * Run DDL that a failed earlier attempt may have partly applied: a statement refused with $applied is taken as
-     * already applied and the rest still run, then that refusal is thrown so the caller knows the schema held part
-     * of it. Inside a transaction the first refusal is thrown at once, since PostgreSQL refuses every later
-     * statement of an aborted transaction.
+     * Inside a transaction the first refusal is thrown at once, since PostgreSQL refuses every later statement of an
+     * aborted transaction.
      *
      * @param  list<string>  $statements
      * @param  class-string<DatabaseException>  $applied

@@ -364,7 +364,7 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertInstanceOf(NotFoundException::class, $error);
         $this->assertSame('Collection not found', $error->getMessage());
         $this->assertSame([
-            'DROP TABLE "utopiaTests"."engine_orders"; DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
+            'DROP TABLE "utopiaTests"."engine_orders"',
             'DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
         ], $statements);
     }
@@ -387,14 +387,15 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertSame($duplicates, $error->getPrevious());
     }
 
-    public function testPostgresDeleteCollectionDropsBothTablesInOneStatement(): void
+    public function testPostgresDeleteCollectionDropsTheMainTableThenThePermissionsTable(): void
     {
         $statements = [];
         $adapter = $this->postgresRecording($statements);
 
         $this->assertTrue($adapter->deleteCollection('orders'));
         $this->assertSame([
-            'DROP TABLE "utopiaTests"."engine_orders"; DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
+            'DROP TABLE "utopiaTests"."engine_orders"',
+            'DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
         ], $statements);
     }
 

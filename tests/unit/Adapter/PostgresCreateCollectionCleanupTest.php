@@ -20,6 +20,10 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
 {
     private const string DECLARED_INDEX = 'CREATE INDEX "namespace__books_title_index"';
 
+    private const string UID_INDEX = 'CREATE UNIQUE INDEX "namespace_books_uid"';
+
+    private const string PERMISSIONS_TABLE = 'CREATE TABLE "database"."namespace_books_perms"';
+
     /** @var list<string> */
     private array $statements = [];
 
@@ -39,12 +43,10 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
             $this->assertSame('Attribute not found', $error->getMessage());
         }
 
-        $this->assertCount(4, $this->statements);
-        $this->assertStringStartsWith(self::DECLARED_INDEX, $this->statements[2]);
-        $this->assertSame(
-            'DROP TABLE IF EXISTS "database"."namespace_books"; DROP TABLE IF EXISTS "database"."namespace_books_perms"',
-            $this->statements[3],
-        );
+        $this->assertCount(11, $this->statements);
+        $this->assertStringStartsWith(self::DECLARED_INDEX, $this->statements[8]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_books"', $this->statements[9]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_books_perms"', $this->statements[10]);
     }
 
     public function testACleanupThatFailsKeepsTheOriginalErrorAndLogsTheCleanupFailure(): void
@@ -65,7 +67,7 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
 
         $this->assertInstanceOf(NotFoundException::class, $error, 'the index failure reaches the caller, not the failed drop');
         $this->assertSame('Attribute not found', $error->getMessage());
-        $this->assertStringStartsWith('DROP TABLE IF EXISTS', $this->statements[3]);
+        $this->assertStringStartsWith('DROP TABLE IF EXISTS', $this->statements[9]);
         $this->assertStringContainsString("Failed to rollback collection 'books': SQLSTATE[25P02]", $log, 'the failed cleanup is logged');
     }
 
@@ -82,10 +84,44 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
             $this->assertInstanceOf(PDOException::class, $error->getPrevious());
         }
 
-        $this->assertCount(3, $this->statements);
+        $this->assertCount(9, $this->statements);
         foreach ($this->statements as $statement) {
             $this->assertStringNotContainsString('DROP TABLE', $statement);
         }
+    }
+
+    public function testAnInternalIndexThatAlreadyExistsDropsBothTables(): void
+    {
+        $this->failures[self::UID_INDEX] = $this->engineError('42P07', 'relation "namespace_books_uid" already exists');
+
+        try {
+            $this->adapter()->createCollection('books', [Attribute::string('title', size: 64)]);
+            $this->fail('An internal index that already exists must fail the collection');
+        } catch (DuplicateException $error) {
+            $this->assertInstanceOf(PDOException::class, $error->getPrevious());
+        }
+
+        $this->assertCount(4, $this->statements);
+        $this->assertStringStartsWith(self::UID_INDEX, $this->statements[1]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_books"', $this->statements[2]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_books_perms"', $this->statements[3]);
+    }
+
+    public function testAPermissionsTableThatAlreadyExistsDropsBothTables(): void
+    {
+        $this->failures[self::PERMISSIONS_TABLE] = $this->engineError('42P07', 'relation "namespace_books_perms" already exists');
+
+        try {
+            $this->adapter()->createCollection('books', [Attribute::string('title', size: 64)]);
+            $this->fail('A permissions table that already exists must fail the collection');
+        } catch (DuplicateException $error) {
+            $this->assertInstanceOf(PDOException::class, $error->getPrevious());
+        }
+
+        $this->assertCount(8, $this->statements);
+        $this->assertStringStartsWith(self::PERMISSIONS_TABLE, $this->statements[5]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_books"', $this->statements[6]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_books_perms"', $this->statements[7]);
     }
 
     public function testASpatialIndexWithOrdersDropsBothTablesAndReachesTheCaller(): void
@@ -99,11 +135,9 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
             $this->assertSame('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.', $error->getMessage());
         }
 
-        $this->assertCount(3, $this->statements);
-        $this->assertSame(
-            'DROP TABLE IF EXISTS "database"."namespace_places"; DROP TABLE IF EXISTS "database"."namespace_places_perms"',
-            $this->statements[2],
-        );
+        $this->assertCount(10, $this->statements);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_places"', $this->statements[8]);
+        $this->assertSame('DROP TABLE IF EXISTS "database"."namespace_places_perms"', $this->statements[9]);
     }
 
     public function testATableThatFailsToBeCreatedDropsNothing(): void

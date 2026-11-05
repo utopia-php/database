@@ -53,6 +53,12 @@ class AggregateTest extends TestCase
         $this->assertSame('Invalid aggregate alias', $this->validator->getDescription());
     }
 
+    public function testAliasWithATrailingNewlineRejected(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::sum('price', "total\n")));
+        $this->assertSame('Invalid aggregate alias', $this->validator->getDescription());
+    }
+
     public function testUnknownAttributeAllowedWithoutAttributeSupport(): void
     {
         $validator = new Aggregate(attributes: [], supportForAttributes: false);

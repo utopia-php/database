@@ -135,6 +135,25 @@ class PoolTimeoutTest extends TestCase
         $this->assertSame(0, $connection->getTimeout());
     }
 
+    public function testGlobalOnlyHandleDropsThePerEventTimeoutTheLastHolderLeft(): void
+    {
+        $connection = new TimeoutRecordingMemory();
+        $pool = new UtopiaPool(new Stack(), 'memory', 1, fn () => $connection, timeout: 0.0);
+
+        $perEvent = new Pool($pool);
+        $perEvent->setAuthorization(new Authorization());
+        $perEvent->setTimeout(50, Event::DocumentFind);
+        $perEvent->getDriver();
+
+        $global = new Pool($pool);
+        $global->setAuthorization(new Authorization());
+        $global->setTimeout(1000);
+        $global->getDriver();
+
+        $this->assertSame([Event::All->value => 1000], $connection->timeouts, 'A handle with only a global timeout must not inherit the last holder\'s per-event one');
+        $this->assertSame(1000, $connection->getTimeout(Event::DocumentFind));
+    }
+
     /**
      * The pool's own map is what a checkout replays, so clearing every timeout
      * has to empty it. The inherited implementation walks the events it finds

@@ -225,7 +225,7 @@ final class PoolSyncTest extends TestCase
         yield 'timeout per event' => [
             static fn (Pool $pool) => $pool->setTimeout(self::EVENT_TIMEOUT, Event::DocumentFind),
             $timeouts,
-            [Event::DocumentFind->value => self::EVENT_TIMEOUT, Event::All->value => self::TIMEOUT],
+            [Event::All->value => self::TIMEOUT, Event::DocumentFind->value => self::EVENT_TIMEOUT],
         ];
         yield 'timeout cleared' => [
             static fn (Pool $pool) => $pool->clearTimeout(),

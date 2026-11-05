@@ -908,7 +908,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         }
 
         foreach ($documents as $document) {
-            foreach ($document->getAttributes() as $key => $value) {
+            foreach ($this->writableAttributes($document) as $key => $value) {
                 $attributeKeySet[$key] = true;
             }
         }
@@ -1134,7 +1134,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
 
-        $attributes = $updates->getAttributes();
+        $attributes = $this->writableAttributes($updates);
 
         if (! empty($updates->getUpdatedAt())) {
             $attributes[Storage::UPDATED_AT] = $updates->getUpdatedAt();
@@ -1156,9 +1156,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         $builder = $this->newBuilder($name);
 
-        // Single pass over update attributes, bucketing into regular / spatial /
-        // operator and applying JSON / boolean conversions inline. Hoisted
-        // guards keep the hot path branch-light.
         $spatialMap = \array_fill_keys($spatialAttributes, true);
         $intBools = $this->supports(Capability::IntegerBooleans);
 
@@ -1262,33 +1259,25 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             $collection = $collection->getId();
             $name = $this->filter($collection);
 
+            $extractions = \array_map(
+                fn (Change $change): array => Operator::extractOperators($this->writableAttributes($change->new)),
+                $changes
+            );
             $hasOperators = false;
-            $firstChange = $changes[0];
-            $firstDoc = $firstChange->new;
-            $firstExtracted = Operator::extractOperators($firstDoc->getAttributes());
-
-            if (! empty($firstExtracted['operators'])) {
-                $hasOperators = true;
-            } else {
-                foreach ($changes as $change) {
-                    $doc = $change->new;
-                    $extracted = Operator::extractOperators($doc->getAttributes());
-                    if (! empty($extracted['operators'])) {
-                        $hasOperators = true;
-                        break;
-                    }
+            foreach ($extractions as $extracted) {
+                if (! empty($extracted['operators'])) {
+                    $hasOperators = true;
+                    break;
                 }
             }
 
             if (! $hasOperators) {
-                $this->executeUpsertBatch($name, $changes, $spatialAttributes, $increase ?? '', [], $attributeDefaults, false);
+                $this->executeUpsertBatch($name, $changes, $extractions, $spatialAttributes, $increase ?? '', [], $attributeDefaults, false);
             } else {
                 $groups = [];
 
-                foreach ($changes as $change) {
-                    $document = $change->new;
-                    $extracted = Operator::extractOperators($document->getAttributes());
-                    $operators = $extracted['operators'];
+                foreach ($changes as $index => $change) {
+                    $operators = $extractions[$index]['operators'];
 
                     if (empty($operators)) {
                         $signature = 'no_ops';
@@ -1303,23 +1292,25 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
                     if (! isset($groups[$signature])) {
                         $groups[$signature] = [
-                            'documents' => [],
+                            'changes' => [],
+                            'extractions' => [],
                             'operators' => $operators,
                         ];
                     }
 
-                    $groups[$signature]['documents'][] = $change;
+                    $groups[$signature]['changes'][$index] = $change;
+                    $groups[$signature]['extractions'][$index] = $extractions[$index];
                 }
 
                 foreach ($groups as $group) {
-                    $this->executeUpsertBatch($name, $group['documents'], $spatialAttributes, '', $group['operators'], $attributeDefaults, true);
+                    $this->executeUpsertBatch($name, $group['changes'], $group['extractions'], $spatialAttributes, '', $group['operators'], $attributeDefaults, true);
                 }
             }
 
             $context = $this->writeContext();
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpsert($name, $changes, $context));
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (PDOException $exception) {
+            throw $this->processException($exception);
         }
 
         return \array_map(static fn (Change $change): Document => $change->new, $changes);
@@ -3089,16 +3080,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $main = $schema->table($this->getTableRaw($id))->drop();
         $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
-        try {
-            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionDelete);
-        } catch (PDOException $e) {
-            $error = $this->processException($e);
-            if ($error instanceof NotFoundException && $this->inTransaction === 0) {
-                $this->executeStatement($permissions->query, Event::CollectionDelete);
-            }
-
-            throw $error;
-        }
+        return $this->executeConvergingStatements([$main->query, $permissions->query], Event::CollectionDelete, NotFoundException::class);
     }
 
     /**
@@ -3120,7 +3102,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $main = $schema->table($this->getTableRaw($id))->dropIfExists();
         $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
-        $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionCreate);
+        $this->executeStatements([$main->query, $permissions->query], Event::CollectionCreate);
     }
 
     /**
@@ -3145,18 +3127,16 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $result->query;
         };
 
-        $sql = match ($relationship->type) {
-            RelationshipType::OneToOne => $addColumn($name, $key) . ';' . ($relationship->twoWay ? $addColumn($relatedName, $twoWayKey) . ';' : ''),
-            RelationshipType::OneToMany => $addColumn($relatedName, $twoWayKey) . ';',
-            RelationshipType::ManyToOne => $addColumn($name, $key) . ';',
-            RelationshipType::ManyToMany => null,
+        $statements = match ($relationship->type) {
+            RelationshipType::OneToOne => $relationship->twoWay
+                ? [$addColumn($name, $key), $addColumn($relatedName, $twoWayKey)]
+                : [$addColumn($name, $key)],
+            RelationshipType::OneToMany => [$addColumn($relatedName, $twoWayKey)],
+            RelationshipType::ManyToOne => [$addColumn($name, $key)],
+            RelationshipType::ManyToMany => [],
         };
 
-        if ($sql === null) {
-            return true;
-        }
-
-        return $this->executeStatement($sql, Event::AttributeCreate);
+        return $this->executeConvergingStatements($statements, Event::AttributeCreate, DuplicateException::class);
     }
 
     /**
@@ -3184,52 +3164,48 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $result->query;
         };
 
-        $sql = '';
+        $statements = [];
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
                 if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($name, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($name, $key, $newKey);
                 }
                 if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                    $statements[] = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey);
                 }
                 break;
             case RelationshipType::OneToMany:
                 if ($side === RelationshipSide::Parent) {
                     if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                        $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $statements[] = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey);
                     }
                 } elseif ($newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($name, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($name, $key, $newKey);
                 }
                 break;
             case RelationshipType::ManyToOne:
                 if ($side === RelationshipSide::Child) {
                     if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                        $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $statements[] = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey);
                     }
                 } elseif ($newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($name, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($name, $key, $newKey);
                 }
                 break;
             case RelationshipType::ManyToMany:
                 $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
                 if ($newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($junctionName, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($junctionName, $key, $newKey);
                 }
                 if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= $renameColumn($junctionName, $twoWayKey, $newTwoWayKey) . ';';
+                    $statements[] = $renameColumn($junctionName, $twoWayKey, $newTwoWayKey);
                 }
                 break;
         }
 
-        if ($sql === '') {
-            return true;
-        }
-
-        return $this->executeStatement($sql, Event::AttributeUpdate);
+        return $this->executeStatements($statements, Event::AttributeUpdate);
     }
 
     /**
@@ -3255,31 +3231,31 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $result->query;
         };
 
-        $sql = '';
+        $statements = [];
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
                 if ($side === RelationshipSide::Parent) {
-                    $sql = $dropColumn($name, $key) . ';';
+                    $statements[] = $dropColumn($name, $key);
                     if ($twoWay) {
-                        $sql .= $dropColumn($relatedName, $twoWayKey) . ';';
+                        $statements[] = $dropColumn($relatedName, $twoWayKey);
                     }
                 } else {
-                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
+                    $statements[] = $dropColumn($relatedName, $twoWayKey);
                     if ($twoWay) {
-                        $sql .= $dropColumn($name, $key) . ';';
+                        $statements[] = $dropColumn($name, $key);
                     }
                 }
                 break;
             case RelationshipType::OneToMany:
-                $sql = $side === RelationshipSide::Parent
-                    ? $dropColumn($relatedName, $twoWayKey) . ';'
-                    : $dropColumn($name, $key) . ';';
+                $statements[] = $side === RelationshipSide::Parent
+                    ? $dropColumn($relatedName, $twoWayKey)
+                    : $dropColumn($name, $key);
                 break;
             case RelationshipType::ManyToOne:
-                $sql = $side === RelationshipSide::Parent
-                    ? $dropColumn($name, $key) . ';'
-                    : $dropColumn($relatedName, $twoWayKey) . ';';
+                $statements[] = $side === RelationshipSide::Parent
+                    ? $dropColumn($name, $key)
+                    : $dropColumn($relatedName, $twoWayKey);
                 break;
             case RelationshipType::ManyToMany:
                 $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
@@ -3287,11 +3263,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $junctionResult = $schema->table($this->getTableRaw($junctionName))->drop();
                 $permissionsResult = $schema->table($this->getTableRaw(Storage::permissionsTable($junctionName)))->drop();
 
-                $sql = $junctionResult->query . '; ' . $permissionsResult->query;
+                $statements[] = $junctionResult->query;
+                $statements[] = $permissionsResult->query;
                 break;
         }
 
-        return $this->executeStatement($sql, Event::AttributeDelete);
+        return $this->executeConvergingStatements($statements, Event::AttributeDelete, NotFoundException::class);
     }
 
     /**
@@ -3884,6 +3861,55 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         return $this->execute($this->prepareStatement($sql, $event));
     }
 
+    /**
+     * @param  list<string>  $statements
+     */
+    protected function executeStatements(array $statements, Event $event): bool
+    {
+        foreach ($statements as $statement) {
+            if (! $this->executeStatement($statement, $event)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Inside a transaction the first refusal is thrown at once, since PostgreSQL refuses every later statement of an
+     * aborted transaction.
+     *
+     * @param  list<string>  $statements
+     * @param  class-string<DatabaseException>  $applied
+     *
+     * @throws DatabaseException
+     */
+    protected function executeConvergingStatements(array $statements, Event $event, string $applied): bool
+    {
+        $refusal = null;
+
+        foreach ($statements as $statement) {
+            try {
+                if (! $this->executeStatement($statement, $event)) {
+                    return false;
+                }
+            } catch (PDOException $exception) {
+                $error = $this->processException($exception);
+                if (! $error instanceof $applied || $this->inTransaction > 0) {
+                    throw $error;
+                }
+
+                $refusal ??= $error;
+            }
+        }
+
+        if ($refusal !== null) {
+            throw $refusal;
+        }
+
+        return true;
+    }
+
     private function transformQuery(Event $event, string $sql): string
     {
         foreach ($this->transforms as $transform) {
@@ -3900,6 +3926,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      *
      * @param  string  $name  The filtered collection name
      * @param  array<Change>  $changes  The changes to upsert
+     * @param  array<array{operators: array<string, Operator>, updates: array<string, mixed>}>  $extractions  Each change's writable attributes split into operators and updates, keyed as $changes
      * @param  list<string>  $spatialAttributes  Spatial column names
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
@@ -3910,6 +3937,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function executeUpsertBatch(
         string $name,
         array $changes,
+        array $extractions,
         array $spatialAttributes,
         string $attribute,
         array $operators,
@@ -3932,13 +3960,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $allColumnNames = [];
         $documentsData = [];
 
-        foreach ($changes as $change) {
+        foreach ($changes as $index => $change) {
             $document = $change->new;
+            $currentRegularAttributes = $extractions[$index]['updates'];
 
             if ($hasOperators) {
-                $extracted = Operator::extractOperators($document->getAttributes());
-                $currentRegularAttributes = $extracted['updates'];
-                $extractedOperators = $extracted['operators'];
+                $extractedOperators = $extractions[$index]['operators'];
 
                 if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
@@ -3951,7 +3978,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
             } else {
-                $currentRegularAttributes = $document->getAttributes();
                 $currentRegularAttributes[Storage::UID] = $document->getId();
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DateTime::setTimezone($document->getCreatedAt()) : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DateTime::setTimezone($document->getUpdatedAt()) : null;
@@ -6535,7 +6561,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      */
     protected function buildDocumentRow(Document $document, array $attributeKeys, array $spatialMap = [], ?bool $intBools = null): array
     {
-        $attributes = $document->getAttributes();
+        $attributes = $this->writableAttributes($document);
         $row = [
             Storage::UID => $document->getId(),
             Storage::CREATED_AT => $document->getCreatedAt(),

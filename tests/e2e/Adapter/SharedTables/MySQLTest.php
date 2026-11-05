@@ -43,7 +43,7 @@ class MySQLTest extends Base
         $dbUser = 'root';
         $dbPass = 'password';
 
-        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, self::PDO_ATTRIBUTES);
+        $pdo = new PDO("mysql:host={$dbHost};port={$dbPort};charset=utf8mb4", $dbUser, $dbPass, self::MYSQL_PDO_ATTRIBUTES);
 
         $redis = new Redis();
         $redis->connect('redis', 6379);

@@ -66,6 +66,6 @@ final class AnalyzeCollectionTest extends TestCase
         $adapter->setNamespace('namespace');
 
         $this->assertTrue($adapter->analyzeCollection('places'));
-        $this->assertSame(['ANALYZE "database"."namespace_places"; ANALYZE "database"."namespace_places_perms"'], $this->statements);
+        $this->assertSame(['ANALYZE "database"."namespace_places"', 'ANALYZE "database"."namespace_places_perms"'], $this->statements);
     }
 }

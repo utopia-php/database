@@ -6462,6 +6462,106 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    private function createStorageColumnKeyCollection(Database $database, string $collection): void
+    {
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: $database->getAdapter()->supports(Capability::DefinedAttributes) ? [Attribute::string(key: 'name', size: 64, required: false)] : [],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: true,
+        ));
+    }
+
+    public function testStorageColumnKeyIsNotWrittenOnCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'storageKeyCreate';
+        $this->createStorageColumnKeyCollection($database, $collection);
+
+        $database->skipValidation(function () use ($database, $collection): void {
+            $database->createDocument($collection, new Document(['$id' => 'plain', Storage::UID => 'hijacked', 'name' => 'plain']));
+            $database->createDocument($collection, new Document(['$id' => 'mangled', '_u!id' => 'hijacked', 'name' => 'mangled']));
+            $database->createDocument($collection, new Document(['$id' => 'sequenced', Storage::SEQUENCE => 777777, 'name' => 'sequenced']));
+            $database->createDocuments($collection, [
+                new Document(['$id' => 'batched', '_u!id' => 'hijacked', 'name' => 'batched']),
+                new Document(['$id' => 'batchedSequence', Storage::SEQUENCE => 888888, 'name' => 'batchedSequence']),
+            ]);
+        });
+
+        foreach (['plain', 'mangled', 'sequenced', 'batched', 'batchedSequence'] as $id) {
+            $document = $database->getDocument($collection, $id);
+            $this->assertSame($id, $document->getId(), "A storage-column key must not rewrite the id of {$id}");
+            $this->assertSame($id, $document->getAttribute('name'));
+        }
+        $this->assertTrue($database->getDocument($collection, 'hijacked')->isEmpty());
+        $this->assertNotSame('777777', (string) $database->getDocument($collection, 'sequenced')->getSequence());
+        $this->assertNotSame('888888', (string) $database->getDocument($collection, 'batchedSequence')->getSequence());
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testStorageColumnKeyIsNotWrittenOnUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'storageKeyUpdate';
+        $this->createStorageColumnKeyCollection($database, $collection);
+        $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
+        $database->createDocument($collection, new Document(['$id' => 'target', '$permissions' => $permissions, 'name' => 'before']));
+
+        $database->skipValidation(fn (): Document => $database->updateDocument(
+            $collection,
+            'target',
+            new Document(['$id' => 'target', '_u!id' => 'hijacked', 'name' => 'after']),
+        ));
+
+        $this->assertTrue($database->getDocument($collection, 'hijacked')->isEmpty());
+        $document = $database->getDocument($collection, 'target');
+        $this->assertSame('target', $document->getId());
+        $this->assertSame('after', $document->getAttribute('name'));
+
+        $database->skipValidation(fn (): int => $database->updateDocuments(
+            $collection,
+            new Document([Storage::PERMISSIONS => \json_encode([Permission::read(Role::user('hijacker'))]), 'name' => 'bulk']),
+        ));
+
+        $document = $database->getDocument($collection, 'target');
+        $this->assertSame('bulk', $document->getAttribute('name'));
+        $this->assertSame($permissions, $document->getPermissions());
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testStorageColumnKeyIsNotWrittenOnUpsert(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'storageKeyUpsert';
+        $this->createStorageColumnKeyCollection($database, $collection);
+
+        $upserted = ['$id' => 'upserted', '$permissions' => [Permission::read(Role::any())], Storage::SEQUENCE => 999999, 'name' => 'upserted'];
+        if ($database->hasSharedTables()) {
+            $upserted['_ten!ant'] = (int) $database->getTenant() + 1;
+        }
+
+        $database->skipValidation(fn (): int => $database->upsertDocuments($collection, [new Document($upserted)]));
+
+        $document = $database->getDocument($collection, 'upserted');
+        $this->assertSame('upserted', $document->getId(), 'A storage-column key must not move the document to another tenant');
+        $this->assertSame('upserted', $document->getAttribute('name'));
+        $this->assertNotSame('999999', (string) $document->getSequence());
+
+        $database->deleteCollection($collection);
+    }
+
     public function testIncreaseDecreasePreserveDates(): void
     {
         $document = $this->initIncreaseDecreaseFixture();

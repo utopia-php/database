@@ -41,10 +41,10 @@ final class SQLTimeoutScopeTest extends TestCase
         $statement = $this->getMockBuilder(\PDOStatement::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $statement->expects($this->exactly(2))->method('execute')->willReturn(true);
+        $statement->expects($this->exactly(3))->method('execute')->willReturn(true);
         $statement->expects($this->once())->method('fetchAll')->willReturn([]);
         $statement->expects($this->once())->method('closeCursor')->willReturn(true);
-        $pdo->expects($this->exactly(2))->method('prepare')->willReturn($statement);
+        $pdo->expects($this->exactly(3))->method('prepare')->willReturn($statement);
 
         $adapter = new MySQL($pdo);
         $adapter->setDatabase('database');

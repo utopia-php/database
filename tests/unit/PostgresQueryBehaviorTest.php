@@ -40,7 +40,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         $statement = $this->getMockBuilder(\PDOStatement::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $statement->expects($this->exactly(2))
+        $statement->expects($this->exactly(8))
             ->method('execute')
             ->willReturn(true);
 
@@ -48,7 +48,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         $pdo = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $pdo->expects($this->exactly(2))
+        $pdo->expects($this->exactly(8))
             ->method('prepare')
             ->willReturnCallback(function (string $sql) use (&$queries, $statement): \PDOStatement {
                 $queries[] = $sql;
@@ -65,7 +65,7 @@ final class PostgresQueryBehaviorTest extends TestCase
 
         $this->assertTrue($adapter->createCollection('movies'));
         $this->assertStringContainsString('"'.Storage::PERMISSIONS.'" JSONB', $queries[0]);
-        $this->assertStringContainsString('USING GIN ("'.Storage::PERMISSIONS.'")', $queries[0]);
+        $this->assertStringContainsString('USING GIN ("'.Storage::PERMISSIONS.'")', $queries[4]);
     }
 
     public function testVectorDistanceIsProjectedHydratedAndOrderedBeforeTieBreaker(): void

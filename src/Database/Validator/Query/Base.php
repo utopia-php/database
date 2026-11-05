@@ -90,7 +90,7 @@ abstract class Base extends Validator
      */
     protected function isAllowedJoinColumn(string $column): bool
     {
-        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
+        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/D', $column) === 1;
     }
 
     abstract public function getMethodType(): string;

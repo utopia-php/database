@@ -556,34 +556,28 @@ class Pool extends Adapter implements Feature\Timeouts
         }
 
         /** @var Adapter&Feature\Timeouts $adapter */
-        if (empty($this->timeouts)) {
+        $global = $this->timeouts[Event::All->value] ?? null;
+        if ($global === null) {
             $adapter->clearTimeout();
-
-            return;
         }
 
-        if (count($this->timeouts) === 1 && isset($this->timeouts[Event::All->value])) {
-            $adapter->setTimeout($this->timeouts[Event::All->value]);
-
-            return;
-        }
-
-        // The concrete adapters keep one timeout scalar, which Postgres writes
-        // into SET statement_timeout and Mongo into maxTimeMS for every
-        // statement, so the last value applied is the one every statement runs
-        // under. Apply the per-event entries first and the global one last, or a
-        // per-event timeout set after the global one bounds everything.
-        $adapter->clearTimeout();
-        foreach ($this->timeouts as $event => $milliseconds) {
-            if ($event === Event::All->value) {
+        foreach (Event::cases() as $event) {
+            if ($event === Event::All) {
                 continue;
             }
 
-            $adapter->setTimeout($milliseconds, Event::from($event));
+            $milliseconds = $this->timeouts[$event->value] ?? null;
+            if ($milliseconds === null) {
+                $adapter->clearTimeout($event);
+
+                continue;
+            }
+
+            $adapter->setTimeout($milliseconds, $event);
         }
 
-        if (isset($this->timeouts[Event::All->value])) {
-            $adapter->setTimeout($this->timeouts[Event::All->value]);
+        if ($global !== null) {
+            $adapter->setTimeout($global);
         }
     }
 

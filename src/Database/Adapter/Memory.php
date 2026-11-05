@@ -1391,10 +1391,7 @@ class Memory extends Adapter implements Feature\Relationships
         }
         [$oldKey, $existing] = $located;
 
-        // Resolve any Operator-typed attributes against the existing row before
-        // computing the new payload so unique-index checks see the post-update
-        // values, matching MariaDB's atomic UPDATE semantics.
-        $resolved = $this->applyOperators($document->getAttributes(), $existing);
+        $resolved = $this->applyOperators($this->writableAttributes($document), $existing);
         foreach ($resolved as $attribute => $value) {
             $document->setAttribute($attribute, $value);
         }
@@ -1535,7 +1532,7 @@ class Memory extends Adapter implements Feature\Relationships
             throw new NotFoundException('Collection not found');
         }
 
-        $attributes = $updates->getAttributes();
+        $attributes = $this->writableAttributes($updates);
         $hasCreatedAt = ! empty($updates->getCreatedAt());
         $hasUpdatedAt = ! empty($updates->getUpdatedAt());
         $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
@@ -1547,14 +1544,14 @@ class Memory extends Adapter implements Feature\Relationships
         // before any write lands, so a uniqueness violation on document N
         // does not leave documents 0..N-1 partially committed.
         $prepared = [];
-        foreach ($documents as $doc) {
-            $uid = $doc->getId();
-            $docKey = $this->documentKey($uid);
-            if (! isset($this->data[$key]['documents'][$docKey])) {
+        foreach ($documents as $document) {
+            $uid = $document->getId();
+            $documentKey = $this->documentKey($uid);
+            if (! isset($this->data[$key]['documents'][$documentKey])) {
                 continue;
             }
 
-            $existingRow = $this->data[$key]['documents'][$docKey];
+            $existingRow = $this->data[$key]['documents'][$documentKey];
 
             // Resolve operators per-row — each document's existing values feed
             // back into operator evaluation, so $attributes cannot be evaluated
@@ -1574,8 +1571,8 @@ class Memory extends Adapter implements Feature\Relationships
 
             $prepared[] = [
                 'uid' => $uid,
-                'docKey' => $docKey,
-                'attrs' => $resolved,
+                'documentKey' => $documentKey,
+                'attributes' => $resolved,
                 'newSignatures' => $newSignatures,
                 'oldSignatures' => $oldSignatures,
             ];
@@ -1583,20 +1580,20 @@ class Memory extends Adapter implements Feature\Relationships
 
         // Phase-1: hashed unique-index validation. For each pending row, probe
         // the hash table — but recognise that any hashed entry currently
-        // pointing at the row's own docKey is about to be replaced by the new
+        // pointing at the row's own document key is about to be replaced by the new
         // signature, so it is not a conflict. We also build a per-batch
         // pending map so two siblings collapsing to the same value collide.
         $pendingByIndex = [];
         foreach ($prepared as $entry) {
-            $docKey = $entry['docKey'];
+            $documentKey = $entry['documentKey'];
             foreach ($entry['newSignatures'] as $indexId => $hash) {
                 $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
-                if ($existing !== null && $existing !== $docKey) {
+                if ($existing !== null && $existing !== $documentKey) {
                     // The entry's own pre-update hash binding does not count
                     // as a conflict — it'll be removed when its row is rewritten.
                     $existingIsSelf = false;
                     foreach ($prepared as $other) {
-                        if ($other['docKey'] === $existing && ($other['oldSignatures'][$indexId] ?? null) === $hash) {
+                        if ($other['documentKey'] === $existing && ($other['oldSignatures'][$indexId] ?? null) === $hash) {
                             $existingIsSelf = true;
                             break;
                         }
@@ -1605,22 +1602,22 @@ class Memory extends Adapter implements Feature\Relationships
                         throw new UniqueException(UniqueException::MESSAGE);
                     }
                 }
-                if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $docKey) {
+                if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $documentKey) {
                     throw new UniqueException(UniqueException::MESSAGE);
                 }
-                $pendingByIndex[$indexId][$hash] = $docKey;
+                $pendingByIndex[$indexId][$hash] = $documentKey;
             }
         }
 
         $tenant = $this->getTenant();
         foreach ($prepared as $entry) {
             $uid = $entry['uid'];
-            $docKey = $entry['docKey'];
-            $resolved = $entry['attrs'];
+            $documentKey = $entry['documentKey'];
+            $resolved = $entry['attributes'];
 
-            $previousRow = $this->data[$key]['documents'][$docKey];
+            $previousRow = $this->data[$key]['documents'][$documentKey];
 
-            $row = &$this->data[$key]['documents'][$docKey];
+            $row = &$this->data[$key]['documents'][$documentKey];
             foreach ($resolved as $attribute => $value) {
                 $row[$this->filter($attribute)] = $value;
             }
@@ -1636,8 +1633,8 @@ class Memory extends Adapter implements Feature\Relationships
             }
             unset($row);
 
-            $this->journal(function () use ($key, $docKey, $previousRow): void {
-                $this->data[$key]['documents'][$docKey] = $previousRow;
+            $this->journal(function () use ($key, $documentKey, $previousRow): void {
+                $this->data[$key]['documents'][$documentKey] = $previousRow;
             });
 
             if ($hasPermissions) {
@@ -1656,7 +1653,7 @@ class Memory extends Adapter implements Feature\Relationships
                     $indexId,
                     $entry['newSignatures'][$indexId] ?? null,
                     $entry['oldSignatures'][$indexId] ?? null,
-                    $docKey,
+                    $documentKey,
                 );
             }
         }
@@ -1899,15 +1896,15 @@ class Memory extends Adapter implements Feature\Relationships
     #[\Override]
     public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
+        $column = $this->writableColumn($attribute);
         $key = $this->key($collection->getId());
-        $docKey = $this->documentKey($id);
-        if (! isset($this->data[$key]['documents'][$docKey])) {
+        $documentKey = $this->documentKey($id);
+        if (! isset($this->data[$key]['documents'][$documentKey])) {
             throw new NotFoundException('Document not found');
         }
 
-        $column = $this->filter($attribute);
-        $previousValue = $this->data[$key]['documents'][$docKey][$column] ?? null;
-        $previousUpdatedAt = $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] ?? null;
+        $previousValue = $this->data[$key]['documents'][$documentKey][$column] ?? null;
+        $previousUpdatedAt = $this->data[$key]['documents'][$documentKey][Storage::UPDATED_AT] ?? null;
         $current = $previousValue ?? 0;
         $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
             && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
@@ -1934,14 +1931,14 @@ class Memory extends Adapter implements Feature\Relationships
             $result = $current + $value;
         }
 
-        $this->data[$key]['documents'][$docKey][$column] = $result;
-        $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] = $updatedAt;
+        $this->data[$key]['documents'][$documentKey][$column] = $result;
+        $this->data[$key]['documents'][$documentKey][Storage::UPDATED_AT] = $updatedAt;
 
-        $this->journal(function () use ($key, $docKey, $column, $previousValue, $previousUpdatedAt): void {
-            if (! isset($this->data[$key]['documents'][$docKey])) {
+        $this->journal(function () use ($key, $documentKey, $column, $previousValue, $previousUpdatedAt): void {
+            if (! isset($this->data[$key]['documents'][$documentKey])) {
                 return;
             }
-            $row = &$this->data[$key]['documents'][$docKey];
+            $row = &$this->data[$key]['documents'][$documentKey];
             if ($previousValue === null) {
                 unset($row[$column]);
             } else {
@@ -2026,10 +2023,7 @@ class Memory extends Adapter implements Feature\Relationships
     protected function documentToRow(Document $document): array
     {
         $row = [];
-        foreach ($document->getAttributes() as $attribute => $value) {
-            // Store native PHP values directly — no JSON encoding for arrays.
-            // The Database casting layer accepts already-decoded arrays
-            // (decodeArrayValue / decodeObjectValue both pass through arrays).
+        foreach ($this->writableAttributes($document) as $attribute => $value) {
             $row[$this->filter($attribute)] = $value;
         }
 

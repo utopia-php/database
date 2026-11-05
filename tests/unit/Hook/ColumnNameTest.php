@@ -39,6 +39,7 @@ final class ColumnNameTest extends TestCase
         yield 'a statement separator' => ['x;y'];
         yield 'a quote character' => ['x`y'];
         yield 'an empty name' => [''];
+        yield 'a trailing newline' => ["_uid\n"];
     }
 
     #[DataProvider('invalidColumns')]
@@ -108,6 +109,26 @@ final class ColumnNameTest extends TestCase
         $this->expectExceptionMessage('Invalid permissions table name: posts perms');
 
         $filter->filter('posts');
+    }
+
+    public function testPermissionFilterRejectsAPermissionsTableWithATrailingNewline(): void
+    {
+        $filter = new Filter(['any'], static fn (string $table): string => $table."_perms\n");
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage("Invalid permissions table name: posts_perms\n");
+
+        $filter->filter('posts');
+    }
+
+    public function testPermissionFilterRejectsACollationWithATrailingNewline(): void
+    {
+        $filter = new Filter(['any'], static fn (string $table): string => $table.'_perms');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid collation name: utf8mb4_bin\n");
+
+        $filter->collate("utf8mb4_bin\n");
     }
 
     public function testPermissionFilterWithNoColumnsMatchesOnlyCollectionWidePermissions(): void

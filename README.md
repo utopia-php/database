@@ -147,6 +147,8 @@ What an adapter supports is reported by `$database->getAdapter()->supports(Capab
 
 `Utopia\Database\PDO` wraps PHP's PDO: it reconnects when a connection is lost outside a transaction and retries the call. Each SQL adapter also accepts a plain `PDO`. Pass the PDO attributes your application needs; the ones below are what the adapters expect.
 
+The adapters send one statement per call, so disable MySQL multi-statements (on by default) with `\Pdo\Mysql::ATTR_MULTI_STATEMENTS => false` (PHP 8.4+) for MariaDB and MySQL; an injected `;` then cannot run a second statement.
+
 #### MariaDB
 
 ```php
@@ -167,6 +169,7 @@ $pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", 'root', 'passw
     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
     \PDO::ATTR_EMULATE_PREPARES => true,
     \PDO::ATTR_STRINGIFY_FETCHES => true,
+    \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
 ]);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish
@@ -194,6 +197,7 @@ $pdo = new PDO("mysql:host={$host};port={$port};charset=utf8mb4", 'root', 'passw
     \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
     \PDO::ATTR_EMULATE_PREPARES => true,
     \PDO::ATTR_STRINGIFY_FETCHES => true,
+    \Pdo\Mysql::ATTR_MULTI_STATEMENTS => false,
 ]);
 
 $cache = new Cache(new Memory()); // or use any cache adapter you wish

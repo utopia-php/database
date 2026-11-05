@@ -958,12 +958,6 @@ abstract class Adapter
     }
 
     /**
-     * Process-lifetime cache for {@see self::filter()}. Keys are referentially
-     * stable across the request lifetime and frequently re-queried per-row, so
-     * caching the regex result amortizes the preg_replace cost across all
-     * decode/encode/build passes. Bounded to avoid unbounded growth from
-     * unusual input.
-     *
      * @var array<string, string>
      */
     private static array $filteredKeyCache = [];
@@ -971,11 +965,17 @@ abstract class Adapter
     private const int FILTERED_KEY_CACHE_LIMIT = 4096;
 
     /**
-     * Filter Keys
-     *
      * @throws DatabaseException
      */
     public function filter(string $value): string
+    {
+        return self::filterKey($value);
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    public static function filterKey(string $value): string
     {
         if (isset(self::$filteredKeyCache[$value])) {
             return self::$filteredKeyCache[$value];
@@ -995,10 +995,6 @@ abstract class Adapter
     }
 
     /**
-     * The column an attribute a caller names is written to. filter() keeps underscores, so a name such as `_tenant`
-     * or `_ten.ant` would reach a column the storage keeps for the document itself and move the document to another
-     * tenant, or rewrite its id or timestamps.
-     *
      * @throws NotFoundException When the attribute names a reserved column
      */
     protected function writableColumn(string $attribute): string
@@ -1010,6 +1006,18 @@ abstract class Adapter
         }
 
         return $column;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function writableAttributes(Document $document): array
+    {
+        return \array_filter(
+            $document->getAttributes(),
+            fn (int|string $key): bool => ! Storage::isReserved($this->filter((string) $key)),
+            \ARRAY_FILTER_USE_KEY
+        );
     }
 
     /**

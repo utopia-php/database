@@ -62,7 +62,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
     private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
 
-    private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
+    private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/D';
 
     /**
      * The catalog's format_type() spellings mapped onto getSqlType()'s.
@@ -270,8 +270,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, [Storage::PERMISSIONS], method: 'gin')->query;
         }
 
-        $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
-
         $permissionsTable = $schema->table($permissionsTableRaw);
         $permissionsTable->id(Storage::SEQUENCE);
         $permissionsTable->integer(Storage::TENANT)->nullable()->default(null);
@@ -294,14 +292,19 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE], method: 'btree')->query;
         }
 
-        $permissionsSql = $permissionsResult->query.'; '.implode('; ', $permissionsIndexStatements);
-
         $created = false;
+        $declaringIndexes = false;
 
         try {
-            $this->executeStatement($collectionSql, Event::CollectionCreate);
+            $this->executeStatement($collectionResult->query, Event::CollectionCreate);
             $created = true;
-            $this->executeStatement($permissionsSql, Event::CollectionCreate);
+            $this->executeStatements([
+                ...$indexStatements,
+                $permissionsResult->query,
+                ...$permissionsIndexStatements,
+            ], Event::CollectionCreate);
+
+            $declaringIndexes = true;
 
             foreach ($indexes as $index) {
                 $indexAttributesWithType = [];
@@ -328,7 +331,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 $error = $this->processException($error);
             }
 
-            if ($created && ! ($error instanceof DuplicateException)) {
+            if ($created && ! ($declaringIndexes && $error instanceof DuplicateException)) {
                 $this->discardCreatedCollection($id);
             }
 
@@ -353,7 +356,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $permissions = $schema->analyzeTable($this->getTableRaw(Storage::permissionsTable($name)));
 
         try {
-            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionUpdate);
+            return $this->executeStatements([$main->query, $permissions->query], Event::CollectionUpdate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1106,7 +1109,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
@@ -1171,7 +1174,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
@@ -1459,7 +1462,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             }, $rings);
         }
 
-        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
+        if (\preg_match('/^[0-9a-fA-F]+$/D', $wkb) === 1) {
             $wkb = hex2bin($wkb);
             if ($wkb === false) {
                 throw new DatabaseException('Invalid hex WKB');

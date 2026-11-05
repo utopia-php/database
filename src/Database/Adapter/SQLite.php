@@ -670,19 +670,17 @@ class SQLite extends SQL
     {
         $id = $this->filter($collection);
 
+        $statements = [];
+
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
-            $sql = 'DROP TABLE IF EXISTS '.$this->quote($ftsTable);
-            $this->execute($this->prepare($sql, event: Event::CollectionDelete));
+            $statements[] = 'DROP TABLE IF EXISTS '.$this->quote($ftsTable);
         }
 
-        $sql = "DROP TABLE IF EXISTS {$this->getTable($id)}";
+        $statements[] = "DROP TABLE IF EXISTS {$this->getTable($id)}";
+        $statements[] = "DROP TABLE IF EXISTS {$this->getTable(Storage::permissionsTable($id))}";
 
-        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
-
-        $sql = "DROP TABLE IF EXISTS {$this->getTable(Storage::permissionsTable($id))}";
-
-        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
+        $this->executeStatements($statements, Event::CollectionDelete);
 
         unset($this->ftsTableCache[$this->getFulltextTablePrefix($id)]);
 
@@ -1213,7 +1211,7 @@ class SQLite extends SQL
             $this->syncWriteHooks();
 
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
@@ -1272,7 +1270,7 @@ class SQLite extends SQL
 
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
-            $attributes = $document->getAttributes();
+            $attributes = $this->writableAttributes($document);
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
@@ -2249,6 +2247,7 @@ class SQLite extends SQL
      *
      * @param  string  $name  The filtered collection name
      * @param  array<Change>  $changes  The changes to upsert
+     * @param  array<array{operators: array<string, Operator>, updates: array<string, mixed>}>  $extractions  Each change's writable attributes split into operators and updates, keyed as $changes
      * @param  array<string>  $spatialAttributes  Spatial column names
      * @param  string  $attribute  Increment attribute name (empty if none)
      * @param  array<string, Operator>  $operators  Operator map keyed by attribute name
@@ -2260,6 +2259,7 @@ class SQLite extends SQL
     protected function executeUpsertBatch(
         string $name,
         array $changes,
+        array $extractions,
         array $spatialAttributes,
         string $attribute,
         array $operators,
@@ -2272,13 +2272,12 @@ class SQLite extends SQL
         $allColumnNames = [];
         $documentsData = [];
 
-        foreach ($changes as $change) {
+        foreach ($changes as $index => $change) {
             $document = $change->new;
+            $currentRegularAttributes = $extractions[$index]['updates'];
 
             if ($hasOperators) {
-                $extracted = Operator::extractOperators($document->getAttributes());
-                $currentRegularAttributes = $extracted['updates'];
-                $extractedOperators = $extracted['operators'];
+                $extractedOperators = $extractions[$index]['operators'];
 
                 if ($change->old->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
@@ -2295,7 +2294,6 @@ class SQLite extends SQL
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
             } else {
-                $currentRegularAttributes = $document->getAttributes();
                 $currentRegularAttributes[Storage::UID] = $document->getId();
                 $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DatabaseDateTime::setTimezone($document->getCreatedAt()) : null;
                 $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DatabaseDateTime::setTimezone($document->getUpdatedAt()) : null;
@@ -2309,15 +2307,15 @@ class SQLite extends SQL
 
             $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $document);
 
-            foreach (\array_keys($currentRegularAttributes) as $colName) {
-                $allColumnNames[$colName] = true;
+            foreach (\array_keys($currentRegularAttributes) as $column) {
+                $allColumnNames[$column] = true;
             }
 
             $documentsData[] = ['regularAttributes' => $currentRegularAttributes];
         }
 
-        foreach (\array_keys($operators) as $colName) {
-            $allColumnNames[$colName] = true;
+        foreach (\array_keys($operators) as $column) {
+            $allColumnNames[$column] = true;
         }
 
         $allColumnNames = \array_keys($allColumnNames);
@@ -2358,8 +2356,8 @@ class SQLite extends SQL
         }
 
         $regularAttributes = [];
-        foreach ($allColumnNames as $colName) {
-            $regularAttributes[$colName] = null;
+        foreach ($allColumnNames as $column) {
+            $regularAttributes[$column] = null;
         }
         foreach ($documentsData[0]['regularAttributes'] as $key => $value) {
             $regularAttributes[$key] = $value;
@@ -2468,13 +2466,6 @@ class SQLite extends SQL
         return true;
     }
 
-    /**
-     * SQL::createRelationship concatenates multiple ALTER TABLE statements
-     * with `;` and runs them through a single prepare/execute, which only
-     * works because MySQL accepts multi-statement queries. SQLite's PDO
-     * driver runs the first statement and silently drops the rest, so
-     * re-implement the dispatch with one statement per call.
-     */
     #[\Override]
     public function createRelationship(string $collection, Relationship $relationship): bool
     {
@@ -2496,11 +2487,7 @@ class SQLite extends SQL
             RelationshipType::ManyToMany => [],
         };
 
-        foreach ($statements as $statement) {
-            $this->execute($this->prepare($statement, event: Event::AttributeCreate));
-        }
-
-        return true;
+        return $this->executeConvergingStatements($statements, Event::AttributeCreate, DuplicateException::class);
     }
 
     #[\Override]
@@ -2555,11 +2542,7 @@ class SQLite extends SQL
                 break;
         }
 
-        foreach ($statements as $statement) {
-            $this->execute($this->prepare($statement, event: Event::AttributeUpdate));
-        }
-
-        return true;
+        return $this->executeStatements($statements, Event::AttributeUpdate);
     }
 
     #[\Override]
@@ -2605,11 +2588,7 @@ class SQLite extends SQL
                 break;
         }
 
-        foreach ($statements as $statement) {
-            $this->execute($this->prepare($statement, event: Event::AttributeDelete));
-        }
-
-        return true;
+        return $this->executeConvergingStatements($statements, Event::AttributeDelete, NotFoundException::class);
     }
 
     /**

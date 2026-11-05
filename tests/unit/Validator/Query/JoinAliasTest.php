@@ -75,6 +75,7 @@ final class JoinAliasTest extends TestCase
         yield 'past 63 characters' => [Query::join('orders', \str_repeat('a', 64), [Query::on('$id', 'customerId')]), 'Join alias must be at most 63 characters'];
         yield 'a dot' => [Query::join('orders', 'a.b', [Query::on('$id', 'customerId')]), $invalid];
         yield 'a quote' => [Query::crossJoin('orders', 'x`y'), $invalid];
+        yield 'a trailing newline' => [Query::join('orders', "ord\n", [Query::on('$id', 'customerId')]), $invalid];
     }
 
     #[DataProvider('rejectedTableIds')]
@@ -99,6 +100,7 @@ final class JoinAliasTest extends TestCase
 
         yield 'a dot' => [Query::leftJoin('orders.v2', '', [Query::on('$id', 'customerId')]), $pattern('orders.v2')];
         yield 'a leading hyphen' => [Query::rightJoin('-orders', '', [Query::on('$id', 'customerId')]), $pattern('-orders')];
+        yield 'a trailing newline' => [Query::crossJoin("orders\n", ''), $pattern("orders\n")];
         yield 'a dot on a cross join' => [Query::crossJoin('orders.v2', ''), $pattern('orders.v2')];
         yield 'a dot on a join built without an alias' => [new Query(Method::FullOuterJoin, 'orders.v2', [Query::on('$id', 'customerId')]), $pattern('orders.v2')];
         yield 'a dot on a parsed join' => [Query::parseQuery(['method' => 'join', 'attribute' => 'orders.v2', 'values' => ['$id', '=', 'customerId']]), $pattern('orders.v2')];

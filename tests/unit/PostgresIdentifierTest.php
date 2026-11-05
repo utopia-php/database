@@ -38,7 +38,7 @@ final class PostgresIdentifierTest extends TestCase
         $this->assertNotSame(self::NAMESPACE.'_'.self::COLLECTION, $physical);
         $this->assertStringContainsString('"'.$physical.'"', $queries[0]);
         $this->assertStringNotContainsString(self::COLLECTION, $queries[0]);
-        $this->assertStringContainsString('"'.$permissions.'"', $queries[1]);
+        $this->assertStringContainsString('"'.$permissions.'"', $queries[5]);
     }
 
     public function testExistsBindsHashedTableName(): void
@@ -59,7 +59,7 @@ final class PostgresIdentifierTest extends TestCase
         $statement = $this->getMockBuilder(PDOStatement::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $statement->expects($this->exactly(2))
+        $statement->expects($this->exactly(8))
             ->method('execute')
             ->willReturn(true);
 
@@ -67,7 +67,7 @@ final class PostgresIdentifierTest extends TestCase
         $pdo = $this->getMockBuilder(PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $pdo->expects($this->exactly(2))
+        $pdo->expects($this->exactly(8))
             ->method('prepare')
             ->willReturnCallback(function (string $sql) use (&$queries, $statement): PDOStatement {
                 $queries[] = $sql;
@@ -83,7 +83,7 @@ final class PostgresIdentifierTest extends TestCase
         $adapter->setAuthorization($authorization);
 
         $this->assertTrue($adapter->createCollection($collection));
-        $this->assertCount(2, $queries);
+        $this->assertCount(8, $queries);
 
         return $queries;
     }

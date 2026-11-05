@@ -4,6 +4,7 @@ namespace Utopia\Database\Validator;
 
 use Closure;
 use Exception;
+use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Profile;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -240,7 +241,7 @@ class Structure extends Validator
         // A key named like a column the storage keeps for the document itself, even one declared as an attribute,
         // would be written over the document's own $sequence, $tenant or $permissions.
         foreach (\array_keys($structure) as $key) {
-            if (Storage::isReserved((string) $key)) {
+            if (Storage::isReserved(Adapter::filterKey((string) $key))) {
                 $this->message = 'Reserved attribute: "'.$key.'"';
 
                 return false;

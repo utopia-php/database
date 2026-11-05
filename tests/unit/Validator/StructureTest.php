@@ -365,6 +365,32 @@ class StructureTest extends TestCase
         }
     }
 
+    public function test_reserved_keys_after_filtering(): void
+    {
+        $document = [
+            '$collection' => Id::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        foreach ([[Capability::UnsignedBigInt], [Capability::DefinedAttributes, Capability::UnsignedBigInt]] as $capabilities) {
+            $validator = new Structure(new Document($this->collection), Profiles::of(capabilities: $capabilities));
+            $this->assertTrue($validator->isValid(new Document($document)), $validator->getDescription());
+
+            foreach (['_u!id', '_ten.ant', '_perm$issions', '_i d'] as $key) {
+                $this->assertFalse($validator->isValid(new Document([...$document, $key => 'stored over the document\'s own field'])), $key);
+                $this->assertSame('Invalid document structure: Reserved attribute: "'.$key.'"', $validator->getDescription());
+            }
+        }
+    }
+
     public function test_reserved_keys_with_defined_attributes(): void
     {
         $collection = $this->collection;

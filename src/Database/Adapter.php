@@ -965,11 +965,17 @@ abstract class Adapter
     private const int FILTERED_KEY_CACHE_LIMIT = 4096;
 
     /**
-     * Filter Keys
-     *
      * @throws DatabaseException
      */
     public function filter(string $value): string
+    {
+        return self::filterKey($value);
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    public static function filterKey(string $value): string
     {
         if (isset(self::$filteredKeyCache[$value])) {
             return self::$filteredKeyCache[$value];

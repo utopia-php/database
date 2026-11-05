@@ -209,13 +209,19 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        $this->timeout = $milliseconds;
+        if ($milliseconds <= 0) {
+            $this->clearTimeout($event);
+
+            return;
+        }
+
+        $this->setTimeoutState($milliseconds, $event);
     }
 
     #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
-        $this->timeout = 0;
+        $this->clearTimeoutState($event);
     }
 
     #[\Override]
@@ -2414,8 +2420,9 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
             $options['skip'] = $offset;
         }
 
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
+        $timeout = $this->getTimeout(Event::DocumentFind);
+        if ($timeout > 0) {
+            $options['maxTimeMS'] = $timeout;
         }
 
         $selections = $this->getAttributeSelections($queries);
@@ -2601,17 +2608,6 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $this->escapeQueryAttributes($collection, $queries);
 
-        $filters = [];
-        $options = [];
-
-        if (! \is_null($max) && $max > 0) {
-            $options['limit'] = $max;
-        }
-
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
-        }
-
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
         $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
@@ -2626,8 +2622,9 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
          **/
         $options = $this->getTransactionOptions();
 
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
+        $timeout = $this->getTimeout(Event::DocumentCount);
+        if ($timeout > 0) {
+            $options['maxTimeMS'] = $timeout;
         }
 
         $pipeline = [];
@@ -2719,8 +2716,9 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
 
         $options = $this->getTransactionOptions();
 
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
+        $timeout = $this->getTimeout(Event::DocumentSum);
+        if ($timeout > 0) {
+            $options['maxTimeMS'] = $timeout;
         }
 
         try {

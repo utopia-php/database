@@ -1896,15 +1896,15 @@ class Memory extends Adapter implements Feature\Relationships
     #[\Override]
     public function increaseDocumentAttribute(Document $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
+        $column = $this->writableColumn($attribute);
         $key = $this->key($collection->getId());
-        $docKey = $this->documentKey($id);
-        if (! isset($this->data[$key]['documents'][$docKey])) {
+        $documentKey = $this->documentKey($id);
+        if (! isset($this->data[$key]['documents'][$documentKey])) {
             throw new NotFoundException('Document not found');
         }
 
-        $column = $this->filter($attribute);
-        $previousValue = $this->data[$key]['documents'][$docKey][$column] ?? null;
-        $previousUpdatedAt = $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] ?? null;
+        $previousValue = $this->data[$key]['documents'][$documentKey][$column] ?? null;
+        $previousUpdatedAt = $this->data[$key]['documents'][$documentKey][Storage::UPDATED_AT] ?? null;
         $current = $previousValue ?? 0;
         $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
             && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
@@ -1931,14 +1931,14 @@ class Memory extends Adapter implements Feature\Relationships
             $result = $current + $value;
         }
 
-        $this->data[$key]['documents'][$docKey][$column] = $result;
-        $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] = $updatedAt;
+        $this->data[$key]['documents'][$documentKey][$column] = $result;
+        $this->data[$key]['documents'][$documentKey][Storage::UPDATED_AT] = $updatedAt;
 
-        $this->journal(function () use ($key, $docKey, $column, $previousValue, $previousUpdatedAt): void {
-            if (! isset($this->data[$key]['documents'][$docKey])) {
+        $this->journal(function () use ($key, $documentKey, $column, $previousValue, $previousUpdatedAt): void {
+            if (! isset($this->data[$key]['documents'][$documentKey])) {
                 return;
             }
-            $row = &$this->data[$key]['documents'][$docKey];
+            $row = &$this->data[$key]['documents'][$documentKey];
             if ($previousValue === null) {
                 unset($row[$column]);
             } else {

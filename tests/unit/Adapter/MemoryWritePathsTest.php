@@ -12,12 +12,14 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\Permission;
 use Utopia\Database\Query;
 use Utopia\Database\Role;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 
@@ -154,6 +156,27 @@ final class MemoryWritePathsTest extends TestCase
         $after = $adapter->getDocument($this->collection(), 'home');
         $this->assertNull($after->getAttribute('visits'));
         $this->assertNull($after->getUpdatedAt());
+    }
+
+    public function testIncreaseRefusesAStorageColumn(): void
+    {
+        $adapter = $this->sharedAdapter();
+        $this->storeAddress($adapter, 'home', 'x', 1);
+        $before = $adapter->getDocument($this->collection(), 'home');
+
+        foreach ([Storage::TENANT, '_ten.ant', Storage::SEQUENCE, Storage::UPDATED_AT] as $attribute) {
+            try {
+                $adapter->increaseDocumentAttribute($this->collection(), 'home', $attribute, 5, self::UPDATED_AT);
+                $this->fail('Incrementing '.$attribute.' must be refused');
+            } catch (NotFoundException $exception) {
+                $this->assertSame('Attribute not found', $exception->getMessage());
+            }
+        }
+
+        $after = $adapter->getDocument($this->collection(), 'home');
+        $this->assertSame($before->getTenant(), $after->getTenant());
+        $this->assertSame($before->getSequence(), $after->getSequence());
+        $this->assertSame($before->getUpdatedAt(), $after->getUpdatedAt());
     }
 
     public function testADivisionOrModuloByZeroThatSkippedValidationKeepsTheValue(): void

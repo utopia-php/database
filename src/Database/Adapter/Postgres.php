@@ -62,7 +62,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
 
     private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
 
-    private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
+    private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/D';
 
     /**
      * The catalog's format_type() spellings mapped onto getSqlType()'s.
@@ -1462,7 +1462,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             }, $rings);
         }
 
-        if (preg_match('/^[0-9a-fA-F]+$/', $wkb)) {
+        if (\preg_match('/^[0-9a-fA-F]+$/D', $wkb) === 1) {
             $wkb = hex2bin($wkb);
             if ($wkb === false) {
                 throw new DatabaseException('Invalid hex WKB');

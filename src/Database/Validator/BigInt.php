@@ -64,7 +64,7 @@ class BigInt extends Validator
 
     public static function isIntegerString(string $value, bool $signed = true): bool
     {
-        return \preg_match($signed ? '/^-?\d+$/' : '/^\d+$/', $value) === 1;
+        return \preg_match($signed ? '/^-?\d+$/D' : '/^\d+$/D', $value) === 1;
     }
 
     /**
@@ -390,7 +390,7 @@ class BigInt extends Validator
         }
 
         if (\is_string($value)) {
-            return \preg_match('/^(-?\d+)\.0+$/', $value, $matches) === 1 ? self::toNative($matches[1]) : null;
+            return \preg_match('/^(-?\d+)\.0+$/D', $value, $matches) === 1 ? self::toNative($matches[1]) : null;
         }
 
         if (! \is_float($value) || ! \is_finite($value) || \floor($value) !== $value) {

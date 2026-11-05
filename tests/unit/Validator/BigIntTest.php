@@ -27,6 +27,7 @@ final class BigIntTest extends TestCase
         yield 'negative decimal with a zero fraction' => ['-7.0', '-7'];
         yield 'decimal with an empty fraction' => ['7.', '7'];
         yield 'decimal with a fraction' => ['7.0500', null];
+        yield 'integer with a trailing newline' => ["7\n", null];
         yield 'exponent' => ['1.8446744073709552e19', null];
         yield 'infinity' => ['INF', null];
         yield 'empty' => ['', null];
@@ -103,6 +104,7 @@ final class BigIntTest extends TestCase
         yield 'null' => [null];
         yield 'a word' => ['abc'];
         yield 'a decimal string' => ['1.5'];
+        yield 'an integer string with a trailing newline' => ["5\n"];
     }
 
     public function testPowerRefusesANegativeExponent(): void
@@ -179,5 +181,18 @@ final class BigIntTest extends TestCase
         $this->assertSame('0', BigInt::normalizeInteger(0));
         $this->assertSame(\PHP_INT_MIN, BigInt::toNative(\PHP_INT_MIN));
         $this->assertSame(12, BigInt::toNative(12));
+    }
+
+    public function testAnIntegerStringWithATrailingNewlineIsNotAnInteger(): void
+    {
+        $this->assertFalse(BigInt::isIntegerString("5\n"));
+        $this->assertFalse(BigInt::isIntegerString("5\n", false));
+        $this->assertFalse((new BigInt(true))->isValid("5\n"));
+    }
+
+    public function testADecimalWithATrailingNewlineHasNoIntegralValue(): void
+    {
+        $this->assertSame(5, BigInt::integralValue('5.0'));
+        $this->assertNull(BigInt::integralValue("5.0\n"));
     }
 }

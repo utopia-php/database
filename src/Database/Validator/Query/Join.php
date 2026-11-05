@@ -18,7 +18,7 @@ class Join extends Base
     /**
      * The characters of an Appwrite ID but `.`, which separates an alias from its column.
      */
-    public const string ALIAS_PATTERN = '/^[A-Za-z0-9_][A-Za-z0-9_-]*$/';
+    public const string ALIAS_PATTERN = '/^[A-Za-z0-9_][A-Za-z0-9_-]*$/D';
 
     /**
      * PostgreSQL folds an identifier past 63 bytes, so two longer aliases could read as one.

@@ -21,13 +21,13 @@ use Utopia\Query\Hook\Join\Filter as JoinFilter;
  */
 readonly class Filter implements FilterHook, JoinFilter
 {
-    private const string IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
+    private const string IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/D';
 
-    private const string QUOTED_IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
+    private const string QUOTED_IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/D';
 
     private const string NO_SEMIJOIN = '/*+ NO_SEMIJOIN() */ ';
 
-    private const string COLLATION_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]*$/';
+    private const string COLLATION_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]*$/D';
 
     protected string $documentCollation;
 

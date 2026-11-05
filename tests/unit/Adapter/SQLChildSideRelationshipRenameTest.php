@@ -25,8 +25,8 @@ final class SQLChildSideRelationshipRenameTest extends TestCase
     public static function renames(): iterable
     {
         $engines = [
-            'MariaDB' => [MariaDB::class, 'ALTER TABLE `database`.`namespace_%s` RENAME COLUMN `%s` TO `%s`;'],
-            'Postgres' => [Postgres::class, 'ALTER TABLE "database"."namespace_%s" RENAME COLUMN "%s" TO "%s";'],
+            'MariaDB' => [MariaDB::class, 'ALTER TABLE `database`.`namespace_%s` RENAME COLUMN `%s` TO `%s`'],
+            'Postgres' => [Postgres::class, 'ALTER TABLE "database"."namespace_%s" RENAME COLUMN "%s" TO "%s"'],
         ];
 
         foreach ($engines as $engine => [$class, $statement]) {

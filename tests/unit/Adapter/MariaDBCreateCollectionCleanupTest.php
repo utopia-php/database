@@ -48,11 +48,9 @@ final class MariaDBCreateCollectionCleanupTest extends TestCase
             $this->assertSame('Query timed out', $error->getMessage());
         }
 
-        $this->assertCount(3, $this->statements);
-        $this->assertSame(
-            'DROP TABLE IF EXISTS `database`.`namespace_books`; DROP TABLE IF EXISTS `database`.`namespace_books_perms`',
-            $this->statements[2],
-        );
+        $this->assertCount(4, $this->statements);
+        $this->assertSame('DROP TABLE IF EXISTS `database`.`namespace_books`', $this->statements[2]);
+        $this->assertSame('DROP TABLE IF EXISTS `database`.`namespace_books_perms`', $this->statements[3]);
     }
 
     /**

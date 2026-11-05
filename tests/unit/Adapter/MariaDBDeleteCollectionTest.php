@@ -35,12 +35,12 @@ final class MariaDBDeleteCollectionTest extends TestCase
      * @param  class-string<MariaDB>  $adapterClass
      */
     #[DataProvider('adapters')]
-    public function testDropsBothTablesInOneStatement(string $adapterClass): void
+    public function testDropsTheMainTableThenThePermissionsTable(string $adapterClass): void
     {
         $adapter = $this->createAdapter($adapterClass, mainTableExists: true);
 
         $this->assertTrue($adapter->deleteCollection('places'));
-        $this->assertSame([self::MAIN.'; '.self::PERMISSIONS], $this->statements);
+        $this->assertSame([self::MAIN, self::PERMISSIONS], $this->statements);
     }
 
     /**
@@ -58,7 +58,7 @@ final class MariaDBDeleteCollectionTest extends TestCase
             $this->assertSame('Collection not found', $e->getMessage());
         }
 
-        $this->assertSame([self::MAIN.'; '.self::PERMISSIONS, self::PERMISSIONS], $this->statements);
+        $this->assertSame([self::MAIN, self::PERMISSIONS], $this->statements);
     }
 
     /**
@@ -71,7 +71,7 @@ final class MariaDBDeleteCollectionTest extends TestCase
             $this->statements[] = $query;
 
             $statement = $this->createStub(PDOStatement::class);
-            if (! $mainTableExists && \str_starts_with($query, self::MAIN.';')) {
+            if (! $mainTableExists && $query === self::MAIN) {
                 $statement->method('execute')->willThrowException($this->unknownTable());
             } else {
                 $statement->method('execute')->willReturn(true);

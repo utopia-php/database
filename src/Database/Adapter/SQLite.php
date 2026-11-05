@@ -670,19 +670,17 @@ class SQLite extends SQL
     {
         $id = $this->filter($collection);
 
+        $statements = [];
+
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
-            $sql = 'DROP TABLE IF EXISTS '.$this->quote($ftsTable);
-            $this->execute($this->prepare($sql, event: Event::CollectionDelete));
+            $statements[] = 'DROP TABLE IF EXISTS '.$this->quote($ftsTable);
         }
 
-        $sql = "DROP TABLE IF EXISTS {$this->getTable($id)}";
+        $statements[] = "DROP TABLE IF EXISTS {$this->getTable($id)}";
+        $statements[] = "DROP TABLE IF EXISTS {$this->getTable(Storage::permissionsTable($id))}";
 
-        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
-
-        $sql = "DROP TABLE IF EXISTS {$this->getTable(Storage::permissionsTable($id))}";
-
-        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
+        $this->executeStatements($statements, Event::CollectionDelete);
 
         unset($this->ftsTableCache[$this->getFulltextTablePrefix($id)]);
 
@@ -2468,13 +2466,6 @@ class SQLite extends SQL
         return true;
     }
 
-    /**
-     * SQL::createRelationship concatenates multiple ALTER TABLE statements
-     * with `;` and runs them through a single prepare/execute, which only
-     * works because MySQL accepts multi-statement queries. SQLite's PDO
-     * driver runs the first statement and silently drops the rest, so
-     * re-implement the dispatch with one statement per call.
-     */
     #[\Override]
     public function createRelationship(string $collection, Relationship $relationship): bool
     {
@@ -2496,11 +2487,7 @@ class SQLite extends SQL
             RelationshipType::ManyToMany => [],
         };
 
-        foreach ($statements as $statement) {
-            $this->execute($this->prepare($statement, event: Event::AttributeCreate));
-        }
-
-        return true;
+        return $this->executeStatements($statements, Event::AttributeCreate);
     }
 
     #[\Override]
@@ -2555,11 +2542,7 @@ class SQLite extends SQL
                 break;
         }
 
-        foreach ($statements as $statement) {
-            $this->execute($this->prepare($statement, event: Event::AttributeUpdate));
-        }
-
-        return true;
+        return $this->executeStatements($statements, Event::AttributeUpdate);
     }
 
     #[\Override]
@@ -2605,11 +2588,7 @@ class SQLite extends SQL
                 break;
         }
 
-        foreach ($statements as $statement) {
-            $this->execute($this->prepare($statement, event: Event::AttributeDelete));
-        }
-
-        return true;
+        return $this->executeStatements($statements, Event::AttributeDelete);
     }
 
     /**

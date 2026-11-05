@@ -270,8 +270,6 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, [Storage::PERMISSIONS], method: 'gin')->query;
         }
 
-        $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
-
         $permissionsTable = $schema->table($permissionsTableRaw);
         $permissionsTable->id(Storage::SEQUENCE);
         $permissionsTable->integer(Storage::TENANT)->nullable()->default(null);
@@ -294,14 +292,19 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             $permissionsIndexStatements[] = $schema->createIndex($permissionsTableRaw, $permissionIndex, [Storage::PERMISSIONS_PERMISSION, Storage::PERMISSIONS_TYPE], method: 'btree')->query;
         }
 
-        $permissionsSql = $permissionsResult->query.'; '.implode('; ', $permissionsIndexStatements);
-
         $created = false;
+        $declaringIndexes = false;
 
         try {
-            $this->executeStatement($collectionSql, Event::CollectionCreate);
+            $this->executeStatement($collectionResult->query, Event::CollectionCreate);
             $created = true;
-            $this->executeStatement($permissionsSql, Event::CollectionCreate);
+            $this->executeStatements([
+                ...$indexStatements,
+                $permissionsResult->query,
+                ...$permissionsIndexStatements,
+            ], Event::CollectionCreate);
+
+            $declaringIndexes = true;
 
             foreach ($indexes as $index) {
                 $indexAttributesWithType = [];
@@ -328,7 +331,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
                 $error = $this->processException($error);
             }
 
-            if ($created && ! ($error instanceof DuplicateException)) {
+            if ($created && ! ($declaringIndexes && $error instanceof DuplicateException)) {
                 $this->discardCreatedCollection($id);
             }
 
@@ -353,7 +356,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
         $permissions = $schema->analyzeTable($this->getTableRaw(Storage::permissionsTable($name)));
 
         try {
-            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionUpdate);
+            return $this->executeStatements([$main->query, $permissions->query], Event::CollectionUpdate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

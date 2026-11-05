@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter;
 
 use PDO;
+use Pdo\Mysql as MySQLPDO;
 use PHPUnit\Framework\TestCase;
 use Tests\E2E\Adapter\Scopes\AggregationTests;
 use Tests\E2E\Adapter\Scopes\AttributeTests;
@@ -87,6 +88,13 @@ abstract class Base extends TestCase
         PDO::ATTR_EMULATE_PREPARES => true,
         PDO::ATTR_STRINGIFY_FETCHES => true,
     ];
+
+    /**
+     * @var array<int, mixed>
+     */
+    protected const array MYSQL_PDO_ATTRIBUTES = [
+        MySQLPDO::ATTR_MULTI_STATEMENTS => false,
+    ] + self::PDO_ATTRIBUTES;
 
     protected static string $namespace;
 

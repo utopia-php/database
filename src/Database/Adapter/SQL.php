@@ -3081,7 +3081,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
         try {
-            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionDelete);
+            return $this->executeStatements([$main->query, $permissions->query], Event::CollectionDelete);
         } catch (PDOException $e) {
             $error = $this->processException($e);
             if ($error instanceof NotFoundException && $this->inTransaction === 0) {
@@ -3111,7 +3111,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $main = $schema->table($this->getTableRaw($id))->dropIfExists();
         $permissions = $schema->table($this->getTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
-        $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionCreate);
+        $this->executeStatements([$main->query, $permissions->query], Event::CollectionCreate);
     }
 
     /**
@@ -3136,18 +3136,16 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $result->query;
         };
 
-        $sql = match ($relationship->type) {
-            RelationshipType::OneToOne => $addColumn($name, $key) . ';' . ($relationship->twoWay ? $addColumn($relatedName, $twoWayKey) . ';' : ''),
-            RelationshipType::OneToMany => $addColumn($relatedName, $twoWayKey) . ';',
-            RelationshipType::ManyToOne => $addColumn($name, $key) . ';',
-            RelationshipType::ManyToMany => null,
+        $statements = match ($relationship->type) {
+            RelationshipType::OneToOne => $relationship->twoWay
+                ? [$addColumn($name, $key), $addColumn($relatedName, $twoWayKey)]
+                : [$addColumn($name, $key)],
+            RelationshipType::OneToMany => [$addColumn($relatedName, $twoWayKey)],
+            RelationshipType::ManyToOne => [$addColumn($name, $key)],
+            RelationshipType::ManyToMany => [],
         };
 
-        if ($sql === null) {
-            return true;
-        }
-
-        return $this->executeStatement($sql, Event::AttributeCreate);
+        return $this->executeStatements($statements, Event::AttributeCreate);
     }
 
     /**
@@ -3175,52 +3173,48 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $result->query;
         };
 
-        $sql = '';
+        $statements = [];
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
                 if (($twoWay || $side === RelationshipSide::Parent) && $newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($name, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($name, $key, $newKey);
                 }
                 if (($twoWay || $side === RelationshipSide::Child) && $newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                    $statements[] = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey);
                 }
                 break;
             case RelationshipType::OneToMany:
                 if ($side === RelationshipSide::Parent) {
                     if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                        $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $statements[] = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey);
                     }
                 } elseif ($newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($name, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($name, $key, $newKey);
                 }
                 break;
             case RelationshipType::ManyToOne:
                 if ($side === RelationshipSide::Child) {
                     if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                        $sql = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey) . ';';
+                        $statements[] = $renameColumn($relatedName, $twoWayKey, $newTwoWayKey);
                     }
                 } elseif ($newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($name, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($name, $key, $newKey);
                 }
                 break;
             case RelationshipType::ManyToMany:
                 $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
 
                 if ($newKey !== null && $key !== $newKey) {
-                    $sql = $renameColumn($junctionName, $key, $newKey) . ';';
+                    $statements[] = $renameColumn($junctionName, $key, $newKey);
                 }
                 if ($newTwoWayKey !== null && $twoWayKey !== $newTwoWayKey) {
-                    $sql .= $renameColumn($junctionName, $twoWayKey, $newTwoWayKey) . ';';
+                    $statements[] = $renameColumn($junctionName, $twoWayKey, $newTwoWayKey);
                 }
                 break;
         }
 
-        if ($sql === '') {
-            return true;
-        }
-
-        return $this->executeStatement($sql, Event::AttributeUpdate);
+        return $this->executeStatements($statements, Event::AttributeUpdate);
     }
 
     /**
@@ -3246,31 +3240,31 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             return $result->query;
         };
 
-        $sql = '';
+        $statements = [];
 
         switch ($relationship->type) {
             case RelationshipType::OneToOne:
                 if ($side === RelationshipSide::Parent) {
-                    $sql = $dropColumn($name, $key) . ';';
+                    $statements[] = $dropColumn($name, $key);
                     if ($twoWay) {
-                        $sql .= $dropColumn($relatedName, $twoWayKey) . ';';
+                        $statements[] = $dropColumn($relatedName, $twoWayKey);
                     }
                 } else {
-                    $sql = $dropColumn($relatedName, $twoWayKey) . ';';
+                    $statements[] = $dropColumn($relatedName, $twoWayKey);
                     if ($twoWay) {
-                        $sql .= $dropColumn($name, $key) . ';';
+                        $statements[] = $dropColumn($name, $key);
                     }
                 }
                 break;
             case RelationshipType::OneToMany:
-                $sql = $side === RelationshipSide::Parent
-                    ? $dropColumn($relatedName, $twoWayKey) . ';'
-                    : $dropColumn($name, $key) . ';';
+                $statements[] = $side === RelationshipSide::Parent
+                    ? $dropColumn($relatedName, $twoWayKey)
+                    : $dropColumn($name, $key);
                 break;
             case RelationshipType::ManyToOne:
-                $sql = $side === RelationshipSide::Parent
-                    ? $dropColumn($name, $key) . ';'
-                    : $dropColumn($relatedName, $twoWayKey) . ';';
+                $statements[] = $side === RelationshipSide::Parent
+                    ? $dropColumn($name, $key)
+                    : $dropColumn($relatedName, $twoWayKey);
                 break;
             case RelationshipType::ManyToMany:
                 $junctionName = $this->getJunctionName($collection, $relationship->relatedCollection, $side);
@@ -3278,11 +3272,12 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
                 $junctionResult = $schema->table($this->getTableRaw($junctionName))->drop();
                 $permissionsResult = $schema->table($this->getTableRaw(Storage::permissionsTable($junctionName)))->drop();
 
-                $sql = $junctionResult->query . '; ' . $permissionsResult->query;
+                $statements[] = $junctionResult->query;
+                $statements[] = $permissionsResult->query;
                 break;
         }
 
-        return $this->executeStatement($sql, Event::AttributeDelete);
+        return $this->executeStatements($statements, Event::AttributeDelete);
     }
 
     /**
@@ -3873,6 +3868,20 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     protected function executeStatement(string $sql, Event $event): bool
     {
         return $this->execute($this->prepareStatement($sql, $event));
+    }
+
+    /**
+     * @param  list<string>  $statements
+     */
+    protected function executeStatements(array $statements, Event $event): bool
+    {
+        foreach ($statements as $statement) {
+            if (! $this->executeStatement($statement, $event)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function transformQuery(Event $event, string $sql): string

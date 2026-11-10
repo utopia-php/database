@@ -4,6 +4,8 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -225,6 +227,43 @@ trait SchemaReconciliationTests
             ));
             $this->assertCount(1, $lookups);
             $this->assertSame(IndexType::Key, $lookups[0]->type);
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testDeletingAnAttributeDropsItsOnlyIndexFromTheSchema(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        // Mongo unsets the field and keeps its indexes.
+        if (! $adapter->supports(Capability::SchemaIntrospection) || $adapter instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'reconcileDroppedAttributeIndex';
+        $this->createReconciledCollection($database, $collection, [
+            Attribute::string(key: 'status', size: 255),
+            Attribute::string(key: 'name', size: 255),
+        ]);
+
+        try {
+            $database->createIndex($collection, Index::key(key: 'status_index', attributes: ['status']));
+            $database->createIndex($collection, Index::key(key: 'status_name', attributes: ['status', 'name']));
+
+            $database->deleteAttribute($collection, 'status');
+
+            $this->assertFalse($this->hasSchemaIndex($database, $collection, 'status_index'));
+            // Postgres drops every index on a dropped column, composite ones included.
+            if (! $adapter instanceof Postgres) {
+                $this->assertTrue($this->hasSchemaIndex($database, $collection, 'status_name'));
+            }
+
+            $database->createAttribute($collection, Attribute::string(key: 'status', size: 255));
+            $this->assertSame('status_index', $database->createIndex($collection, Index::key(key: 'status_index', attributes: ['status']))->key);
         } finally {
             $database->deleteCollection($collection);
         }

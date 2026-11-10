@@ -473,6 +473,44 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
     }
 
     /**
+     * Dropping a column drops an index only when no other column is left in it. Under shared
+     * tables every key and unique index leads with the tenant column, so an index whose last
+     * attribute is the dropped column survives on the tenant column alone, keeps its name, and
+     * refuses the next index created under that name. Every index left on the tenant column
+     * alone is dropped with the column: no index the library creates is ever only that column.
+     *
+     * @throws DatabaseException
+     * @throws Exception
+     * @throws PDOException
+     */
+    #[\Override]
+    public function deleteAttribute(string $collection, string $key): bool
+    {
+        $missing = null;
+        try {
+            $deleted = parent::deleteAttribute($collection, $key);
+        } catch (NotFoundException $error) {
+            // A retry after the column was dropped still clears what the first attempt left behind.
+            $missing = $error;
+            $deleted = false;
+        }
+
+        if ($this->sharedTables) {
+            foreach ($this->getSchemaIndexes($collection) as $index) {
+                if (\array_map(\strtolower(...), $index->columns) === [\strtolower(Storage::TENANT)]) {
+                    $this->deleteIndex($collection, $index->name);
+                }
+            }
+        }
+
+        if ($missing !== null) {
+            throw $missing;
+        }
+
+        return $deleted;
+    }
+
+    /**
      * @param  array<string,string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      *

@@ -915,13 +915,21 @@ trait Attributes
                 continue;
             }
 
-            $attributes = \array_values(\array_filter(
-                $index->attributes,
-                static fn (string $attribute): bool => $attribute !== $key,
-            ));
+            // Lengths and orders are positional, so drop the entry at the removed attribute's position too.
+            $position = \array_search($key, $index->attributes, true);
+            $document = $index->toDocument();
+            $attributes = $index->attributes;
+            $lengths = $document->getAttribute('lengths', []);
+            $orders = $document->getAttribute('orders', []);
+            \array_splice($attributes, $position, 1);
+            \array_splice($lengths, $position, 1);
+            \array_splice($orders, $position, 1);
 
             if ($attributes !== []) {
-                $remaining[] = self::withIndexedAttributes($index, $attributes);
+                $remaining[] = Index::fromDocument($document
+                    ->setAttribute(self::INDEX_ATTRIBUTES, $attributes)
+                    ->setAttribute('lengths', $lengths)
+                    ->setAttribute('orders', $orders));
             }
         }
 

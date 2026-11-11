@@ -137,6 +137,29 @@ trait IndexTests
         $database->deleteCollection('indexes');
     }
 
+    public function testDeleteAttributeKeepsIndexLengthsAligned(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(Collection::create(id: 'indexLengths', attributes: [
+            Attribute::string(key: 'first', size: 128),
+            Attribute::string(key: 'second', size: 128),
+        ], indexes: [
+            Index::key(key: 'pair', attributes: ['first', 'second'], lengths: [64, 32], orders: [OrderDirection::Asc, OrderDirection::Desc]),
+        ]));
+
+        $database->deleteAttribute('indexLengths', 'first');
+
+        $index = $database->getCollection('indexLengths')->indexes()[0];
+        $this->assertSame([32], $index->lengths);
+        $this->assertSame([OrderDirection::Desc], $index->orders);
+
+        $database->updateAttribute('indexLengths', 'second', new Update(size: 256));
+
+        $database->deleteCollection('indexLengths');
+    }
+
     public function testCreateUniqueIndexOverDuplicates(): void
     {
         $database = $this->getDatabase();

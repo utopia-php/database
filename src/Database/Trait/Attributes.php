@@ -915,15 +915,16 @@ trait Attributes
                 continue;
             }
 
-            // Lengths and orders are positional, so drop the entry at the removed attribute's position too.
-            $position = (int) \array_search($key, $index->attributes, true);
+            // Lengths and orders are positional, so drop the entry at each removed attribute's position too.
             $document = $index->toDocument();
             $attributes = $index->attributes;
             $lengths = (array) $document->getAttribute('lengths', []);
             $orders = (array) $document->getAttribute('orders', []);
-            \array_splice($attributes, $position, 1);
-            \array_splice($lengths, $position, 1);
-            \array_splice($orders, $position, 1);
+            foreach (\array_reverse(\array_keys($attributes, $key, true)) as $position) {
+                \array_splice($attributes, $position, 1);
+                \array_splice($lengths, $position, 1);
+                \array_splice($orders, $position, 1);
+            }
 
             if ($attributes !== []) {
                 $remaining[] = Index::fromDocument($document

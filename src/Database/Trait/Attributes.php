@@ -916,11 +916,11 @@ trait Attributes
             }
 
             // Lengths and orders are positional, so drop the entry at the removed attribute's position too.
-            $position = \array_search($key, $index->attributes, true);
+            $position = (int) \array_search($key, $index->attributes, true);
             $document = $index->toDocument();
             $attributes = $index->attributes;
-            $lengths = $document->getAttribute('lengths', []);
-            $orders = $document->getAttribute('orders', []);
+            $lengths = (array) $document->getAttribute('lengths', []);
+            $orders = (array) $document->getAttribute('orders', []);
             \array_splice($attributes, $position, 1);
             \array_splice($lengths, $position, 1);
             \array_splice($orders, $position, 1);

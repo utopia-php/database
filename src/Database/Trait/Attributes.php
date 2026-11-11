@@ -378,6 +378,17 @@ trait Attributes
 
         $deletedInSchema = $this->deleteAttributeFromSchema($definition->getId(), $key);
 
+        // An engine drops an index with its column only when no other column is left in it, and under
+        // shared tables every index also holds the tenant column. An index whose last attribute this was
+        // would survive on the tenant column alone and refuse the next index created under its name.
+        if ($this->adapter->hasSharedTables()) {
+            foreach ($indexes as $index) {
+                if ($index->attributes === [$key]) {
+                    $this->deleteIndexFromSchema($definition->getId(), $index->key);
+                }
+            }
+        }
+
         $this->updateMetadata(
             collection: $definition,
             rollbackOperation: fn () => $this->adapter->createAttribute($definition->getId(), $attribute),

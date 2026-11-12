@@ -1180,6 +1180,16 @@ class Redis extends Adapter implements
         return $this->upsertDocuments($collection, [$change])[0];
     }
 
+    /**
+     * Redis has no row locks to take.
+     *
+     * @param  array<string>  $ids
+     */
+    #[\Override]
+    public function lockDocuments(Document $collection, array $ids): void
+    {
+    }
+
     #[\Override]
     public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array
     {

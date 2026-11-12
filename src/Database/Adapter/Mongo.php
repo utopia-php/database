@@ -2151,6 +2151,16 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
     }
 
     /**
+     * MongoDB has no row locks to take; a concurrent write to the same document fails the transaction with a write conflict instead.
+     *
+     * @param  array<string>  $ids
+     */
+    #[\Override]
+    public function lockDocuments(Document $collection, array $ids): void
+    {
+    }
+
+    /**
      * @param  array<Change>  $changes
      * @return array<Document>
      *

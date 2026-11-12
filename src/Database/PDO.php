@@ -50,6 +50,13 @@ class PDO
     private ?Throwable $lostTransaction = null;
 
     /**
+     * Whether the connection is lost and a reconnect has not replaced it yet. Its own
+     * transaction state is not read meanwhile: pdo_pgsql reports a transaction on a lost
+     * connection whether the caller held one or not.
+     */
+    private bool $lost = false;
+
+    /**
      * Statements that set session state, keyed by the setting each one sets.
      *
      * @var array<string, string>
@@ -110,10 +117,12 @@ class PDO
     {
         $this->guard($query);
 
+        $inTransaction = $this->inTransaction();
+
         try {
             $statement = $this->pdo->prepare($query, $options);
         } catch (Throwable $e) {
-            if (!Connection::hasError($e) || $this->pdo->inTransaction()) {
+            if (!Connection::hasError($e) || $inTransaction) {
                 throw $e;
             }
 
@@ -145,6 +154,10 @@ class PDO
             $this->guard(\is_string($statement) ? $statement : $method);
         }
 
+        // Read before the call: a lost connection reports a transaction afterwards
+        // (pdo_pgsql reads libpq's unknown status as one), so the call would never be retried.
+        $inTransaction = $this->inTransaction();
+
         try {
             return $this->pdo->{$method}(...$args);
         } catch (Throwable $e) {
@@ -152,17 +165,19 @@ class PDO
                 Console::warning('[Database] '.$e->getMessage());
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
 
-                $inTransaction = $this->pdo->inTransaction();
-
-                $this->reconnect();
-
                 if (! $inTransaction) {
+                    $this->reconnect();
+
                     return $this->pdo->{$method}(...$args);
                 }
 
+                // Set before replacing the connection, so a reconnect that fails still
+                // refuses the caller's next statement.
                 if (\strcasecmp($method, 'rollBack') !== 0) {
                     $this->lostTransaction = $e;
                 }
+
+                $this->replace();
             }
 
             throw $e;
@@ -211,6 +226,17 @@ class PDO
      */
     public function reconnect(): void
     {
+        $this->replace();
+        $this->lostTransaction = null;
+    }
+
+    /**
+     * @throws Throwable
+     */
+    private function replace(): void
+    {
+        $this->lost = true;
+
         $pdo = $this->connect();
 
         foreach ($this->attributes as $attribute => $value) {
@@ -226,7 +252,7 @@ class PDO
         }
 
         $this->pdo = $pdo;
-        $this->lostTransaction = null;
+        $this->lost = false;
     }
 
     /**
@@ -271,7 +297,7 @@ class PDO
 
     public function inTransaction(): bool
     {
-        return $this->lostTransaction !== null || $this->pdo->inTransaction();
+        return $this->lostTransaction !== null || (! $this->lost && $this->pdo->inTransaction());
     }
 
     /**

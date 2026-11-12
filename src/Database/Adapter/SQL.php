@@ -1416,26 +1416,6 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
-     * @param  array<string>  $ids
-     */
-    #[\Override]
-    public function lockDocuments(Document $collection, array $ids): void
-    {
-        if ($ids === [] || ! $this->supports(Capability::UpdateLock)) {
-            return;
-        }
-
-        $builder = $this->newBuilder($collection->getId());
-        $builder->select([Storage::UID]);
-        $builder->filter([BaseQuery::equal(Storage::UID, $ids)]);
-        $builder->forUpdate();
-
-        $statement = $this->executeResult($builder->build(), Event::DocumentRead);
-        $this->execute($statement);
-        $statement->closeCursor();
-    }
-
-    /**
      * Assign internal IDs for the given documents
      *
      * @param  array<Document>  $documents
@@ -1583,7 +1563,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
      * @throws Exception
      */
     #[\Override]
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
     {
         $collectionDoc = $collection;
         $collection = $collection->getId();
@@ -1788,6 +1768,9 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
             }
 
             $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
+            if ($forUpdate && $this->supports(Capability::UpdateLock)) {
+                $builder->forUpdate();
+            }
             $results = $this->executeSelect($builder, Event::DocumentFind, $name);
         }
 

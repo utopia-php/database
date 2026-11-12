@@ -856,14 +856,6 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
-    /**
-     * @param  array<string>  $ids
-     */
-    public function lockDocuments(Document $collection, array $ids): void
-    {
-        $this->delegateFeature(Feature\Upserts::class, __FUNCTION__, \func_get_args());
-    }
-
     #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {
@@ -889,7 +881,7 @@ class Pool extends Adapter implements Feature\Timeouts
     }
 
     #[\Override]
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
     {
         /** @var array<Document> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

@@ -26,7 +26,7 @@ final class LockedDocumentReadTest extends TestCase
     public static function adapters(): iterable
     {
         yield 'mariadb' => [static fn (PDO $pdo): SQL => new MariaDB($pdo), 'SELECT * FROM `database`.`namespace_books` AS `table_main` WHERE `_uid` = :_uid'];
-        yield 'postgres' => [static fn (PDO $pdo): SQL => new Postgres($pdo), 'SELECT * FROM "database"."namespace_books" AS "table_main" WHERE "_uid" = :_uid'];
+        yield 'postgres' => [static fn (PDO $pdo): SQL => new Postgres($pdo), 'SELECT * FROM "database"."namespace_books" AS "table_main" WHERE "_uid" COLLATE utf8_ci_ai = :_uid'];
     }
 
     /**
@@ -67,8 +67,8 @@ final class LockedDocumentReadTest extends TestCase
         yield 'mariadb' => [$mariadb, 'books', 3, 'SELECT * FROM `database`.`namespace_books` AS `table_main` WHERE `_uid` = :_uid AND `table_main`._tenant IN (:_tenant)'];
         yield 'mariadb metadata' => [$mariadb, '_metadata', 3, 'SELECT * FROM `database`.`namespace__metadata` AS `table_main` WHERE `_uid` = :_uid AND (`table_main`._tenant IN (:_tenant) OR `table_main`._tenant IS NULL)'];
         yield 'mariadb without a tenant' => [$mariadb, 'books', null, 'SELECT * FROM `database`.`namespace_books` AS `table_main` WHERE `_uid` = :_uid AND `table_main`._tenant IN (:_tenant)'];
-        yield 'postgres' => [$postgres, 'books', 3, 'SELECT * FROM "database"."namespace_books" AS "table_main" WHERE "_uid" = :_uid AND "table_main"._tenant IN (:_tenant)'];
-        yield 'postgres metadata' => [$postgres, '_metadata', 3, 'SELECT * FROM "database"."namespace__metadata" AS "table_main" WHERE "_uid" = :_uid AND ("table_main"._tenant IN (:_tenant) OR "table_main"._tenant IS NULL)'];
+        yield 'postgres' => [$postgres, 'books', 3, 'SELECT * FROM "database"."namespace_books" AS "table_main" WHERE "_uid" COLLATE utf8_ci_ai = :_uid AND "table_main"._tenant IN (:_tenant)'];
+        yield 'postgres metadata' => [$postgres, '_metadata', 3, 'SELECT * FROM "database"."namespace__metadata" AS "table_main" WHERE "_uid" COLLATE utf8_ci_ai = :_uid AND ("table_main"._tenant IN (:_tenant) OR "table_main"._tenant IS NULL)'];
     }
 
     /**

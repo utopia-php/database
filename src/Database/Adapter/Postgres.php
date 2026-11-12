@@ -1047,7 +1047,7 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
     private function getCollectionCreators(string $collection): array
     {
         $statement = $this->prepareStatement(
-            'SELECT '.$this->quote(Storage::TENANT).' FROM '.$this->getTable(Database::METADATA).' WHERE '.$this->collateDocumentId($this->quote(Storage::UID)).' = ? ORDER BY '.$this->quote(Storage::SEQUENCE).' ASC LIMIT 1',
+            'SELECT '.$this->quote(Storage::TENANT).' FROM '.$this->getTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ? ORDER BY '.$this->quote(Storage::SEQUENCE).' ASC LIMIT 1',
             Event::IndexRename,
         );
         $statement->bindValue(1, $collection);

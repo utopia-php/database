@@ -72,6 +72,15 @@ final readonly class Storage
     }
 
     /**
+     * Whether $column is a column the storage keeps for a document's own $id, $sequence, $tenant, $permissions or
+     * timestamps, which no attribute a caller names may be written to.
+     */
+    public static function isReserved(string $column): bool
+    {
+        return isset(self::columnMap()[$column]);
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function attributeMap(): array

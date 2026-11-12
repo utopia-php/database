@@ -50,6 +50,7 @@ use Utopia\Database\Query;
 use Utopia\Database\RelationshipSide;
 use Utopia\Database\RelationshipType;
 use Utopia\Database\Rounding;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -252,7 +253,8 @@ trait Documents
 
     /**
      * The single-valued numeric attribute an increase or decrease changes; null when the adapter does not define
-     * attributes.
+     * attributes. Without defined attributes any key names a field, except one stored in a column the storage keeps
+     * for the document itself, such as `_tenant`.
      *
      * @throws NotFoundException
      * @throws TypeException
@@ -260,6 +262,10 @@ trait Documents
     private function numericAttribute(Collection $collection, string $key): ?Attribute
     {
         if (! $this->adapter->supports(Capability::DefinedAttributes)) {
+            if (Storage::isReserved($this->adapter->filter($key))) {
+                throw new NotFoundException('Attribute not found');
+            }
+
             return null;
         }
 
@@ -2389,6 +2395,9 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        if ($increase !== null && $increase !== '') {
+            $this->numericAttribute($collection, $increase);
+        }
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionAttributes = $collection->attributes();
         $time = DateTime::now();

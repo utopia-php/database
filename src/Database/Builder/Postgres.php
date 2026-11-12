@@ -82,7 +82,7 @@ class Postgres extends Base implements Filtering, Scoping
             }
         }
 
-        return parent::compileFilter($query);
+        return $this->enclose($query, parent::compileFilter($query));
     }
 
     #[\Override]

@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\SharedTables;
 
 use Redis;
 use Tests\E2E\Adapter\Base;
+use Tests\E2E\Adapter\Scopes\PostgresIdCollationTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
@@ -12,6 +13,8 @@ use Utopia\Database\PDO;
 
 class PostgresTest extends Base
 {
+    use PostgresIdCollationTests;
+
     public static ?Database $database = null;
 
     public static ?PDO $pdo = null;

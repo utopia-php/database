@@ -3077,7 +3077,9 @@ trait Documents
             $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection, $document->getId()));
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
-            $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            if ($document->getId() !== $id) {
+                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            }
 
             if ($result) {
                 $this->queueDocumentPurge($collection->getId(), $document->getId());

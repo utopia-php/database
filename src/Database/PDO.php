@@ -110,10 +110,13 @@ class PDO
     {
         $this->guard($query);
 
+        // Read before the call: pdo_pgsql reports a lost connection as in a transaction.
+        $inTransaction = $this->pdo->inTransaction();
+
         try {
             $statement = $this->pdo->prepare($query, $options);
         } catch (Throwable $e) {
-            if (!Connection::hasError($e) || $this->pdo->inTransaction()) {
+            if (!Connection::hasError($e) || $inTransaction) {
                 throw $e;
             }
 
@@ -145,14 +148,15 @@ class PDO
             $this->guard(\is_string($statement) ? $statement : $method);
         }
 
+        // Read before the call: pdo_pgsql reports a lost connection as in a transaction.
+        $inTransaction = $this->pdo->inTransaction();
+
         try {
             return $this->pdo->{$method}(...$args);
         } catch (Throwable $e) {
             if (Connection::hasError($e)) {
                 Console::warning('[Database] '.$e->getMessage());
                 Console::warning('[Database] Lost connection detected. Reconnecting...');
-
-                $inTransaction = $this->pdo->inTransaction();
 
                 $this->reconnect();
 

@@ -856,6 +856,14 @@ class Pool extends Adapter implements Feature\Timeouts
         return $result;
     }
 
+    /**
+     * @param  array<string>  $ids
+     */
+    public function lockDocuments(Document $collection, array $ids): void
+    {
+        $this->delegateFeature(Feature\Upserts::class, __FUNCTION__, \func_get_args());
+    }
+
     #[\Override]
     public function deleteDocument(Document $collection, string $id): bool
     {

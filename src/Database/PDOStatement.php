@@ -108,12 +108,15 @@ class PDOStatement implements \IteratorAggregate
      */
     public function __call(string $method, array $args): mixed
     {
+        // Read before the call: pdo_pgsql reports a lost connection as in a transaction.
+        $inTransaction = $this->pdo->inTransaction();
+
         try {
             return $this->statement->{$method}(...$args);
         } catch (\Throwable $e) {
             if (
                 \strcasecmp($method, 'execute') !== 0
-                || $this->pdo->inTransaction()
+                || $inTransaction
                 || !Connection::hasError($e)
             ) {
                 throw $e;

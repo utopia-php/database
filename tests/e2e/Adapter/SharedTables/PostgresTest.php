@@ -8,8 +8,13 @@ use Tests\E2E\Adapter\Scopes\PostgresIdCollationTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Index;
 use Utopia\Database\PDO;
+use Utopia\Database\Permission;
+use Utopia\Database\Role;
 
 class PostgresTest extends Base
 {
@@ -94,5 +99,43 @@ class PostgresTest extends Base
         self::$pdo->exec($sql);
 
         return true;
+    }
+
+    /**
+     * Table names are quoted, so a collection whose id differs only by case is another table: the creator of the
+     * index a tenant without its own copy renames must be found by the exact id.
+     */
+    public function testRenameIndexFindsTheCreatorOfTheExactCollectionId(): void
+    {
+        $database = $this->getDatabase();
+        $tenant = $database->getTenant();
+
+        $create = static fn (string $id) => $database->createCollection(Collection::create(id: $id, attributes: [
+            Attribute::string(key: 'title', size: 64, required: false),
+        ], indexes: [
+            Index::key(key: 'idx', attributes: ['title']),
+        ], permissions: [Permission::read(Role::any())]));
+
+        try {
+            $database->setTenant(998);
+            $create('RenameCreator');
+            $database->setTenant(1000);
+            $create('renameCreator');
+            $database->setTenant(999);
+            $create('renameCreator');
+
+            $database->renameIndex('renameCreator', 'idx', 'idx2');
+
+            $this->assertSame(['idx2'], \array_map(
+                static fn (Index $index): string => $index->key,
+                $database->getCollection('renameCreator')->indexes(),
+            ));
+        } finally {
+            foreach ([999 => 'renameCreator', 1000 => 'renameCreator', 998 => 'RenameCreator'] as $owner => $id) {
+                $database->setTenant($owner);
+                $database->deleteCollection($id);
+            }
+            $database->setTenant($tenant);
+        }
     }
 }

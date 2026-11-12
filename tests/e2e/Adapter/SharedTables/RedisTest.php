@@ -13,6 +13,7 @@ class RedisTest extends BaseRedisTest
      * the bootstrap keys (dbs, cols, metadata) under the per-run namespace
      * and leak them when teardown only scrubs the empty-namespace pattern.
      */
+    #[\Override]
     protected function configureDatabase(Database $database): void
     {
         $database->setSharedTables(true);
@@ -20,6 +21,7 @@ class RedisTest extends BaseRedisTest
         $database->setNamespace('');
     }
 
+    #[\Override]
     public function setUp(): void
     {
         parent::setUp();

@@ -3,28 +3,35 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Adapter\FeatureAdapterStub;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Filter\Callback;
+use Utopia\Database\Hook\Relationships;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Query\Schema\ColumnType;
 
 class CacheKeyTest extends TestCase
 {
     /**
-     * @param array<string, array{encode: callable, decode: callable}> $instanceFilters
+     * @param  list<Callback>  $filters
      */
-    private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
+    private function createDatabase(array $filters = [], string $database = 'test'): Database
     {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(false);
+        $adapter = self::createStub(Adapter::class);
+        $adapter->method('supports')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
         $adapter->method('getDatabase')->willReturn($database);
 
-        return new Database($adapter, new Cache(new None()), $instanceFilters);
+        return new Database($adapter, new Cache(new None()), $filters);
     }
 
     private function getHashKey(Database $db, string $collection = 'col', string $docId = 'doc1'): string
@@ -35,12 +42,14 @@ class CacheKeyTest extends TestCase
 
     public function testBaseKeysMatchScopedVariantKeys(): void
     {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
-        $adapter->method('getHostname')->willReturn('mysql-project');
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
+        );
+        $adapter->method('hostname')->willReturn('mysql-project');
         $adapter->method('getNamespace')->willReturn('project');
         $adapter->method('getTenant')->willReturn(42);
-        $adapter->method('getSharedTables')->willReturn(true);
+        $adapter->method('hasSharedTables')->willReturn(true);
 
         $db = new Database($adapter, new Cache(new None()));
         $db->setGlobalCollections(['global']);
@@ -52,6 +61,21 @@ class CacheKeyTest extends TestCase
             $this->assertSame([$full[0], $full[1]], $withoutHash);
             $this->assertNotSame('', $full[2]);
         }
+    }
+
+    public function testCacheKeysSeparateDatabasesSharingANamespace(): void
+    {
+        $console = $this->createDatabase(database: 'console');
+        $project = $this->createDatabase(database: 'project');
+
+        $this->assertNotSame(
+            $console->getCacheKeys('users', 'user1'),
+            $project->getCacheKeys('users', 'user1'),
+        );
+        $this->assertNotSame(
+            $console->getQueryCacheKey('users'),
+            $project->getQueryCacheKey('users'),
+        );
     }
 
     public function testSameConfigProducesSameCacheKey(): void
@@ -82,51 +106,34 @@ class CacheKeyTest extends TestCase
         $this->assertEquals($hashA, $hashB);
     }
 
-    public function testInstanceFilterOverrideProducesDifferentCacheKey(): void
+    public function testConstructorFilterProducesDifferentCacheKey(): void
     {
-        $noop = function (mixed $value) {
-            return $value;
-        };
+        $noop = static fn (mixed $value): mixed => $value;
 
-        $dbDefault = $this->createDatabase();
-        $dbOverride = $this->createDatabase([
-            'json' => [
-                'encode' => $noop,
-                'decode' => $noop,
-            ],
-        ]);
-
-        $this->assertNotEquals(
-            $this->getHashKey($dbDefault),
-            $this->getHashKey($dbOverride)
+        $this->assertNotSame(
+            $this->getHashKey($this->createDatabase()),
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noop, $noop)])),
         );
     }
 
-    public function testDifferentInstanceFilterCallablesProduceDifferentCacheKeys(): void
+    public function testDifferentConstructorFilterClosuresProduceDifferentCacheKeys(): void
     {
-        $noopA = function (mixed $value) {
-            return $value;
-        };
-        $noopB = function (mixed $value) {
-            return $value;
-        };
+        $noopA = static fn (mixed $value): mixed => $value;
+        $noopB = static fn (mixed $value): mixed => $value;
 
-        $dbA = $this->createDatabase([
-            'myFilter' => [
-                'encode' => $noopA,
-                'decode' => $noopA,
-            ],
-        ]);
-        $dbB = $this->createDatabase([
-            'myFilter' => [
-                'encode' => $noopB,
-                'decode' => $noopB,
-            ],
-        ]);
+        $this->assertNotSame(
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noopA, $noopA)])),
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noopB, $noopB)])),
+        );
+    }
 
-        $this->assertNotEquals(
-            $this->getHashKey($dbA),
-            $this->getHashKey($dbB)
+    public function testSameConstructorFilterClosuresShareCacheKeys(): void
+    {
+        $noop = static fn (mixed $value): mixed => $value;
+
+        $this->assertSame(
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noop, $noop)])),
+            $this->getHashKey($this->createDatabase([new Callback('myFilter', $noop, $noop)])),
         );
     }
 
@@ -149,41 +156,47 @@ class CacheKeyTest extends TestCase
 
         $hashEnabled = $this->getHashKey($db);
 
-        $db->disableFilters();
+        $db->setFiltering(false);
         $hashDisabled = $this->getHashKey($db);
-        $db->enableFilters();
+        $db->setFiltering(true);
 
         $this->assertNotEquals($hashEnabled, $hashDisabled);
     }
 
     public function testQueryCacheKeyUsesQueryCacheShape(): void
     {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
-        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
+        );
+        $adapter->method('hostname')->willReturn('mysql-console');
+        $adapter->method('getDatabase')->willReturn('console');
         $adapter->method('getNamespace')->willReturn('_39');
         $adapter->method('getTenant')->willReturn(null);
 
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache-mysql-console:_39::collection:ttl_cache_table:query',
+            'default-cache-mysql-console:console:_39::collection:ttl_cache_table:query',
             $db->getQueryCacheKey('ttl_cache_table'),
         );
     }
 
     public function testQueryCacheKeyCanOverrideNamespaceSegment(): void
     {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
-        $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
+        );
+        $adapter->method('hostname')->willReturn('mysql-console');
+        $adapter->method('getDatabase')->willReturn('console');
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('getTenant')->willReturn(null);
 
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache-mysql-console:_39::collection:wafrules:query',
+            'default-cache-mysql-console:console:_39::collection:wafrules:query',
             $db->getQueryCacheKey('wafrules', '_39'),
         );
     }
@@ -194,8 +207,8 @@ class CacheKeyTest extends TestCase
         $collection = new Document([
             '$id' => 'wafRules',
             'attributes' => [
-                new Document(['$id' => 'projectId', 'type' => Database::VAR_STRING]),
-                new Document(['$id' => 'enabled', 'type' => Database::VAR_BOOLEAN]),
+                new Document(['$id' => 'projectId', 'type' => ColumnType::String->value]),
+                new Document(['$id' => 'enabled', 'type' => ColumnType::Boolean->value]),
             ],
             'indexes' => [
                 new Document(['$id' => 'project_enabled', 'attributes' => ['projectId', 'enabled']]),
@@ -207,13 +220,9 @@ class CacheKeyTest extends TestCase
             Query::orderAsc('priority'),
         ];
 
-        $schemaHash = \md5(
-            (\json_encode($collection->getAttribute('attributes', [])) ?: '')
-            . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
-            . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
-            . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
-        );
+        $schemaHash = Collection::fromDocument($collection)->fingerprint();
         $field = $db->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($field);
 
         $this->assertStringStartsWith("{$schemaHash}:", $field);
         $this->assertStringEndsWith(':documents', $field);
@@ -226,24 +235,27 @@ class CacheKeyTest extends TestCase
 
         $field = $db->getQueryCacheField(
             new Document([
-                'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
+                'attributes' => [new Document(['$id' => 'name', 'type' => ColumnType::String->value])],
                 'indexes' => [],
             ]),
             [Query::limit(10)],
         );
+        $this->assertNotNull($field);
 
         $this->assertNotSame(
             $field,
             $db->getQueryCacheField(
                 new Document([
-                    'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
+                    'attributes' => [new Document(['$id' => 'status', 'type' => ColumnType::String->value])],
                     'indexes' => [],
                 ]),
                 [Query::limit(10)],
             ),
         );
         $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(20)]));
-        $this->assertStringEndsWith(':total', $db->getQueryCacheField(null, [Query::limit(10)], 'total'));
+        $total = $db->getQueryCacheField(null, [Query::limit(10)], 'total');
+        $this->assertNotNull($total);
+        $this->assertStringEndsWith(':total', $total);
     }
 
     public function testQueryCacheFieldChangesWithActiveAuthorizationContext(): void
@@ -269,7 +281,7 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        $this->assertNull($db->getQueryCacheField(forPermission: Database::PERMISSION_UPDATE));
+        $this->assertNull($db->getQueryCacheField(forPermission: PermissionType::Update));
     }
 
     public function testQueryCacheFieldIncludesCursorDocumentPayload(): void
@@ -297,6 +309,7 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheFieldIncludesAmbientState(): void
     {
         $db = $this->createDatabase();
+        $db->addHook(new Relationships());
 
         $field = $db->getQueryCacheField(null, [Query::limit(10)]);
 
@@ -326,11 +339,14 @@ class CacheKeyTest extends TestCase
     {
         $hostname = 'database_db_nyc3_self_hosted_0_0';
 
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
-        $adapter->method('getHostname')->willReturn($hostname);
+        $adapter = self::createStub(FeatureAdapterStub::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            fn (string $feature): bool => $feature === Feature\Connection::class
+        );
+        $adapter->method('hostname')->willReturn($hostname);
+        $adapter->method('getDatabase')->willReturn('appwrite');
         $adapter->method('getTenant')->willReturn(999);
-        $adapter->method('getSharedTables')->willReturn(true);
+        $adapter->method('hasSharedTables')->willReturn(true);
         $adapter->method('getNamespace')->willReturn('_ns');
 
         $db = new Database($adapter, new Cache(new None()), []);
@@ -339,7 +355,7 @@ class CacheKeyTest extends TestCase
          * Check DSN is parsed correctly
          */
         [$collectionKey, $documentKey] = $db->getCacheKeys('users');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:users', $collectionKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns:999:collection:users', $collectionKey);
         $this->assertEquals('', $documentKey);
 
         $db->setGlobalCollections(['users']);
@@ -350,14 +366,14 @@ class CacheKeyTest extends TestCase
          */
 
         [$collectionKey, $documentKey] = $db->getCacheKeys(Database::METADATA, 'audit');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:_metadata', $collectionKey);
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:_metadata:audit', $documentKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns:999:collection:_metadata', $collectionKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns:999:collection:_metadata:audit', $documentKey);
 
         /**
          * Check that tenant 999 was removed
          */
         [$collectionKey, $documentKey] = $db->getCacheKeys(Database::METADATA, 'users');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns::collection:_metadata', $collectionKey);
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns::collection:_metadata:users', $documentKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns::collection:_metadata', $collectionKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns::collection:_metadata:users', $documentKey);
     }
 }

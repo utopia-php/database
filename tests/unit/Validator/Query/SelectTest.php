@@ -2,52 +2,72 @@
 
 namespace Tests\Unit\Validator\Query;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Database;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Query\Base;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationshipSide;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 
 class SelectTest extends TestCase
 {
-    protected Base|null $validator = null;
+    protected Select $validator;
 
     /**
      * @throws Exception
      */
-    public function setUp(): void
+    #[\Override]
+    protected function setUp(): void
     {
         $this->validator = new Select(
             attributes: [
                 new Document([
                     '$id' => 'attr',
                     'key' => 'attr',
-                    'type' => Database::VAR_STRING,
+                    'type' => ColumnType::String->value,
                     'array' => false,
                 ]),
-                new Document([
-                    '$id' => 'artist',
-                    'key' => 'artist',
-                    'type' => Database::VAR_RELATIONSHIP,
-                    'array' => false,
-                ]),
+                Attribute::relationship('artist', Relationship::manyToOne('artists'), RelationshipSide::Parent)->toDocument(),
             ],
         );
     }
 
-    public function testValueSuccess(): void
+    public function test_value_success(): void
     {
         $this->assertTrue($this->validator->isValid(Query::select(['*', 'attr'])));
         $this->assertTrue($this->validator->isValid(Query::select(['artist.name'])));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
         $this->assertFalse($this->validator->isValid(Query::limit(1)));
         $this->assertEquals('Invalid query', $this->validator->getDescription());
         $this->assertFalse($this->validator->isValid(Query::select(['name.artist'])));
+    }
+
+    public function testANestedPathOnAPlainAttributeIsRefused(): void
+    {
+        $this->assertFalse($this->validator->isValid(Query::select(['attr.x'])));
+        $this->assertSame('Cannot select nested attribute on: attr', $this->validator->getDescription());
+    }
+
+    public function testANestedPathOnAnObjectAttributeIsAccepted(): void
+    {
+        $validator = new Select([
+            new Document([
+                '$id' => 'meta',
+                'key' => 'meta',
+                'type' => ColumnType::Object->value,
+                'array' => false,
+            ]),
+        ]);
+
+        $this->assertTrue($validator->isValid(Query::select(['meta.key'])), $validator->getDescription());
     }
 
     /**
@@ -57,12 +77,11 @@ class SelectTest extends TestCase
      * a malformed value that way.
      *
      * @param array<mixed> $values
-     *
-     * @dataProvider nonStringSelections
      */
+    #[DataProvider('nonStringSelections')]
     public function testANonStringSelectionIsRefusedByType(array $values, string $expected): void
     {
-        $this->assertFalse($this->validator->isValid(Query::select($values)));
+        $this->assertFalse($this->validator->isValid(new Query(Method::Select, values: $values)));
         $this->assertSame($expected, $this->validator->getDescription());
     }
 
@@ -104,5 +123,21 @@ class SelectTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::select(['*'])));
         $this->assertTrue($this->validator->isValid(Query::select(['$id', '$createdAt'])));
         $this->assertTrue($this->validator->isValid(Query::select(['artist.name'])));
+    }
+
+    public function testDottedJoinAliasIsAcceptedAfterAllowJoinAliases(): void
+    {
+        $this->validator->allowJoinAliases(['ord']);
+
+        $this->assertTrue($this->validator->isValid(Query::select(['ord.amount'])));
+        $this->assertTrue($this->validator->isValid(Query::select(['ord.$id'])));
+    }
+
+    public function testUnqualifiedAmountIsStillRejected(): void
+    {
+        $this->validator->allowJoinAliases(['ord']);
+
+        $this->assertFalse($this->validator->isValid(Query::select(['amount'])));
+        $this->assertSame('Attribute not found in schema: amount', $this->validator->getDescription());
     }
 }

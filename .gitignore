@@ -12,3 +12,6 @@ Makefile
 .envrc
 .vscode
 tmp
+*.sql
+
+/compat/vendor/

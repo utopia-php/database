@@ -80,14 +80,16 @@ docker compose up -d --build
 To run all unit tests, use the following Docker command:
 
 ```bash
-docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/unit
 ```
 
 To run tests for a single file, use the following Docker command structure:
 
 ```bash
-docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/Database/[FILE_PATH]
+docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/[FILE_PATH]
 ```
+
+`FILE_PATH` is relative to `tests/` and starts with `unit/` or `e2e/`.
 
 To run static code analysis, use the following phpstan command:
 
@@ -110,7 +112,7 @@ To test your DB changes under load:
 ```bash
 docker compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[name]]
 
-# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [adapter]: 'mariadb', 'mysql' or 'postgres', no quotes
 # [limit]: integer of total documents to generate
 # [name]: (optional) name for new database
 ```
@@ -120,7 +122,7 @@ docker compose exec tests bin/load --adapter=[adapter] --limit=[limit] [--name=[
 ```bash
 docker compose exec tests bin/index --adapter=[adapter] --name=[name]
 
-# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [adapter]: 'mariadb', 'mysql' or 'postgres', no quotes
 # [name]: name of filled database by bin/load
 ```
 
@@ -129,7 +131,7 @@ docker compose exec tests bin/index --adapter=[adapter] --name=[name]
 ```bash
 docker compose exec tests bin/query --adapter=[adapter] --limit=[limit] --name=[name]
 
-# [adapter]: either 'mongodb' or 'mariadb', no quotes
+# [adapter]: 'mariadb', 'mysql' or 'postgres', no quotes
 # [limit]: integer of query limit (default 25)
 # [name]: name of filled database by bin/load
 ```

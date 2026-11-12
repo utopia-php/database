@@ -1,0 +1,963 @@
+<?php
+
+namespace Tests\Unit\Documents;
+
+use Closure;
+use PHPUnit\Framework\TestCase;
+use Tests\Unit\Cache\FailingRegistrationCache;
+use Tests\Unit\Cache\RacedReleaseCache;
+use Tests\Unit\Cache\RedisLeasableCache;
+use Tests\Unit\Support\CountingMemory;
+use Tests\Unit\Support\UncachedTwin;
+use Utopia\Cache\Adapter as CacheAdapter;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Cache;
+use Utopia\Cache\Feature\Versioned;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Cache\Query as ResultCache;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Permission;
+use Utopia\Database\Query;
+use Utopia\Database\Role;
+
+final class DocumentCacheEpochTest extends TestCase
+{
+    public function testOuterTransactionCannotPublishAStalePointCacheEntryBeforeCommit(): void
+    {
+        [$writer, $reader, $adapter, $path] = $this->createSharedSQLiteDatabases();
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $duringCommit = null;
+            $adapter->pauseNextCommit(function () use ($reader, &$duringCommit): void {
+                $duringCommit = $reader->getDocument('users', 'user')->getAttribute('name');
+            });
+
+            $writer->withTransaction(function () use ($writer): void {
+                $writer->updateDocument('users', 'user', new Document(['name' => 'updated']));
+            });
+
+            $this->assertSame('original', $duringCommit);
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'));
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testPurgeCachedCollectionRetiresItsCachedDocuments(): void
+    {
+        $database = $this->createDatabaseWithCache(new RedisLeasableCache());
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A document written without this cache leaves the cached copy in place');
+
+        $database->purgeCachedCollection('webhooks');
+
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'purgeCachedCollection() must retire every cached document of the collection');
+    }
+
+    public function testBlockFailureRollsBackTheMutation(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $cache->failBlocks();
+
+        try {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $this->fail('Document cache block failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Unable to save cache snapshot', $error->getMessage());
+        }
+
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testActivationFailureAfterCommitLeavesTheEpochBlocked(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $cache->failActivations();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation failed stays uncached');
+    }
+
+    public function testActivationFailureDoesNotStrandOtherCollectionEpochs(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $adapter = new CountingMemory();
+        $database = $this->createDatabaseWithCache($cache, adapter: $adapter);
+        $database->createCollection(Collection::create(id: 'logs', attributes: [
+            Attribute::string(key: 'name'),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $database->createDocument('logs', new Document([
+            '$id' => 'log',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame('original', $database->getDocument('logs', 'log')->getAttribute('name'));
+        $cache->failActivations('collection:webhooks#state');
+
+        $database->withTransaction(function () use ($database): void {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $this->renameDocument($database, 'logs', 'log', 'updated');
+        });
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'The collection whose activation failed stays uncached');
+
+        $this->assertSame('updated', $database->getDocument('logs', 'log')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('logs', 'log')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'The other collection of the transaction is cached again');
+    }
+
+    public function testCacheFlushDuringTransactionCannotPreserveAStalePointCacheEntry(): void
+    {
+        [$writer, $reader, $adapter, $path] = $this->createSharedSQLiteDatabases();
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $duringCommit = null;
+            $adapter->pauseNextCommit(function () use ($reader, &$duringCommit): void {
+                $this->assertTrue($reader->getCache()->flush());
+                $duringCommit = $reader->getDocument('users', 'user')->getAttribute('name');
+            });
+
+            $writer->withTransaction(function () use ($writer): void {
+                $writer->updateDocument('users', 'user', new Document(['name' => 'updated']));
+            });
+
+            $this->assertSame('original', $duringCommit);
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'));
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testCacheFlushDuringActivationDoesNotFailTheCommittedMutation(): void
+    {
+        $cache = new FlushDuringActivationMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        $this->assertTrue($cache->flush());
+        $cache->flushDuringActivation();
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testCacheFlushAfterActivationReadsVersionDoesNotFailTheCommittedMutation(): void
+    {
+        $cache = new FlushDuringActivationMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $this->assertTrue($cache->flush());
+        $database->purgeCachedCollection('webhooks');
+        $cache->flushAfterReading('collection:webhooks#state');
+
+        $database->deleteCollection('webhooks');
+        $this->assertNull($database->findCollection('webhooks'));
+    }
+
+    public function testALostFinishAfterCommitDoesNotFailTheWrite(): void
+    {
+        $cache = new FlushDuringActivationMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertTrue($cache->flush());
+        $cache->failDuringActivation();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testWritesDoNotAddKeysToACacheThatKeepsPurgedKeys(): void
+    {
+        $cache = new RedisLeasableCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->setQueryCache(new ResultCache(new Cache($cache)));
+        for ($index = 0; $index <= 20; $index++) {
+            $database->createDocument('webhooks', new Document([
+                '$id' => 'hook'.$index,
+                'name' => 'hook '.$index,
+            ]));
+        }
+        $readEveryHook = function () use ($database): void {
+            for ($index = 0; $index <= 20; $index++) {
+                $this->assertFalse($database->getDocument('webhooks', 'hook'.$index)->isEmpty());
+            }
+        };
+        $readEveryHook();
+
+        $keys = 0;
+        for ($round = 1; $round <= 3; $round++) {
+            $database->withTransaction(function () use ($database, $round): void {
+                $database->updateDocument('webhooks', 'hook1', new Document(['name' => 'updated '.$round]));
+                $database->updateDocument('webhooks', 'hook2', new Document(['name' => 'updated '.$round]));
+            });
+            $this->renameDocument($database, 'webhooks', 'hook3', 'updated '.$round);
+            $readEveryHook();
+
+            if ($round === 1) {
+                $keys = \count($cache->keys());
+            }
+        }
+
+        $this->assertSame($keys, \count($cache->keys()), 'A purged key stays behind in Redis, so writes and the reads between them must not leave keys of their own');
+        $this->assertSame('updated 3', $database->getDocument('webhooks', 'hook1')->getAttribute('name'));
+    }
+
+    public function testOverlappingWritesSucceedOnACacheWithoutFields(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $writer = $this->createDatabaseWithCache($cache);
+        $other = $this->createDatabaseWithCache($cache, $writer->getNamespace());
+        foreach ([$writer, $other] as $database) {
+            $database->createDocument('webhooks', new Document([
+                '$id' => 'hook',
+                'name' => 'original',
+            ]));
+        }
+
+        $writer->withTransaction(function () use ($writer, $other, $cache): void {
+            $this->renameDocument($writer, 'webhooks', 'hook', 'updated');
+            $cache->failBlocks();
+            try {
+                $this->renameDocument($other, 'webhooks', 'hook', 'updated');
+                $this->fail('The other writer\'s block did not fail');
+            } catch (\RuntimeException $error) {
+                $this->assertStringContainsString('Unable to save cache snapshot', $error->getMessage());
+            } finally {
+                $cache->failBlocks(false);
+            }
+        });
+
+        $this->assertSame('updated', $writer->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testACorruptedOwnerRegistrationDoesNotFailTheCommittedWrite(): void
+    {
+        $cache = new RedisLeasableCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $cache->corruptFieldWrites();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
+
+        $cache->corruptFieldWrites(false);
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose activation was refused stays uncached');
+    }
+
+    public function testAnOwnerReleaseFailureDoesNotFailTheCommittedWrite(): void
+    {
+        $cache = new RedisLeasableCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $cache->failCompletions();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'), 'A stored write must not be reported as failed because its cache activation failed');
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose owner release failed stays uncached');
+    }
+
+    private function renameDocument(Database $database, string $collection, string $id, string $name): int
+    {
+        return $database->updateDocuments($collection, new Document(['name' => $name]), [Query::equal('$id', [$id])]);
+    }
+
+    private function createDatabaseWithCache(CacheAdapter $cache, ?string $namespace = null, DatabaseMemory $adapter = new DatabaseMemory()): Database
+    {
+        $database = new Database($adapter, new Cache($cache));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace($namespace ?? 'epoch_'.\uniqid());
+        $database->create();
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
+            Attribute::string(key: 'name'),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        return $database;
+    }
+
+    /**
+     * @return array{Database, Database, PausedDocumentSQLite, string}
+     */
+    private function createSharedSQLiteDatabases(): array
+    {
+        $path = \tempnam(\sys_get_temp_dir(), 'document-cache-epoch-');
+        if ($path === false) {
+            throw new \RuntimeException('Failed to create SQLite test database');
+        }
+
+        $attributes = [
+            \PDO::ATTR_PERSISTENT => false,
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_EMULATE_PREPARES => true,
+            \PDO::ATTR_STRINGIFY_FETCHES => true,
+        ];
+        $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $writerConnection->exec('PRAGMA journal_mode = WAL');
+        $writerConnection->exec('PRAGMA busy_timeout = 1000');
+        $readerConnection->exec('PRAGMA busy_timeout = 1000');
+
+        $adapter = new PausedDocumentSQLite($writerConnection);
+        $cache = new MemoryCache();
+        $writer = new Database($adapter, new Cache($cache));
+        $reader = new Database(new SQLite($readerConnection), new Cache($cache));
+        $namespace = 'shared_epoch_'.\uniqid();
+        foreach ([$writer, $reader] as $database) {
+            $database
+                ->setDatabase('utopiaTests')
+                ->setNamespace($namespace);
+            $database->getAuthorization()->addRole(Role::any()->toString());
+        }
+
+        $writer->create();
+        $writer->createCollection(Collection::create(id: 'users', attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $writer->createDocument('users', new Document([
+            '$id' => 'user',
+            'name' => 'original',
+        ]));
+
+        return [$writer, $reader, $adapter, $path];
+    }
+
+    private function removeSQLiteFiles(string $path): void
+    {
+        foreach ([$path, $path.'-wal', $path.'-shm'] as $file) {
+            if (\is_file($file)) {
+                \unlink($file);
+            }
+        }
+    }
+
+    public function testALostActivationDoesNotKeepTheCollectionUncached(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->failActivations();
+
+        $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A collection whose write has not activated stays uncached while the write is younger than the writer timeout');
+
+        $database->setCacheWriterTimeout(0);
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        for ($read = 0; $read < 3; $read++) {
+            $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        }
+        $this->assertSame(0, $adapter->documentReads, 'Past the writer timeout the lost activation lapses and reads are served from the cache again, without a flush');
+    }
+
+    public function testAWriteAfterAnAbandonedWriteReenablesTheCollection(): void
+    {
+        $cache = new AbandoningCache();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->abandonNextWrite();
+
+        $this->renameDocument($database, 'webhooks', 'hook', 'abandoned');
+
+        $this->renameDocument($database, 'webhooks', 'hook', 'second');
+        $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        UncachedTwin::of($database)->updateDocument('webhooks', 'hook', new Document(['name' => 'changed']));
+        $this->assertSame('changed', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A write younger than the writer timeout counts as in flight, so the next write leaves the collection uncached');
+
+        $database->setCacheWriterTimeout(0);
+        $this->renameDocument($database, 'webhooks', 'hook', 'third');
+        $database->setCacheWriterTimeout(3600);
+
+        $this->assertSame('third', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('third', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'The first write after the abandoned one passed the writer timeout releases it and re-enables the collection');
+    }
+
+    public function testAWriterYoungerThanTheTimeoutKeepsItsBlockUntilItsActivation(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing($cache);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $writer->withTransaction(function () use ($writer, $reader, $cache): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $cache->failActivations();
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A reader must not cache what it read while a write younger than the writer timeout was in flight');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testAWriterPastTheTimeoutRetiresWhatReadersFilledWhileItRan(): void
+    {
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing(new MemoryCache());
+        $writer->setCacheWriterTimeout(0);
+        $reader->setCacheWriterTimeout(0);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $writer->withTransaction(function () use ($writer, $reader): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'What readers filled after the block lapsed must be retired when the write activates');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testAWriteFinishingWhileAnotherIsInFlightLeavesTheCollectionBlocked(): void
+    {
+        $cache = new AbandoningCache();
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing($cache);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $writer->withTransaction(function () use ($writer, $reader, $cache): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $reader->purgeCachedCollection('users');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $cache->abandonNextWrite();
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write that finishes while another is in flight must not re-enable the collection');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testAWriterReleasedAsAbandonedStillRetiresWhatReadersFilledWhileItRan(): void
+    {
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing(new RedisLeasableCache());
+        $reader->setCacheWriterTimeout(0);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $writer->withTransaction(function () use ($writer, $reader): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $reader->purgeCachedCollection('users');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write another writer released as abandoned must still retire, when it activates, what readers filled while it ran');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testATransactionReadsItsBatchWriteAfterAnotherReaderRefilledTheDefinition(): void
+    {
+        $cache = new MemoryCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $definitionKey = \strtolower($database->getCacheBaseKeys(Database::METADATA, 'webhooks')[1]);
+        $definition = $cache->load($definitionKey, Database::TTL);
+        if (! \is_array($definition)) {
+            $this->fail("No cached definition under '{$definitionKey}' to save again");
+        }
+
+        $read = $database->withTransaction(function () use ($database, $cache, $definitionKey, $definition): mixed {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $cache->save($definitionKey, $definition);
+            $document = $database->getDocument('webhooks', 'hook');
+
+            return $document->getAttribute('name');
+        });
+
+        $this->assertSame('updated', $read, 'A transaction must read what its batch write changed even when another reader saved the definition as it was before the write');
+    }
+
+    public function testADefinitionFilledAcrossAWriteOnACacheWithoutGenerationsIsDropped(): void
+    {
+        $cache = new InterleavingMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        $database->purgeCachedDocument(Database::METADATA, 'webhooks');
+        $cache->beforeNextSave(':_metadata:webhooks', function () use ($database): void {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+        });
+        $database->getCollection('webhooks');
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A definition saved after a write retired its epoch must not keep serving that epoch');
+    }
+
+    public function testARegistrationReleasedJustBeforeItsOwnReleaseFinishesTheWrite(): void
+    {
+        $cache = new RacedReleaseCache();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->releaseBeforeNextOwnerRelease();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'A registration another worker already released is not a failed release: the write activates and reads are cached again');
+    }
+
+    public function testUnregisterableWritesRollBackAndCachingRecovers(): void
+    {
+        $cache = new FailingRegistrationCache();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->failRegistrations(PHP_INT_MAX);
+        try {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $this->fail('A write must not proceed without registering its invalidation');
+        } catch (\Utopia\Cache\Exception\Unavailable) {
+            $this->assertSame('original', UncachedTwin::of($database)->getDocument('webhooks', 'hook')->getAttribute('name'));
+        }
+        $cache->failRegistrations(0);
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads);
+    }
+
+    public function testAFailedOwnerRegistrationIsRetried(): void
+    {
+        $cache = new FailingRegistrationCache();
+        $database = $this->createCountedDatabase(new CountingMemory(), $cache);
+        $cache->failRegistrations(1);
+        $registrations = $cache->getRegistrations();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+
+        $this->assertSame(2, $cache->getRegistrations() - $registrations, 'A registration refused once is tried again, so the write is counted by the writers it overlaps');
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    private function createCountedDatabase(CountingMemory $adapter, CacheAdapter $cache): Database
+    {
+        $database = new Database($adapter, new Cache($cache));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('epoch_'.\uniqid());
+        $database->create();
+        $database->createCollection(Collection::create(id: 'webhooks', attributes: [
+            Attribute::string(key: 'name'),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        return $database;
+    }
+
+    /**
+     * @return array{Database, Database, string}
+     */
+    private function createSQLiteDatabasesSharing(CacheAdapter $cache): array
+    {
+        $path = \tempnam(\sys_get_temp_dir(), 'document-cache-lapse-');
+        if ($path === false) {
+            throw new \RuntimeException('Failed to create SQLite test database');
+        }
+
+        $attributes = [
+            \PDO::ATTR_PERSISTENT => false,
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_EMULATE_PREPARES => true,
+            \PDO::ATTR_STRINGIFY_FETCHES => true,
+        ];
+        $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $writerConnection->exec('PRAGMA journal_mode = WAL');
+        $writerConnection->exec('PRAGMA busy_timeout = 1000');
+        $readerConnection->exec('PRAGMA busy_timeout = 1000');
+
+        $writer = new Database(new SQLite($writerConnection), new Cache($cache));
+        $reader = new Database(new SQLite($readerConnection), new Cache($cache));
+        $namespace = 'lapse_'.\uniqid();
+        foreach ([$writer, $reader] as $database) {
+            $database
+                ->setDatabase('utopiaTests')
+                ->setNamespace($namespace);
+            $database->getAuthorization()->addRole(Role::any()->toString());
+        }
+
+        $writer->create();
+        $writer->createCollection(Collection::create(id: 'users', attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $writer->createDocument('users', new Document([
+            '$id' => 'user',
+            'name' => 'original',
+        ]));
+
+        return [$writer, $reader, $path];
+    }
+}
+
+final class PausedDocumentSQLite extends SQLite
+{
+    private ?Closure $commitCallback = null;
+
+    public function pauseNextCommit(Closure $callback): void
+    {
+        $this->commitCallback = $callback;
+    }
+
+    #[\Override]
+    public function commitTransaction(): bool
+    {
+        if ($this->inTransaction === 1) {
+            $callback = $this->commitCallback;
+            $this->commitCallback = null;
+            $callback?->__invoke();
+        }
+
+        return parent::commitTransaction();
+    }
+}
+
+final class FailDocumentEpochMemory extends MemoryCache
+{
+    private bool $failingBlocks = false;
+
+    private ?string $activationFailure = null;
+
+    private int $activationFailures = 0;
+
+    public function failBlocks(bool $failing = true): void
+    {
+        $this->failingBlocks = $failing;
+    }
+
+    public function failActivations(?string $key = null): void
+    {
+        $this->activationFailure = $key ?? '#state';
+        $this->activationFailures = 3;
+    }
+
+    #[\Override]
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+    {
+        if (\str_ends_with($key, '#state') && \is_array($data)) {
+            if ($this->failingBlocks && ! empty($data['owners'])) {
+                return false;
+            }
+            if (
+                $this->activationFailure !== null
+                && $this->activationFailures > 0
+                && \str_contains($key, $this->activationFailure)
+                && empty($data['owners'])
+            ) {
+                $this->activationFailures--;
+                return false;
+            }
+        }
+
+        return parent::save($key, $data, $hash);
+    }
+}
+
+final class FlushDuringActivationMemory extends MemoryCache
+{
+    private bool $flushDuringActivation = false;
+    private bool $failDuringActivation = false;
+    private ?string $flushAfterReading = null;
+
+    public function flushDuringActivation(): void
+    {
+        $this->flushDuringActivation = true;
+    }
+
+    public function failDuringActivation(): void
+    {
+        $this->failDuringActivation = true;
+    }
+
+    public function flushAfterReading(string $key): void
+    {
+        $this->flushAfterReading = $key;
+    }
+
+    #[\Override]
+    public function loadVersioned(string $key): array
+    {
+        $snapshot = parent::loadVersioned($key);
+        if ($this->flushAfterReading !== null && \str_ends_with($key, $this->flushAfterReading)) {
+            $this->flushAfterReading = null;
+            $this->flush();
+        }
+        return $snapshot;
+    }
+
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        $before = $this->load($key, PHP_INT_MAX);
+        if (\str_ends_with($key, '#state') && \is_array($before) && \is_array($data)
+            && \is_array($before['owners'] ?? null) && \is_array($data['owners'] ?? null)
+            && \count($data['owners']) < \count($before['owners'])) {
+            if ($this->flushDuringActivation) {
+                $this->flushDuringActivation = false;
+                $this->flush();
+            }
+            if ($this->failDuringActivation) {
+                throw new \Utopia\Cache\Exception\Unavailable('Completion unavailable');
+            }
+        }
+        return parent::compareAndSwap($key, $data, $hash, $version);
+    }
+}
+
+/**
+ * A Redis-like cache that can abandon a write the way a killed worker does: the write stays registered and its
+ * collection stays blocked, because the release of its registration is refused and its activation stops there.
+ */
+final class AbandoningCache implements CacheAdapter, Versioned
+{
+    #[\Override]
+    public function supportsVersioning(): bool
+    {
+        return true;
+    }
+    #[\Override]
+    public function getVersion(string $key): string
+    {
+        return $this->cache->getVersion($key);
+    }
+    #[\Override]
+    public function loadVersioned(string $key): array
+    {
+        return ['version' => $this->getVersion($key), 'value' => $this->load($key, PHP_INT_MAX)];
+    }
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        if (\str_ends_with($key, '#state') && \is_array($data)) {
+            $before = $this->cache->load($key, PHP_INT_MAX);
+            $removed = \is_array($before) && \is_array($before['owners'] ?? null) && \is_array($data['owners'] ?? null) ? \array_diff_key($before['owners'], $data['owners']) : [];
+            if ($removed !== [] && $this->abandoning) {
+                $this->abandoning = false;
+                $this->abandoned = (string) \array_key_first($removed);
+            }
+            if ($this->abandoned !== '' && \count($removed) === 1 && isset($removed[$this->abandoned])) {
+                throw new \Utopia\Cache\Exception\Unavailable('Completion unavailable');
+            }
+        }
+        if ($this->getVersion($key) !== $version) {
+            return false;
+        }
+        if ($this->save($key, $data, $hash) === false) {
+            throw new \Utopia\Cache\Exception\Unavailable('Cache write failed');
+        }
+        return $this->cache->getVersion($key);
+    }
+
+    private RedisLeasableCache $cache;
+
+    private bool $abandoning = false;
+
+    private string $abandoned = '';
+
+    public function __construct()
+    {
+        $this->cache = new RedisLeasableCache();
+    }
+
+    public function abandonNextWrite(): void
+    {
+        $this->abandoning = true;
+    }
+
+    #[\Override]
+    public function load(string $key, int $ttl, string $hash = ''): mixed
+    {
+        return $this->cache->load($key, $ttl, $hash);
+    }
+
+    #[\Override]
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+    {
+        return $this->cache->save($key, $data, $hash);
+    }
+
+    #[\Override]
+    public function touch(string $key, string $hash = ''): bool
+    {
+        return $this->cache->touch($key, $hash);
+    }
+
+    /** @return array<string> */
+    #[\Override]
+    public function list(string $key): array
+    {
+        return $this->cache->list($key);
+    }
+
+    #[\Override]
+    public function purge(string $key, string $hash = ''): bool
+    {
+        if ($hash !== '' && \str_ends_with($key, '#owners')) {
+            if ($this->abandoning) {
+                $this->abandoning = false;
+                $this->abandoned = $hash;
+            }
+            if ($hash === $this->abandoned) {
+                return false;
+            }
+        }
+
+        return $this->cache->purge($key, $hash);
+    }
+
+    #[\Override]
+    public function flush(): bool
+    {
+        return $this->cache->flush();
+    }
+
+    #[\Override]
+    public function ping(): bool
+    {
+        return true;
+    }
+
+    #[\Override]
+    public function getSize(): int
+    {
+        return $this->cache->getSize();
+    }
+
+    #[\Override]
+    public function getName(?string $key = null): string
+    {
+        return 'abandoning';
+    }
+
+}
+
+/**
+ * A cache without generations that runs a callback just before one save lands, as when a write commits between a
+ * reader's database read and its fill.
+ */
+final class InterleavingMemory extends MemoryCache
+{
+    private ?string $fragment = null;
+
+    private ?Closure $callback = null;
+
+    public function beforeNextSave(string $fragment, Closure $callback): void
+    {
+        $this->fragment = $fragment;
+        $this->callback = $callback;
+    }
+
+    #[\Override]
+    public function compareAndSwap(string $key, array|string $data, string $hash, string $version): string|false
+    {
+        $callback = $this->callback;
+        if ($callback !== null && $this->fragment !== null && \str_contains($key, $this->fragment)) {
+            $this->callback = null;
+            $callback();
+        }
+
+        return parent::compareAndSwap($key, $data, $hash, $version);
+    }
+}

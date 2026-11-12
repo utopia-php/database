@@ -20,4 +20,12 @@ interface Upserts
      * @return array<Document> The written documents, in the order of $changes
      */
     public function upsertDocuments(Document $collection, array $changes, ?string $increase = null): array;
+
+    /**
+     * Lock the stored documents with these ids until the open transaction ends, so the upsert that reads and then
+     * writes them works from their current values.
+     *
+     * @param  array<string>  $ids
+     */
+    public function lockDocuments(Document $collection, array $ids): void;
 }

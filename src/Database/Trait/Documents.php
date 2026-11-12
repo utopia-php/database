@@ -3073,12 +3073,16 @@ trait Documents
                 $changed = $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete($collection, $document, $report));
             }
 
-            $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection, $id));
+            // The stored id, which an engine that matches ids case-insensitively may spell differently from $id
+            $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection, $document->getId()));
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            if ($document->getId() !== $id) {
+                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            }
 
             if ($result) {
-                $this->queueDocumentPurge($collection->getId(), $id);
+                $this->queueDocumentPurge($collection->getId(), $document->getId());
             }
 
             return $result ? $document : null;

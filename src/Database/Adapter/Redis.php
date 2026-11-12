@@ -1479,7 +1479,7 @@ class Redis extends Adapter implements
     }
 
     #[\Override]
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
     {
         $collectionId = $this->filter($collection->getId());
         $metaKey = $this->key($this->ns(), 'meta', $collectionId);

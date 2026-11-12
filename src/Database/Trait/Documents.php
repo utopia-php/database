@@ -2394,8 +2394,6 @@ trait Documents
         $time = DateTime::now();
         $created = 0;
         $updated = 0;
-        $operatorIds = [];
-        $seenIds = [];
         $hasRelationships = self::relationshipAttributes($collection) !== [];
         $preparation = $hasRelationships ? $this->nestedPreparation() : null;
         if ($preparation !== null) {
@@ -2407,183 +2405,11 @@ trait Documents
             static fn (Attribute $attribute): string => $attribute->key,
             self::internalAttributesFor(true)
         ));
-        $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
-
-        foreach ($documents as $key => $document) {
-            $old = $existing[$this->upsertKey($document)] ?? new Document();
-
-            $document = $this->removeUnknownAttributes($collection, $document);
-            $unchanged = $this->roundOperators($collection, $document);
-            if (! $old->isEmpty()) {
-                self::keepStored($document, $old, $unchanged);
+        $seenIds = [];
+        foreach ($documents as $document) {
+            if ($document->getId() !== '') {
+                $seenIds[] = $this->upsertKey($document);
             }
-
-            // Extract operators early to avoid comparison issues
-            $documentArray = $document->getArrayCopy();
-            $extracted = Operator::extractOperators($documentArray);
-            $operators = $extracted['operators'];
-            $regularUpdates = $extracted['updates'];
-
-            $regularUpdatesUserOnly = \array_diff_key($regularUpdates, $internalKeys);
-
-            $skipPermissionsUpdate = true;
-
-            if ($document->offsetExists(Document::PERMISSIONS)) {
-                $originalPermissions = $old->getPermissions();
-                $currentPermissions = $document->getPermissions();
-
-                sort($originalPermissions);
-                sort($currentPermissions);
-
-                $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
-            }
-
-            // Only skip if no operators and regular attributes haven't changed
-            $hasChanges = false;
-            if (! empty($operators)) {
-                $hasChanges = true;
-            } elseif (($increase ?? '') !== '') {
-                $hasChanges = true;
-            } elseif (! $skipPermissionsUpdate) {
-                $hasChanges = true;
-            } else {
-                // Check if any of the provided attributes differ from old document
-                $oldAttributes = $old->getAttributes();
-                foreach ($regularUpdatesUserOnly as $attrKey => $value) {
-                    $oldValue = $oldAttributes[$attrKey] ?? null;
-                    if ($oldValue != $value) {
-                        $hasChanges = true;
-                        break;
-                    }
-                }
-
-                // Also check if old document has attributes that new document doesn't
-                if (! $hasChanges) {
-                    $oldUserAttributes = \array_diff_key($oldAttributes, $internalKeys);
-
-                    foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
-                        if (! array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
-                            // Old document has an attribute that new document doesn't
-                            $hasChanges = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (! $hasChanges) {
-                // If not updating a single attribute and the document is the same as the old one, skip it
-                unset($documents[$key]);
-
-                continue;
-            }
-
-            // If old is empty, check if user has create permission on the collection
-            // If old is not empty, check if user has update permission on the collection
-            // If old is not empty AND documentSecurity is enabled, check if user has update permission on the collection or document
-
-            if ($old->isEmpty()) {
-                if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
-                    throw new AuthorizationException($this->authorization->getDescription());
-                }
-            } elseif (! $this->authorization->isValid(new Input(PermissionType::Update, \array_merge(
-                $collection->getPermissionsByType(PermissionType::Update),
-                ((bool) $documentSecurity ? $old->getPermissionsByType(PermissionType::Update) : [])
-            )))) {
-                throw new AuthorizationException($this->authorization->getDescription());
-            }
-
-            $updatedAt = $document->getUpdatedAt();
-
-            $document
-                ->setAttribute(Document::ID, empty($document->getId()) ? Id::unique() : $document->getId())
-                ->setAttribute(Document::COLLECTION, $collection->getId())
-                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
-
-            if (! $this->sequencePreservation()->get()) {
-                $document->removeAttribute(Document::SEQUENCE);
-            }
-
-            $createdAt = $document->getCreatedAt();
-            if ($createdAt === null || ! $this->datePreservation()->get()) {
-                $document->setAttribute(Document::CREATED_AT, $old->isEmpty() ? $time : $old->getCreatedAt());
-            } else {
-                $document->setAttribute(Document::CREATED_AT, $createdAt);
-            }
-
-            // Force matching optional parameter sets
-            // Doesn't use decode as that intentionally skips null defaults to reduce payload size
-            foreach ($collectionAttributes as $declared) {
-                if (! $declared->required && ! \array_key_exists($declared->key, (array) $document)) {
-                    $document->setAttribute(
-                        $declared->key,
-                        $old->getAttribute($declared->key, $declared->default)
-                    );
-                }
-            }
-
-            if ($skipPermissionsUpdate) {
-                $document->setAttribute(Document::PERMISSIONS, $old->getPermissions());
-            }
-
-            if ($this->adapter->hasSharedTables()) {
-                if ($this->adapter->isTenantPerDocument()) {
-                    if ($document->getTenant() === null) {
-                        throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
-                    }
-                    if (! $old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
-                        throw new DatabaseException('Tenant cannot be changed.');
-                    }
-                } else {
-                    $document->setAttribute(Document::TENANT, $this->adapter->getTenant());
-                }
-            }
-
-            $document = $this->encode($collection, $document);
-
-            if ($this->validation()->get()) {
-                $validator = new Structure(
-                    collection: $collection,
-                    profile: $this->profile(),
-                    currentDocument: $old->isEmpty() ? null : $old
-                );
-
-                if (! $validator->isValid($document)) {
-                    throw new StructureException($validator->getDescription());
-                }
-            }
-
-            if (! $old->isEmpty()) {
-                // Check if document was updated after the request timestamp
-                try {
-                    $oldUpdatedAt = new PhpDateTime($old->getUpdatedAt() ?? 'now');
-                } catch (Exception $e) {
-                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-                }
-
-                $requestTimestamp = $this->requestTimestamp()->get();
-                if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
-                    throw new ConflictException('Document was updated after the request timestamp');
-                }
-            }
-
-            $hook = $this->relationshipHook;
-            if ($hook?->isEnabled()) {
-                $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
-            }
-
-            $identity = $this->getDocumentIdentity($document);
-            $seenIds[] = $identity;
-            if (! empty($operators)) {
-                $operatorIds[$identity] = true;
-            }
-            $old = $this->castBefore($collection, $old);
-            $document = $this->castBefore($collection, $document);
-
-            $documents[$key] = new Change(
-                old: $old,
-                new: $document
-            );
         }
 
         // Required because *some* DBs will allow duplicate IDs for upsert
@@ -2591,45 +2417,218 @@ trait Documents
             throw new DuplicateException('Duplicate document IDs found in the input array.');
         }
 
-        foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            /**
-             * @var array<Change> $chunk
-             */
-            $hasOperators = false;
-            foreach ($chunk as $change) {
-                if (isset($operatorIds[$this->getDocumentIdentity($change->new)])) {
-                    $hasOperators = true;
-                    break;
-                }
-            }
+        // Each chunk reads the stored documents in the transaction that writes them, with their rows locked: the
+        // optional attributes a document leaves out are copied from that read, so a stale one would revert a
+        // concurrent write to them.
+        foreach (\array_chunk($documents, $batchSize) as $input) {
+            /** @var array{array<Change>, bool, array<Document>} $written */
+            $written = $this->withInvalidationScope(fn () => $this->withAdapterTransaction(function () use ($collection, $collectionAttributes, $documentSecurity, $internalKeys, $time, $increase, $input): array {
+                $chunk = [];
+                $hasOperators = false;
+                $existing = $this->findDocumentsToUpsert($collection, $input);
 
-            $batch = $this->withMutation(
-                Event::DocumentsUpsert,
-                \array_map(static fn (Change $change): Document => $change->new, $chunk),
-                function () use ($collection, $increase, $chunk): array {
-                    if (! $this->adapterHasFeature(Feature\Upserts::class)) {
-                        throw new DatabaseException('Adapter does not support upserts');
+                foreach ($input as $document) {
+                    $old = $existing[$this->upsertKey($document)] ?? new Document();
+
+                    $document = $this->removeUnknownAttributes($collection, $document);
+                    $unchanged = $this->roundOperators($collection, $document);
+                    if (! $old->isEmpty()) {
+                        self::keepStored($document, $old, $unchanged);
                     }
 
-                    $adapter = $this->adapter;
-                    $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
-                        $collection,
-                        $chunk,
-                        $increase,
-                    ));
+                    // Extract operators early to avoid comparison issues
+                    $documentArray = $document->getArrayCopy();
+                    $extracted = Operator::extractOperators($documentArray);
+                    $operators = $extracted['operators'];
+                    $regularUpdates = $extracted['updates'];
 
-                    foreach ($batch as $document) {
-                        $this->withDocumentTenant(
-                            $document,
-                            fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
+                    $regularUpdatesUserOnly = \array_diff_key($regularUpdates, $internalKeys);
+
+                    $skipPermissionsUpdate = true;
+
+                    if ($document->offsetExists(Document::PERMISSIONS)) {
+                        $originalPermissions = $old->getPermissions();
+                        $currentPermissions = $document->getPermissions();
+
+                        sort($originalPermissions);
+                        sort($currentPermissions);
+
+                        $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
+                    }
+
+                    // Only skip if no operators and regular attributes haven't changed
+                    $hasChanges = false;
+                    if (! empty($operators)) {
+                        $hasChanges = true;
+                    } elseif (($increase ?? '') !== '') {
+                        $hasChanges = true;
+                    } elseif (! $skipPermissionsUpdate) {
+                        $hasChanges = true;
+                    } else {
+                        // Check if any of the provided attributes differ from old document
+                        $oldAttributes = $old->getAttributes();
+                        foreach ($regularUpdatesUserOnly as $attrKey => $value) {
+                            $oldValue = $oldAttributes[$attrKey] ?? null;
+                            if ($oldValue != $value) {
+                                $hasChanges = true;
+                                break;
+                            }
+                        }
+
+                        // Also check if old document has attributes that new document doesn't
+                        if (! $hasChanges) {
+                            $oldUserAttributes = \array_diff_key($oldAttributes, $internalKeys);
+
+                            foreach (array_keys($oldUserAttributes) as $oldAttrKey) {
+                                if (! array_key_exists($oldAttrKey, $regularUpdatesUserOnly)) {
+                                    // Old document has an attribute that new document doesn't
+                                    $hasChanges = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (! $hasChanges) {
+                        // If not updating a single attribute and the document is the same as the old one, skip it
+                        continue;
+                    }
+
+                    // If old is empty, check if user has create permission on the collection
+                    // If old is not empty, check if user has update permission on the collection
+                    // If old is not empty AND documentSecurity is enabled, check if user has update permission on the collection or document
+
+                    if ($old->isEmpty()) {
+                        if (! $this->authorization->isValid(new Input(PermissionType::Create, $collection->getPermissionsByType(PermissionType::Create)))) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+                    } elseif (! $this->authorization->isValid(new Input(PermissionType::Update, \array_merge(
+                        $collection->getPermissionsByType(PermissionType::Update),
+                        ((bool) $documentSecurity ? $old->getPermissionsByType(PermissionType::Update) : [])
+                    )))) {
+                        throw new AuthorizationException($this->authorization->getDescription());
+                    }
+
+                    $updatedAt = $document->getUpdatedAt();
+
+                    $document
+                        ->setAttribute(Document::ID, empty($document->getId()) ? Id::unique() : $document->getId())
+                        ->setAttribute(Document::COLLECTION, $collection->getId())
+                        ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->datePreservation()->get()) ? $time : $updatedAt);
+
+                    if (! $this->sequencePreservation()->get()) {
+                        $document->removeAttribute(Document::SEQUENCE);
+                    }
+
+                    $createdAt = $document->getCreatedAt();
+                    if ($createdAt === null || ! $this->datePreservation()->get()) {
+                        $document->setAttribute(Document::CREATED_AT, $old->isEmpty() ? $time : $old->getCreatedAt());
+                    } else {
+                        $document->setAttribute(Document::CREATED_AT, $createdAt);
+                    }
+
+                    // Force matching optional parameter sets
+                    // Doesn't use decode as that intentionally skips null defaults to reduce payload size
+                    foreach ($collectionAttributes as $declared) {
+                        if (! $declared->required && ! \array_key_exists($declared->key, (array) $document)) {
+                            $document->setAttribute(
+                                $declared->key,
+                                $old->getAttribute($declared->key, $declared->default)
+                            );
+                        }
+                    }
+
+                    if ($skipPermissionsUpdate) {
+                        $document->setAttribute(Document::PERMISSIONS, $old->getPermissions());
+                    }
+
+                    if ($this->adapter->hasSharedTables()) {
+                        if ($this->adapter->isTenantPerDocument()) {
+                            if ($document->getTenant() === null) {
+                                throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
+                            }
+                            if (! $old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
+                                throw new DatabaseException('Tenant cannot be changed.');
+                            }
+                        } else {
+                            $document->setAttribute(Document::TENANT, $this->adapter->getTenant());
+                        }
+                    }
+
+                    $document = $this->encode($collection, $document);
+
+                    if ($this->validation()->get()) {
+                        $validator = new Structure(
+                            collection: $collection,
+                            profile: $this->profile(),
+                            currentDocument: $old->isEmpty() ? null : $old
                         );
+
+                        if (! $validator->isValid($document)) {
+                            throw new StructureException($validator->getDescription());
+                        }
                     }
 
-                    $this->queueDocumentPurges($collection->getId(), $batch);
+                    if (! $old->isEmpty()) {
+                        // Check if document was updated after the request timestamp
+                        try {
+                            $oldUpdatedAt = new PhpDateTime($old->getUpdatedAt() ?? 'now');
+                        } catch (Exception $e) {
+                            throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                        }
 
-                    return $batch;
+                        $requestTimestamp = $this->requestTimestamp()->get();
+                        if ($requestTimestamp !== null && $oldUpdatedAt > $requestTimestamp) {
+                            throw new ConflictException('Document was updated after the request timestamp');
+                        }
+                    }
+
+                    $hook = $this->relationshipHook;
+                    if ($hook?->isEnabled()) {
+                        $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
+                    }
+
+                    if (! empty($operators)) {
+                        $hasOperators = true;
+                    }
+                    $old = $this->castBefore($collection, $old);
+                    $document = $this->castBefore($collection, $document);
+
+                    $chunk[] = new Change(
+                        old: $old,
+                        new: $document
+                    );
                 }
-            );
+
+                if ($chunk === []) {
+                    return [[], false, []];
+                }
+
+                $this->blockMutation(Event::DocumentsUpsert, \array_map(static fn (Change $change): Document => $change->new, $chunk));
+
+                $adapter = $this->adapter;
+                $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
+                    $collection,
+                    $chunk,
+                    $increase,
+                ));
+
+                foreach ($batch as $document) {
+                    $this->withDocumentTenant(
+                        $document,
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
+                    );
+                }
+
+                $this->queueDocumentPurges($collection->getId(), $batch);
+
+                return [$chunk, $hasOperators, $batch];
+            }));
+
+            [$chunk, $hasOperators, $batch] = $written;
+            if ($chunk === []) {
+                continue;
+            }
 
             foreach ($batch as $index => $document) {
                 if (empty($document->getSequence()) && ! empty($chunk[$index]->old->getSequence())) {
@@ -2686,17 +2685,18 @@ trait Documents
     }
 
     /**
-     * Load the stored documents an upsert batch will be compared against, in one
+     * Lock and load the stored documents an upsert batch will be compared against, in one
      * read per tenant instead of one per document. A batch of N documents costs a
      * bounded number of round trips; getDocument() per document cost 2N, which
-     * doubled the stats-resources sweep and is what this replaces.
+     * doubled the stats-resources sweep and is what this replaces. The rows stay
+     * locked until the caller's transaction ends.
      *
      * @param  array<Document>  $documents
      * @return array<string, Document>
      *
      * @throws Throwable
      */
-    private function findDocumentsToUpsert(string $collection, array $documents): array
+    private function findDocumentsToUpsert(Collection $collection, array $documents): array
     {
         $perTenant = $this->hasSharedTables() && $this->isTenantPerDocument();
 
@@ -2719,10 +2719,10 @@ trait Documents
         $existing = [];
         foreach ($batches as $batch) {
             foreach (\array_chunk(\array_values(\array_unique($batch['ids'])), \max(1, $this->maxQueryValues)) as $chunk) {
-                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->find($collection, [
+                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->fetch($collection, [
                     Query::equal(Document::ID, $chunk),
                     Query::limit($this->maxQueryValues),
-                ], forPermission: PermissionType::Update))));
+                ], PermissionType::Update, false, forUpdate: true))));
 
                 $found = $perTenant
                     ? $this->withTenant($batch['tenant'], $read)
@@ -4149,7 +4149,7 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null, array &$joinedByAlias = []): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null, array &$joinedByAlias = [], bool $forUpdate = false): array
     {
         $adapterQueries = null;
         $joinedByAlias = [];
@@ -4302,6 +4302,7 @@ trait Documents
                 && $collection->getId() !== self::METADATA
                 && $this->adapter->supports(Capability::Caching)
                 && ! $this->adapter->inTransaction()
+                && ! $forUpdate
                 && empty($joins)
             ) {
                 $cacheContext = $skipAuth
@@ -4365,7 +4366,8 @@ trait Documents
                     $orderTypes,
                     $cursor,
                     $cursorDirection,
-                    $forPermission
+                    $forPermission,
+                    $forUpdate
                 );
                 $results = $skipAuth ? $this->authorization->skip($find) : $find();
 

@@ -2399,7 +2399,7 @@ class Mongo extends Adapter implements Feature\Casting, Feature\Connection, Feat
      * @throws TimeoutException
      */
     #[\Override]
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);

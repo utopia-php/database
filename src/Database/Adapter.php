@@ -839,9 +839,10 @@ abstract class Adapter
      * @param  array<string>  $orderAttributes
      * @param  array<\Utopia\Query\OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
+     * @param  bool  $forUpdate  Whether to lock the found documents for update
      * @return array<Document>
      */
-    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array;
 
     /**
      * Count Documents

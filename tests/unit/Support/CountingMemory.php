@@ -46,7 +46,7 @@ class CountingMemory extends Memory
      * @return array<Document>
      */
     #[\Override]
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
     {
         if ($collection->getId() === Database::METADATA) {
             $this->metadataReads++;
@@ -54,7 +54,7 @@ class CountingMemory extends Memory
             $this->finds++;
         }
 
-        return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+        return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission, $forUpdate);
     }
 
     public function reset(): void

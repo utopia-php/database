@@ -2696,7 +2696,7 @@ trait Documents
      *
      * @throws Throwable
      */
-    private function findDocumentsToUpsert(Document $collection, array $documents): array
+    private function findDocumentsToUpsert(Collection $collection, array $documents): array
     {
         $perTenant = $this->hasSharedTables() && $this->isTenantPerDocument();
 
@@ -2719,16 +2719,10 @@ trait Documents
         $existing = [];
         foreach ($batches as $batch) {
             foreach (\array_chunk(\array_values(\array_unique($batch['ids'])), \max(1, $this->maxQueryValues)) as $chunk) {
-                $read = function () use ($collection, $chunk): array {
-                    /** @var Feature\Upserts $adapter */
-                    $adapter = $this->adapter;
-                    $adapter->lockDocuments($collection, $chunk);
-
-                    return $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->find($collection->getId(), [
-                        Query::equal(Document::ID, $chunk),
-                        Query::limit($this->maxQueryValues),
-                    ], forPermission: PermissionType::Update))));
-                };
+                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->skipQueryHooks(fn () => $this->fetch($collection, [
+                    Query::equal(Document::ID, $chunk),
+                    Query::limit($this->maxQueryValues),
+                ], PermissionType::Update, false, forUpdate: true))));
 
                 $found = $perTenant
                     ? $this->withTenant($batch['tenant'], $read)
@@ -4155,7 +4149,7 @@ trait Documents
      * @throws TimeoutException
      * @throws Exception
      */
-    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null, array &$joinedByAlias = []): array
+    private function fetch(Collection $collection, array $queries, PermissionType $forPermission, bool $aggregate, ?array &$adapterQueries = null, array &$joinedByAlias = [], bool $forUpdate = false): array
     {
         $adapterQueries = null;
         $joinedByAlias = [];
@@ -4308,6 +4302,7 @@ trait Documents
                 && $collection->getId() !== self::METADATA
                 && $this->adapter->supports(Capability::Caching)
                 && ! $this->adapter->inTransaction()
+                && ! $forUpdate
                 && empty($joins)
             ) {
                 $cacheContext = $skipAuth
@@ -4371,7 +4366,8 @@ trait Documents
                     $orderTypes,
                     $cursor,
                     $cursorDirection,
-                    $forPermission
+                    $forPermission,
+                    $forUpdate
                 );
                 $results = $skipAuth ? $this->authorization->skip($find) : $find();
 

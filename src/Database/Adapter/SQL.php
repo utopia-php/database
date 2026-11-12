@@ -1416,6 +1416,26 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     }
 
     /**
+     * @param  array<string>  $ids
+     */
+    #[\Override]
+    public function lockDocuments(Document $collection, array $ids): void
+    {
+        if ($ids === [] || ! $this->supports(Capability::UpdateLock)) {
+            return;
+        }
+
+        $builder = $this->newBuilder($collection->getId());
+        $builder->select([Storage::UID]);
+        $builder->filter([BaseQuery::equal(Storage::UID, $ids)]);
+        $builder->forUpdate();
+
+        $statement = $this->executeResult($builder->build(), Event::DocumentRead);
+        $this->execute($statement);
+        $statement->closeCursor();
+    }
+
+    /**
      * Assign internal IDs for the given documents
      *
      * @param  array<Document>  $documents

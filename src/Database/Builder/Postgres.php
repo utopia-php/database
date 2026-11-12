@@ -4,6 +4,7 @@ namespace Utopia\Database\Builder;
 
 use Utopia\Database\Database;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\ObjectPath;
 use Utopia\Query\Builder\PostgreSQL as Base;
 use Utopia\Query\Builder\SpatialDistanceFilter;
@@ -15,6 +16,10 @@ use Utopia\Query\Schema\ColumnType;
  * The PostgreSQL builder, which also compiles filters on their own, prepares search terms and matches containsAll() as
  * 7.x did, writes a filter on a path into an object attribute only when every key of the path is a plain key, and lets
  * a distanceLessThan() filter use the spatial index.
+ *
+ * The `_uid` unique index, and the `_perms` unique index outside shared tables, are built in the non-deterministic
+ * utf8_ci_ai collation. PostgreSQL only uses an index for a comparison in the index's collation, so equality on those
+ * columns compares in it.
  */
 class Postgres extends Base implements Filtering, Scoping
 {
@@ -26,6 +31,19 @@ class Postgres extends Base implements Filtering, Scoping
     private const float METERS_PER_LATITUDE_DEGREE = 110574;
 
     private const float METERS_PER_EQUATORIAL_LONGITUDE_DEGREE = 111319;
+
+    public const string COLLATION = 'utf8_ci_ai';
+
+    private const string COLLATE = ' COLLATE '.self::COLLATION;
+
+    private const array EQUALITY_OPERATORS = ['=', '!=', '<>'];
+
+    /**
+     * @param  bool  $sharedTables  Whether the `_perms` unique index is the shared-tables one, built without the collation
+     */
+    public function __construct(private readonly bool $sharedTables = false)
+    {
+    }
 
     /**
      * @throws QueryException On a builder that read a collection, whose tenant scope does not reach the second table
@@ -65,6 +83,92 @@ class Postgres extends Base implements Filtering, Scoping
         }
 
         return parent::compileFilter($query);
+    }
+
+    #[\Override]
+    public function compileJoin(Query $query): string
+    {
+        $sql = parent::compileJoin($query);
+
+        foreach ($this->onComparisons($query->getJoinOnQueries()) as [$left, $operator, $right]) {
+            if (! \in_array($operator, self::EQUALITY_OPERATORS, true) || ! $this->isCollated($left) || ! $this->isCollated($right)) {
+                continue;
+            }
+
+            $comparison = ' '.$operator.' '.$this->resolveAndWrap($right);
+            $wrappedLeft = $this->resolveAndWrap($left);
+            $sql = \str_replace($wrappedLeft.$comparison, $wrappedLeft.self::COLLATE.$comparison, $sql);
+        }
+
+        return $sql;
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     */
+    #[\Override]
+    protected function compileIn(string $attribute, array $values, ?string $column = null): string
+    {
+        return parent::compileIn($this->collate($attribute, $column), $values, $column);
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     */
+    #[\Override]
+    protected function compileNotIn(string $attribute, array $values, ?string $column = null): string
+    {
+        return parent::compileNotIn($this->collate($attribute, $column), $values, $column);
+    }
+
+    private function collate(string $attribute, ?string $column): string
+    {
+        return $column !== null && $this->isCollated($column) ? $attribute.self::COLLATE : $attribute;
+    }
+
+    private function isCollated(string $column): bool
+    {
+        $resolved = $this->resolveAttribute($column);
+        $separator = \strrpos($resolved, '.');
+        $name = $separator === false ? $resolved : \substr($resolved, $separator + 1);
+
+        return $name === Storage::UID || ($name === Storage::PERMISSIONS_DOCUMENT && ! $this->sharedTables);
+    }
+
+    /**
+     * @param  array<mixed>  $queries
+     * @return list<array{string, string, string}>
+     */
+    private function onComparisons(array $queries): array
+    {
+        $comparisons = [];
+        foreach ($queries as $query) {
+            if (! $query instanceof Query) {
+                continue;
+            }
+
+            $comparisons = match ($query->getMethod()) {
+                Method::On => [...$comparisons, ...$this->comparison($query->getValues())],
+                Method::And, Method::Or => [...$comparisons, ...$this->onComparisons($query->getValues())],
+                default => $comparisons,
+            };
+        }
+
+        return $comparisons;
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     * @return list<array{string, string, string}>
+     */
+    private function comparison(array $values): array
+    {
+        [$left, $operator, $right] = [$values[0] ?? null, $values[1] ?? null, $values[2] ?? null];
+        if (! \is_string($left) || ! \is_string($operator) || ! \is_string($right) || $left === '' || $right === '') {
+            return [];
+        }
+
+        return [[$left, $operator, $right]];
     }
 
     /**

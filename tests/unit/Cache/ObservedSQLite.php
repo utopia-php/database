@@ -35,6 +35,7 @@ final class ObservedSQLite extends SQLite
         array $cursor = [],
         CursorDirection $cursorDirection = CursorDirection::After,
         PermissionType $forPermission = PermissionType::Read,
+        bool $forUpdate = false,
     ): array {
         if ($collection->getId() === $this->findCollection) {
             $this->finds++;
@@ -50,6 +51,7 @@ final class ObservedSQLite extends SQLite
             $cursor,
             $cursorDirection,
             $forPermission,
+            $forUpdate,
         );
     }
 }

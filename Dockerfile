@@ -1,4 +1,4 @@
-FROM composer:2.8@sha256:5248900ab8b5f7f880c2d62180e40960cd87f60149ec9a1abfd62ac72a02577c AS composer
+FROM composer:2.10@sha256:2cf275428757e5435a667bfc0d038b14520ca02be2b1b70d44a05c8c19e2de48 AS composer
 
 WORKDIR /usr/local/src/
 
@@ -13,7 +13,7 @@ RUN composer install \
     --prefer-dist
 
 
-FROM php:8.5.8-cli-alpine@sha256:8d7090ce03736b6ecfd739d87a46ab59b5d1d0d837f1ac7c5d2702f1d312f5a0 AS compile
+FROM php:8.5.12-cli-alpine@sha256:1ff5b45922ab30f418447c6089dbe2eba5f01e0b2742863d0327ac349305d70f AS compile
 
 ENV PHP_REDIS_VERSION="6.3.0" \
     PHP_SWOOLE_VERSION="v6.2.2" \

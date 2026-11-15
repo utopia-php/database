@@ -217,10 +217,27 @@ class MongoDBTest extends Base
         $database->createCollection(Collection::create(id: 'adminDefinition', permissions: [Permission::read(Role::user('admin'))]));
         $database->createCollection(Collection::create(id: 'unlistedDefinition', permissions: [Permission::create(Role::any())]));
 
-        $listed = fn (): array => \array_values(\array_intersect(
-            $definitions,
-            \array_map(fn (Collection $collection) => $collection->getId(), $database->listCollections(100)),
-        ));
+        // Paged rather than a single page: the listing has no order, so it answers with the
+        // oldest collections first, and these three are created last in a database every
+        // other test has already added to. A first page would stop finding them the moment
+        // the suite grows past it, which says nothing about who may read them.
+        $listed = function () use ($database, $definitions): array {
+            $ids = [];
+
+            for ($offset = 0; ; $offset += 100) {
+                $page = $database->listCollections(100, $offset);
+
+                foreach ($page as $collection) {
+                    $ids[] = $collection->getId();
+                }
+
+                if (\count($page) < 100) {
+                    break;
+                }
+            }
+
+            return \array_values(\array_intersect($definitions, $ids));
+        };
         $queries = [Query::equal('$id', $definitions)];
 
         $this->actAs('bob', function () use ($database, $listed, $queries): void {

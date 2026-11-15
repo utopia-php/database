@@ -21,13 +21,30 @@ class Permissions extends Roles
     protected int $length;
 
     /**
+     * Columns a permission in this set is allowed to name.
+     *
+     * @var array<string>|null
+     */
+    private ?array $columns;
+
+    private Key $key;
+
+    /**
      * @param  int  $length  maximum amount of permissions. 0 means unlimited.
      * @param  array<PermissionType>  $allowed  allowed permissions. Defaults to all available.
+     * @param  array<string>|null  $columns  the collection's column keys. A permission may name one
+     *                                       of these and no other. Null means this set may not name
+     *                                       a column at all, which is the case for every permission
+     *                                       outside a collection's own -- a document's permissions
+     *                                       carry no column, and nothing else has a column list to
+     *                                       judge one against.
      */
-    public function __construct(int $length = 0, array $allowed = [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete, PermissionType::Write])
+    public function __construct(int $length = 0, array $allowed = [PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete, PermissionType::Write], ?array $columns = null)
     {
         $this->length = $length;
         $this->allowed = \array_map(fn (PermissionType $p) => $p->value, $allowed);
+        $this->columns = $columns;
+        $this->key = new Key();
     }
 
     #[\Override]
@@ -98,6 +115,56 @@ class Permissions extends Roles
             if (! $this->isValidRole($role, $identifier, $dimension)) {
                 return false;
             }
+
+            if (! $permission->isForAllColumns() && ! $this->isValidColumn($permission)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A permission may name a column only where columns are meaningful, and only one that exists.
+     *
+     * Reported by the key the caller wrote. Nothing has translated it yet at this point, and an
+     * error naming something the caller did not type is worse than no error at all.
+     */
+    private function isValidColumn(Permission $permission): bool
+    {
+        $type = $permission->getPermission();
+
+        // Before anything about where the permission lives. Only read and update answer a
+        // question about one column. A create brings a whole row into being, so narrowing it to
+        // one column would have to mean something about the columns it leaves unset, which is
+        // not a thing a grant can say; a delete removes the whole row, so narrowing it says
+        // nothing at all; and write aggregates to create, update and delete, so it inherits
+        // both objections. Refused rather than accepted and ignored: a grant that reads as a
+        // restriction and enforces none is worse than no grant.
+        if (\in_array($type, [PermissionType::Create->value, PermissionType::Delete->value, PermissionType::Write->value], true)) {
+            $this->message = 'Permission "'.$type.'" cannot be scoped to a column, it applies to the whole row.';
+
+            return false;
+        }
+
+        if ($this->columns === null) {
+            $this->message = 'Permission "'.$permission->toString().'" is scoped to a column. Column-scoped permissions are set on the collection, not here.';
+
+            return false;
+        }
+
+        // Judged before existence, so a column that could never be a key is told why rather
+        // than being reported as one the collection happens not to have.
+        if (! $this->key->isValid($permission->getColumn())) {
+            $this->message = 'Column "'.$permission->getColumn().'" is not a valid column key.';
+
+            return false;
+        }
+
+        if (! \in_array($permission->getColumn(), $this->columns, true)) {
+            $this->message = 'Column "'.$permission->getColumn().'" does not exist.';
+
+            return false;
         }
 
         return true;

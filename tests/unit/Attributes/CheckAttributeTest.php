@@ -18,18 +18,41 @@ final class CheckAttributeTest extends TestCase
 {
     public function testAnAttributeWithinTheLimitPasses(): void
     {
-        $database = $this->database([Attribute::string('first', 16), Attribute::string('second', 16), Attribute::string('third', 16)]);
+        $database = $this->database($this->attributes(self::limit() - 1));
 
-        $this->assertTrue($database->checkAttribute('items', Attribute::string('fourth', 16)));
+        $this->assertTrue($database->checkAttribute('items', Attribute::string('last', 16)));
     }
 
     public function testAnAttributeOverTheLimitIsRefused(): void
     {
-        $database = $this->database([Attribute::string('first', 16), Attribute::string('second', 16), Attribute::string('third', 16), Attribute::string('fourth', 16)]);
+        $database = $this->database($this->attributes(self::limit()));
 
         $this->expectException(LimitException::class);
 
-        $database->checkAttribute('items', Attribute::string('fifth', 16));
+        $database->checkAttribute('items', Attribute::string('overTheLimit', 16));
+    }
+
+    /**
+     * How many attributes the adapter below allows, which it derives from the metadata
+     * definition -- so a fixture counting them by hand goes stale the moment that grows.
+     */
+    private static function limit(): int
+    {
+        return \count(Database::collectionDefinition()->attributes());
+    }
+
+    /**
+     * @return list<Attribute>
+     */
+    private function attributes(int $count): array
+    {
+        $attributes = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $attributes[] = Attribute::string('attribute'.$i, 16);
+        }
+
+        return $attributes;
     }
 
     public function testCheckingDoesNotStoreTheAttribute(): void

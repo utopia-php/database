@@ -310,14 +310,21 @@ trait Attributes
     /**
      * Checks that the attribute can be added to the collection without exceeding its limits.
      *
+     * Pending attributes are accepted but not yet in the collection, such as ones queued for
+     * creation, and count towards the limits as if they were already added.
+     *
+     * @param  list<Attribute>  $pending
+     *
      * @throws LimitException
      * @throws NotFoundException
      */
-    public function checkAttribute(string $collection, Attribute $attribute): bool
+    public function checkAttribute(string $collection, Attribute $attribute, array $pending = []): bool
     {
         $definition = clone ($this->silent(fn () => $this->getCollection($collection)));
 
-        $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $attribute->toDocument(), SetType::Append);
+        foreach ([...$pending, $attribute] as $added) {
+            $definition->setAttribute(self::COLLECTION_ATTRIBUTES, $added->toDocument(), SetType::Append);
+        }
 
         if (
             $this->adapter->limits()->attributes > 0 &&

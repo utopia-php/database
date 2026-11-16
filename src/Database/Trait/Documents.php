@@ -1709,6 +1709,42 @@ trait Documents
      * @throws DuplicateException
      * @throws StructureException
      */
+    /**
+     * Whether an update changes nothing but operator attributes, such as an increment, so it can be applied
+     * without a locked read. $id and $permissions may be present unchanged, as Appwrite always sends them;
+     * unchanged permissions are confirmed once the stored document is read.
+     */
+    private function changesOnlyOperators(Document $collection, string $id, Document $document): bool
+    {
+        if (
+            $collection->getId() === self::METADATA
+            || $this->requestTimestamp()->get() !== null
+            || ! $this->adapter->supports(Capability::UpdateLock)
+        ) {
+            return false;
+        }
+
+        $relationships = [];
+        foreach ($collection->attributes() as $attribute) {
+            if ($attribute->relationship !== null) {
+                $relationships[$attribute->key] = true;
+            }
+        }
+
+        $operators = 0;
+        foreach ($document->getArrayCopy() as $key => $value) {
+            if ($key === Document::PERMISSIONS || $key === Document::COLLECTION || ($key === Document::ID && $value === $id)) {
+                continue;
+            }
+            if (! Operator::isOperator($value) || isset($relationships[$key])) {
+                return false;
+            }
+            $operators++;
+        }
+
+        return $operators > 0;
+    }
+
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
         if (! $id) {
@@ -1722,13 +1758,31 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, &$hasOperators) {
-            $old = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: true))
+        $operatorsOnly = $this->changesOnlyOperators($collection, $id, $document);
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $preparation, $newUpdatedAt, &$hasOperators, $operatorsOnly) {
+            $read = fn (bool $lock) => $this->authorization->skip(fn () => $this->silent(
+                fn () => $this->skipQueryHooks(fn () => $this->readDocument($collection, $id, forUpdate: $lock))
             ));
+            // An update made only of operators writes nothing it read, so it does not need the row lock
+            // until its UPDATE takes it. Waiting on a locked read here serialises every concurrent
+            // increment of a hot row behind the whole of the previous one's transaction.
+            $old = $read(! $operatorsOnly);
+            if ($operatorsOnly && $document->offsetExists(Document::PERMISSIONS)) {
+                $stored = $old->getPermissions();
+                $given = $document->getPermissions();
+                \sort($stored);
+                \sort($given);
+                if ($stored !== $given) {
+                    $operatorsOnly = false;
+                    $old = $read(true);
+                }
+            }
             if ($old->isEmpty()) {
                 return new Document();
             }
+            $operatorKeys = $operatorsOnly
+                ? \array_keys(\array_filter($document->getArrayCopy(), fn ($value) => Operator::isOperator($value)))
+                : [];
             $document = $this->prepareNestedCopy($collection, $document, $preparation);
             $time = DateTime::nowAfter($old->getUpdatedAt() ?: null);
 
@@ -1954,7 +2008,17 @@ trait Documents
 
             $document = $this->castBefore($collection, $document);
 
-            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $old->getId(), $document, $skipPermissionsUpdate));
+            if ($operatorsOnly) {
+                // Write the operator columns and $updatedAt only: every other column of $document was read
+                // without the lock and may be stale, so writing it back would undo a concurrent update.
+                $changes = new Document([Document::UPDATED_AT => $document->getUpdatedAt()]);
+                foreach ($operatorKeys as $key) {
+                    $changes->setAttribute($key, $document->getAttribute($key));
+                }
+                $this->authorization->skip(fn () => $this->adapter->updateDocuments($collection, $changes, [$document], [$document->getId() => true]));
+            } else {
+                $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $old->getId(), $document, $skipPermissionsUpdate));
+            }
 
             $document = $this->castAfterDocument($collection, $document);
 
@@ -1968,7 +2032,7 @@ trait Documents
                 $this->queueDocumentPurge($collection->getId(), $purgedId);
             }
 
-            if ($hasOperators) {
+            if ($hasOperators && ! $operatorsOnly) {
                 $refetched = $this->refetchDocuments($collection, [$document]);
                 $document = $refetched[0];
             }
@@ -1978,6 +2042,12 @@ trait Documents
 
         if ($document->isEmpty()) {
             return $document;
+        }
+
+        // Read the operators' results once the row lock is released. The values include this update and
+        // any that committed after it, never fewer.
+        if ($operatorsOnly) {
+            $document = $this->refetchDocuments($collection, [$document])[0];
         }
 
         $hook = $this->relationshipHook;

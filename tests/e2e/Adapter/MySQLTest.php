@@ -94,6 +94,35 @@ class MySQLTest extends Base
      */
     public function testOperatorOnlyUpdateLeavesConcurrentWriteToAnotherColumn(): void
     {
+        [$updated, $row, $blocked] = $this->incrementWhileAnotherColumnIsWritten(Operator::increment(1));
+
+        $this->assertFalse($blocked, 'The concurrent write waited for the row lock');
+        $this->assertSame(1, $updated->getAttribute('opens'));
+        $this->assertSame(['opens' => 1, 'status' => 'concurrent'], $row);
+    }
+
+    /**
+     * A bounded increment is validated against the stored value, so it still reads the row under the lock:
+     * a concurrent write cannot land between that check and the write.
+     */
+    public function testBoundedIncrementKeepsTheRowLockedFromReadToWrite(): void
+    {
+        [$updated, $row, $blocked] = $this->incrementWhileAnotherColumnIsWritten(Operator::increment(1, 10));
+
+        $this->assertTrue($blocked, 'The concurrent write landed between the bound check and the write');
+        $this->assertSame(1, $updated->getAttribute('opens'));
+        $this->assertSame(['opens' => 1, 'status' => 'before'], $row);
+    }
+
+    /**
+     * Increment a row's `opens` while a second connection writes its `status` between the update's read and
+     * its write.
+     *
+     * @return array{Document, array{opens: int, status: string}, bool} The updated document, the stored row,
+     *                                                                and whether the other write hit a lock wait timeout
+     */
+    private function incrementWhileAnotherColumnIsWritten(Operator $increment): array
+    {
         $database = $this->getDatabase();
         $collection = 'hot_row_'.\uniqid();
         $database->createCollection(Collection::create(
@@ -122,7 +151,17 @@ class MySQLTest extends Base
                 return parent::isValid($value);
             }
         };
-        $between->write = fn () => $other->exec("UPDATE {$table} SET `status` = 'concurrent' WHERE `_uid` = 'row'");
+        $blocked = false;
+        $between->write = function () use ($other, $table, &$blocked): void {
+            try {
+                $other->exec("UPDATE {$table} SET `status` = 'concurrent' WHERE `_uid` = 'row'");
+            } catch (\PDOException $error) {
+                $blocked = ($error->errorInfo[1] ?? null) === 1205;
+                if (! $blocked) {
+                    throw $error;
+                }
+            }
+        };
 
         $authorization = $database->getAuthorization();
         $database->setAuthorization($between);
@@ -130,19 +169,22 @@ class MySQLTest extends Base
             $updated = $database->updateDocument($collection, 'row', new Document([
                 Document::ID => 'row',
                 Document::PERMISSIONS => [],
-                'opens' => Operator::increment(1),
+                'opens' => $increment,
             ]));
         } finally {
             $database->setAuthorization($authorization);
         }
 
         $this->assertNull($between->write, 'The concurrent write never ran');
-        $this->assertSame(1, $updated->getAttribute('opens'));
         $statement = $other->query("SELECT `opens`, `status` FROM {$table} WHERE `_uid` = 'row'");
         $this->assertNotFalse($statement);
-        $this->assertSame([['opens' => 1, 'status' => 'concurrent']], $statement->fetchAll(\PDO::FETCH_ASSOC));
-
+        $row = $statement->fetch(\PDO::FETCH_ASSOC);
+        $this->assertIsArray($row);
+        $this->assertIsInt($row['opens']);
+        $this->assertIsString($row['status']);
         $database->deleteCollection($collection);
+
+        return [$updated, ['opens' => $row['opens'], 'status' => $row['status']], $blocked];
     }
 
     #[\Override]

@@ -1710,7 +1710,7 @@ trait Documents
      * @throws StructureException
      */
     /**
-     * Whether an update changes nothing but operator attributes, such as an increment, so it can be applied
+     * Whether an update changes nothing but unbounded increments and decrements, so it can be applied
      * without a locked read. $id and $permissions may be present unchanged, as Appwrite always sends them;
      * unchanged permissions are confirmed once the stored document is read.
      */
@@ -1724,19 +1724,18 @@ trait Documents
             return false;
         }
 
-        $relationships = [];
-        foreach ($collection->attributes() as $attribute) {
-            if ($attribute->relationship !== null) {
-                $relationships[$attribute->key] = true;
-            }
-        }
-
         $operators = 0;
         foreach ($document->getArrayCopy() as $key => $value) {
             if ($key === Document::PERMISSIONS || $key === Document::COLLECTION || ($key === Document::ID && $value === $id)) {
                 continue;
             }
-            if (! Operator::isOperator($value) || isset($relationships[$key])) {
+            // Only unbounded increments: a bound is validated against the stored value, which is read
+            // without the lock here and may already be stale.
+            if (
+                ! $value instanceof Operator
+                || ! \in_array($value->getMethod(), [OperatorType::Increment, OperatorType::Decrement], true)
+                || \count($value->getValues()) > 1
+            ) {
                 return false;
             }
             $operators++;

@@ -9838,6 +9838,72 @@ trait DocumentTests
         $this->assertSame(false, $database->isDroppingUnknownAttributes());
     }
 
+    /**
+     * A column reaches _metadata before the release that declares it, which is the order a
+     * rollout wants: the engine is ready before anything writes the key. The definition is
+     * read with SELECT *, so that column comes back on a document whose schema does not
+     * declare it, and the schema operation that writes the definition back would fail
+     * structure validation and roll its own DDL back with it. Metadata drops the key whatever
+     * the flag says; the caller's own tables still refuse one, because there it may be data
+     * they sent.
+     */
+    public function testMetadataDropsUnknownAttributes(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(Collection::create(id: __FUNCTION__));
+        $this->assertSame(false, $database->isDroppingUnknownAttributes());
+
+        // What a patch script ahead of the release writes: the physical column alone. The
+        // metadata schema is declared in code, so there is no stored definition to keep in step.
+        $database->getAdapter()->createAttribute(
+            Database::METADATA,
+            Attribute::string(key: 'unreleased', size: 1_000_000, filters: [Filter::Json]),
+        );
+
+        try {
+            // Drop the cached definition, so the next read is the one that brings the column back.
+            $database->purgeCachedDocument(Database::METADATA, __FUNCTION__);
+
+            $this->assertSame(
+                'known',
+                $database->createAttribute(__FUNCTION__, Attribute::string(key: 'known', size: 128))->key,
+                'A schema operation failed against a metadata table holding an undeclared column'
+            );
+
+            $this->assertNull(
+                $database->getCollection(__FUNCTION__)->getAttribute('unreleased'),
+                'The undeclared column was written back onto the definition'
+            );
+
+            // The caller's own table is untouched by this: an attribute it does not declare is
+            // still refused rather than discarded.
+            try {
+                $database->createDocument(__FUNCTION__, new Document([
+                    '$id' => 'strict',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'known' => 'kept',
+                    'unknown' => 'refused',
+                ]));
+                $this->fail('Unknown attribute was accepted on a caller-owned table');
+            } catch (StructureException $e) {
+                $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
+            }
+        } finally {
+            $database->getAdapter()->deleteAttribute(Database::METADATA, 'unreleased');
+            $database->purgeCachedDocument(Database::METADATA, __FUNCTION__);
+        }
+
+        $database->deleteCollection(__FUNCTION__);
+    }
+
     public function testCreateDocumentWithBigIntType(): void
     {
         $database = $this->getDatabase();

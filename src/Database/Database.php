@@ -1960,11 +1960,24 @@ class Database
      * counted as a write. encode() also calls this once it has collected the known
      * set while iterating the schema.
      *
+     * The metadata collection drops whatever the flag says. Its schema is declared in code,
+     * so a key it does not declare is never the caller's data: it is a physical column this
+     * version knows nothing about, which a read hands back regardless because the adapter
+     * selects every column. Left on the document it fails structure validation on the way
+     * back, and takes the schema operation with it -- so a deployment that predates a column
+     * could not add one to a table that already had it, which is the order a rollout wants.
+     * The caller's own tables still honour the flag, because a key they sent that this schema
+     * does not declare may well be data worth refusing rather than discarding.
+     *
      * @param  array<string, true>|null  $known  Attribute ids already collected
      */
     protected function removeUnknownAttributes(Document $collection, Document $document, ?array $known = null): Document
     {
-        if (! $this->dropUnknownAttributes || ! $this->adapter->supports(Capability::DefinedAttributes)) {
+        if (! $this->adapter->supports(Capability::DefinedAttributes)) {
+            return $document;
+        }
+
+        if (! $this->dropUnknownAttributes && $collection->getId() !== self::METADATA) {
             return $document;
         }
 

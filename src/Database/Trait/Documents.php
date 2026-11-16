@@ -4224,7 +4224,7 @@ trait Documents
         }
 
         if (! $isAggregation && ! $distinct) {
-            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor), $selects);
+            [$orderAttributes, $orderTypes] = $this->addTieBreaks($collection, $orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor), $selects);
         }
 
         if (! empty($cursor)) {
@@ -5159,7 +5159,54 @@ trait Documents
      * @param  array<Query>  $selects
      * @return array{array<string>, array<OrderDirection>}
      */
-    private function addTieBreaks(array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged, array $selects): array
+    /**
+     * The direction of the sequence tie break that lets an index serve the whole order.
+     *
+     * InnoDB ends every secondary index with the primary key in ascending order, so an index whose
+     * attributes are exactly the order attributes also orders by sequence: ascending when the order
+     * reads the index forward, descending when it reads it backward. `(x)` serves `x DESC, _id DESC`
+     * and `(x DESC)` serves `x DESC, _id ASC`; any other pairing filesorts every row in range. With no
+     * such index the tie break follows the leading direction, which is what an ascending index wants.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     */
+    private function tieBreakDirection(Collection $collection, array $orderAttributes, array $orderTypes): OrderDirection
+    {
+        $leading = $orderTypes[0] ?? OrderDirection::Asc;
+        if ($orderAttributes === []) {
+            return $leading;
+        }
+
+        foreach ($collection->indexes() as $index) {
+            if (! \in_array($index->type, [IndexType::Key, IndexType::Unique], true)
+                || \count($index->attributes) !== \count($orderAttributes)) {
+                continue;
+            }
+
+            $forward = null;
+            foreach ($orderAttributes as $position => $attribute) {
+                $requested = $orderTypes[$position] ?? OrderDirection::Asc;
+                $declared = $index->orders[$position] ?? OrderDirection::Asc;
+                if ($index->attributes[$position] !== $attribute
+                    || ! \in_array($requested, [OrderDirection::Asc, OrderDirection::Desc], true)) {
+                    continue 2;
+                }
+
+                $same = $requested === $declared;
+                if ($forward !== null && $forward !== $same) {
+                    continue 2;
+                }
+                $forward = $same;
+            }
+
+            return $forward ? OrderDirection::Asc : OrderDirection::Desc;
+        }
+
+        return $leading;
+    }
+
+    private function addTieBreaks(Collection $collection, array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged, array $selects): array
     {
         $uniqueOrderBy = \in_array(Document::ID, $orderAttributes, true) || \in_array(Document::SEQUENCE, $orderAttributes, true);
 
@@ -5175,11 +5222,9 @@ trait Documents
             return [$orderAttributes, $orderTypes];
         }
 
-        // The tie break follows the leading direction so an index ending in the order attribute
-        // can be walked in one direction; `x DESC, _id ASC` cannot use (x, _id) and filesorts.
         if (! $uniqueOrderBy) {
+            $orderTypes[] = $this->tieBreakDirection($collection, $orderAttributes, $orderTypes);
             $orderAttributes[] = Document::SEQUENCE;
-            $orderTypes[] = $orderTypes[0] ?? OrderDirection::Asc;
         }
 
         if ($joins === [] || (! $paged && ! $this->showsJoinedRows($selects, $joinedCollections))) {
@@ -5239,7 +5284,7 @@ trait Documents
             if ($distinct) {
                 $this->assertDistinctCursorOrder($selects, $orders);
             } else {
-                [$orders] = $this->addTieBreaks($orders, $orderTypes, $filters, $joins, $joinedCollections, true, $selects);
+                [$orders] = $this->addTieBreaks($collection, $orders, $orderTypes, $filters, $joins, $joinedCollections, true, $selects);
             }
 
             $this->assertCursorHasOrderValues($cursor, $orders);

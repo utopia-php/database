@@ -422,6 +422,33 @@ class FindLogicTest extends TestCase
         $this->database->find('testCol', [Query::orderDesc('age')]);
     }
 
+    public function testDescendingIndexKeepsAscendingSequenceTieBreak(): void
+    {
+        $adapter = $this->mockAdapter();
+        $this->setupCollectionLookup('testCol', [
+            new Document(['$id' => 'age', 'key' => 'age', 'type' => 'integer', 'size' => 0, 'required' => false, 'array' => false]),
+        ], [
+            new Document(['$id' => 'age_desc', 'key' => 'age_desc', 'type' => 'key', 'attributes' => ['age'], 'lengths' => [], 'orders' => ['DESC']]),
+        ]);
+
+        $sent = [];
+        $adapter->expects($this->exactly(2))->method('find')->willReturnCallback(function (...$arguments) use (&$sent): array {
+            $sent[] = [$arguments[4], $arguments[5]];
+
+            return [];
+        });
+
+        $this->database->find('testCol', [Query::orderDesc('age')]);
+        $this->database->find('testCol', [Query::orderAsc('age')]);
+
+        // InnoDB appends the primary key ascending, so (age DESC) is read forward for
+        // `age DESC, _id ASC` and backward for `age ASC, _id DESC`.
+        $this->assertSame([
+            [['age', '$sequence'], [OrderDirection::Desc, OrderDirection::Asc]],
+            [['age', '$sequence'], [OrderDirection::Asc, OrderDirection::Desc]],
+        ], $sent);
+    }
+
     public function testFindCursorValidationThrowsOnEmptyCursorAttribute(): void
     {
         $attributes = [

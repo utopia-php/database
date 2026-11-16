@@ -5175,14 +5175,11 @@ trait Documents
             return [$orderAttributes, $orderTypes];
         }
 
+        // The tie break follows the leading direction so an index ending in the order attribute
+        // can be walked in one direction; `x DESC, _id ASC` cannot use (x, _id) and filesorts.
         if (! $uniqueOrderBy) {
-            $leadingAttribute = $orderAttributes[0] ?? null;
-            $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
-
             $orderAttributes[] = Document::SEQUENCE;
-            $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
-                ? $leadingOrderType
-                : OrderDirection::Asc;
+            $orderTypes[] = $orderTypes[0] ?? OrderDirection::Asc;
         }
 
         if ($joins === [] || (! $paged && ! $this->showsJoinedRows($selects, $joinedCollections))) {

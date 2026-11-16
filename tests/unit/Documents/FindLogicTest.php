@@ -398,6 +398,30 @@ class FindLogicTest extends TestCase
         ]);
     }
 
+    public function testDescendingOrderAppendsDescendingSequenceTieBreak(): void
+    {
+        $adapter = $this->mockAdapter();
+        $this->setupCollectionLookup('testCol', [
+            new Document(['$id' => 'age', 'key' => 'age', 'type' => 'integer', 'size' => 0, 'required' => false, 'array' => false]),
+        ]);
+        $adapter->expects($this->once())
+            ->method('find')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+            )
+            ->willReturn([]);
+
+        $this->database->find('testCol', [Query::orderDesc('age')]);
+    }
+
     public function testFindCursorValidationThrowsOnEmptyCursorAttribute(): void
     {
         $attributes = [

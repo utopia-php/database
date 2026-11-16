@@ -1,4 +1,4 @@
-FROM postgres:16@sha256:f9a7b9ebf6f56201f949db745e47bc423c0f0f8294bafe991cc10bf74b029657
+FROM postgres:16@sha256:dd2bf3ce2dc83a81674cf7f217fcfd8a5009a4b325dda5b843bfee82a06cff6f
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

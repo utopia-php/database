@@ -32,6 +32,15 @@ final class CheckAttributeTest extends TestCase
         $database->checkAttribute('items', Attribute::string('fifth', 16));
     }
 
+    public function testPendingAttributesCountTowardsTheLimit(): void
+    {
+        $database = $this->database([Attribute::string('first', 16), Attribute::string('second', 16), Attribute::string('third', 16)]);
+
+        $this->expectException(LimitException::class);
+
+        $database->checkAttribute('items', Attribute::string('fifth', 16), [Attribute::string('fourth', 16)]);
+    }
+
     public function testCheckingDoesNotStoreTheAttribute(): void
     {
         $database = $this->database([Attribute::string('first', 16)]);

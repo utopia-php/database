@@ -422,6 +422,33 @@ class FindLogicTest extends TestCase
         $this->database->find('testCol', [Query::orderDesc('age')]);
     }
 
+    public function testDateOrdersFollowTheirIndexDirection(): void
+    {
+        $adapter = $this->mockAdapter();
+        $this->setupCollectionLookup('testCol', [], [
+            new Document(['$id' => 'updated_desc', 'key' => 'updated_desc', 'type' => 'key', 'attributes' => ['$updatedAt'], 'lengths' => [], 'orders' => ['DESC']]),
+        ]);
+
+        $sent = [];
+        $adapter->expects($this->exactly(3))->method('find')->willReturnCallback(function (...$arguments) use (&$sent): array {
+            $sent[] = [$arguments[4], $arguments[5]];
+
+            return [];
+        });
+
+        // The built-in _created_at index is ascending and not in the collection metadata, so a
+        // date order with no declared index keeps following its own direction, as it always has.
+        $this->database->find('testCol', [Query::orderDesc('$createdAt')]);
+        $this->database->find('testCol', [Query::orderAsc('$createdAt')]);
+        $this->database->find('testCol', [Query::orderDesc('$updatedAt')]);
+
+        $this->assertSame([
+            [['$createdAt', '$sequence'], [OrderDirection::Desc, OrderDirection::Desc]],
+            [['$createdAt', '$sequence'], [OrderDirection::Asc, OrderDirection::Asc]],
+            [['$updatedAt', '$sequence'], [OrderDirection::Desc, OrderDirection::Asc]],
+        ], $sent);
+    }
+
     public function testDescendingIndexKeepsAscendingSequenceTieBreak(): void
     {
         $adapter = $this->mockAdapter();

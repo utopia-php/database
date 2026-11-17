@@ -9899,6 +9899,87 @@ trait DocumentTests
         $database->deleteCollection(__FUNCTION__);
     }
 
+    /**
+     * The rollout end to end: a patch script puts the column on _metadata before the release
+     * that declares it, and a schema operation then has to survive reading it back. Without the
+     * exemption the definition write fails structure validation and rolls its own DDL back.
+     *
+     * SQLite is left out because only the cleanup is unportable: deleteAttribute rebuilds a
+     * table from the stored definition row that _metadata has none of, so the column could not
+     * be taken off again, and it is shared with every test after this one. The flag-independent
+     * branch itself is covered on every adapter by testMetadataDropsUnknownAttributes.
+     */
+    public function testMetadataDropsUnknownAttributesOnSchemaUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        if ($adapter instanceof SQLite || $adapter instanceof Memory || $adapter instanceof Redis) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        // Short of __FUNCTION__: the engine caps a table name at 64 bytes and the suite's
+        // per-run prefix leaves this method's name no room.
+        $collectionId = 'metadataSchemaUpdate';
+
+        $database->createCollection(Collection::create(id: $collectionId));
+        $this->assertSame(false, $database->isDroppingUnknownAttributes());
+
+        // What a patch script ahead of the release writes: the physical column alone. The
+        // metadata schema is declared in code, so there is no stored definition to keep in step.
+        $adapter->createAttribute(
+            Database::METADATA,
+            Attribute::string(key: 'unreleased', size: 1_000_000, filters: [Filter::Json]),
+        );
+
+        try {
+            // Drop the cached definition, so the next read is the one that brings the column back.
+            $database->purgeCachedDocument(Database::METADATA, $collectionId);
+
+            // The read hands the column straight back, undeclared and all, because the adapter
+            // selects every column. This is the document the schema operation writes back, so
+            // without it arriving here there would be nothing for the exemption to strip.
+            $this->assertTrue(
+                $database->getCollection($collectionId)->offsetExists('unreleased'),
+                'The undeclared column never reached the definition, so the case under test did not arise'
+            );
+
+            $this->assertSame(
+                'known',
+                $database->createAttribute($collectionId, Attribute::string(key: 'known', size: 128))->key,
+                'A schema operation failed against a metadata table holding an undeclared column'
+            );
+
+            // The caller's own table is untouched by this: an attribute it does not declare is
+            // still refused rather than discarded.
+            try {
+                $database->createDocument($collectionId, new Document([
+                    '$id' => 'strict',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'known' => 'kept',
+                    'unknown' => 'refused',
+                ]));
+                $this->fail('Unknown attribute was accepted on a caller-owned table');
+            } catch (StructureException $e) {
+                $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
+            }
+        } finally {
+            $adapter->deleteAttribute(Database::METADATA, 'unreleased');
+            $database->purgeCachedDocument(Database::METADATA, $collectionId);
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testCreateDocumentWithBigIntType(): void
     {
         $database = $this->getDatabase();

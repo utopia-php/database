@@ -9904,10 +9904,12 @@ trait DocumentTests
      * that declares it, and a schema operation then has to survive reading it back. Without the
      * exemption the definition write fails structure validation and rolls its own DDL back.
      *
-     * SQLite is left out because only the cleanup is unportable: deleteAttribute rebuilds a
-     * table from the stored definition row that _metadata has none of, so the column could not
-     * be taken off again, and it is shared with every test after this one. The flag-independent
-     * branch itself is covered on every adapter by testMetadataDropsUnknownAttributes.
+     * Only an engine with a fixed physical schema can hold the column this is about: one that
+     * exists on the table while no document carries it. Mongo has no such notion, so there the
+     * case cannot be staged at all. SQLite could stage it but not clear it up, because
+     * deleteAttribute rebuilds a table from the stored definition row that _metadata has none
+     * of, and _metadata is shared with every test after this one. The flag-independent branch
+     * itself is covered on every adapter by testMetadataDropsUnknownAttributes.
      */
     public function testMetadataDropsUnknownAttributesOnSchemaUpdate(): void
     {
@@ -9921,7 +9923,12 @@ trait DocumentTests
             return;
         }
 
-        if ($adapter instanceof SQLite || $adapter instanceof Memory || $adapter instanceof Redis) {
+        if (
+            $adapter instanceof SQLite
+            || $adapter instanceof Memory
+            || $adapter instanceof Redis
+            || $adapter instanceof Mongo
+        ) {
             $this->expectNotToPerformAssertions();
 
             return;

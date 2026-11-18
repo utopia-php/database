@@ -9838,6 +9838,155 @@ trait DocumentTests
         $this->assertSame(false, $database->isDroppingUnknownAttributes());
     }
 
+    /**
+     * A column reaches _metadata before the release that declares it, which is the order a
+     * rollout wants: the engine is ready before anything writes the key. The definition is read
+     * with every column selected, so that column rides back on a document whose schema knows
+     * nothing about it, and the schema operation that writes the definition back would fail
+     * structure validation and roll its own DDL back with it. Metadata drops the key whatever
+     * the flag says; the caller's own tables still keep it, because there it may be data they
+     * sent and refusing the write tells them so.
+     */
+    public function testMetadataDropsUnknownAttributes(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(Collection::create(id: __FUNCTION__));
+        $this->assertSame('known', $database->createAttribute(__FUNCTION__, Attribute::string(key: 'known', size: 128))->key);
+        $this->assertSame(false, $database->isDroppingUnknownAttributes());
+
+        $metadata = $database->encode(Database::collectionDefinition(), new Document([
+            '$id' => __FUNCTION__,
+            '$collection' => Database::METADATA,
+            'name' => __FUNCTION__,
+            'documentSecurity' => false,
+            'unreleased' => 'dropped',
+        ]));
+
+        $this->assertEquals(__FUNCTION__, $metadata->getAttribute('name'));
+        $this->assertNull($metadata->getAttribute('unreleased'), 'Metadata kept an attribute it does not declare');
+
+        // The caller's own table is untouched by this: the attribute survives encode and the
+        // write is refused, rather than discarded on the way through.
+        $encoded = $database->encode($database->getCollection(__FUNCTION__), new Document([
+            '$id' => 'strict',
+            '$collection' => __FUNCTION__,
+            'known' => 'kept',
+            'unknown' => 'refused',
+        ]));
+
+        $this->assertEquals('refused', $encoded->getAttribute('unknown'), 'A caller-owned table dropped an attribute while dropping is disabled');
+
+        try {
+            $database->createDocument(__FUNCTION__, new Document([
+                '$id' => 'strict',
+                '$permissions' => [Permission::read(Role::any())],
+                'known' => 'kept',
+                'unknown' => 'refused',
+            ]));
+            $this->fail('Unknown attribute was accepted on a caller-owned table');
+        } catch (StructureException $e) {
+            $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
+        }
+
+        $database->deleteCollection(__FUNCTION__);
+    }
+
+    /**
+     * The rollout end to end: a patch script puts the column on _metadata before the release
+     * that declares it, and a schema operation then has to survive reading it back. Without the
+     * exemption the definition write fails structure validation and rolls its own DDL back.
+     *
+     * Only an engine with a fixed physical schema can hold the column this is about: one that
+     * exists on the table while no document carries it. Mongo has no such notion, so there the
+     * case cannot be staged at all. SQLite could stage it but not clear it up, because
+     * deleteAttribute rebuilds a table from the stored definition row that _metadata has none
+     * of, and _metadata is shared with every test after this one. The flag-independent branch
+     * itself is covered on every adapter by testMetadataDropsUnknownAttributes.
+     */
+    public function testMetadataDropsUnknownAttributesOnSchemaUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        if (
+            $adapter instanceof SQLite
+            || $adapter instanceof Memory
+            || $adapter instanceof Redis
+            || $adapter instanceof Mongo
+        ) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        // Short of __FUNCTION__: the engine caps a table name at 64 bytes and the suite's
+        // per-run prefix leaves this method's name no room.
+        $collectionId = 'metadataSchemaUpdate';
+
+        $database->createCollection(Collection::create(id: $collectionId));
+        $this->assertSame(false, $database->isDroppingUnknownAttributes());
+
+        // What a patch script ahead of the release writes: the physical column alone. The
+        // metadata schema is declared in code, so there is no stored definition to keep in step.
+        $adapter->createAttribute(
+            Database::METADATA,
+            Attribute::string(key: 'unreleased', size: 1_000_000, filters: [Filter::Json]),
+        );
+
+        try {
+            // Drop the cached definition, so the next read is the one that brings the column back.
+            $database->purgeCachedDocument(Database::METADATA, $collectionId);
+
+            // The read hands the column straight back, undeclared and all, because the adapter
+            // selects every column. This is the document the schema operation writes back, so
+            // without it arriving here there would be nothing for the exemption to strip.
+            $this->assertTrue(
+                $database->getCollection($collectionId)->offsetExists('unreleased'),
+                'The undeclared column never reached the definition, so the case under test did not arise'
+            );
+
+            $this->assertSame(
+                'known',
+                $database->createAttribute($collectionId, Attribute::string(key: 'known', size: 128))->key,
+                'A schema operation failed against a metadata table holding an undeclared column'
+            );
+
+            // The caller's own table is untouched by this: an attribute it does not declare is
+            // still refused rather than discarded.
+            try {
+                $database->createDocument($collectionId, new Document([
+                    '$id' => 'strict',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'known' => 'kept',
+                    'unknown' => 'refused',
+                ]));
+                $this->fail('Unknown attribute was accepted on a caller-owned table');
+            } catch (StructureException $e) {
+                $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
+            }
+        } finally {
+            $adapter->deleteAttribute(Database::METADATA, 'unreleased');
+            $database->purgeCachedDocument(Database::METADATA, $collectionId);
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testCreateDocumentWithBigIntType(): void
     {
         $database = $this->getDatabase();

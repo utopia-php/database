@@ -24,6 +24,17 @@ final class StorageTest extends TestCase
         }
     }
 
+    public function test_reserved_columns(): void
+    {
+        foreach (Storage::attributeMap() as $column) {
+            $this->assertTrue(Storage::isReserved($column), $column);
+        }
+
+        $this->assertFalse(Storage::isReserved(Document::ID));
+        $this->assertFalse(Storage::isReserved('title'));
+        $this->assertFalse(Storage::isReserved('_title'));
+    }
+
     public function test_permissions_table(): void
     {
         $this->assertSame('movies_perms', Storage::permissionsTable('movies'));

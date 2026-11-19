@@ -31,6 +31,7 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -49,6 +50,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Role;
 use Utopia\Database\SetType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -6412,6 +6414,54 @@ trait DocumentTests
             $this->assertInstanceOf(TypeException::class, $e);
         }
     }
+    /**
+     * filter() keeps underscores, so increasing `_tenant` would move the document to another tenant and increasing
+     * `_createdAt` would rewrite when it was created: a column the storage keeps for the document itself is no
+     * attribute to change, with or without defined attributes, and an upsert cannot increase one either.
+     */
+    public function testIncreaseOfAStorageColumnIsRefused(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = __FUNCTION__;
+        $database->createCollection(Collection::create(
+            id: $collection,
+            attributes: $database->getAdapter()->supports(Capability::DefinedAttributes) ? [Attribute::integer(key: 'count')] : [],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: false,
+        ));
+        $stored = $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 1]));
+
+        foreach ([Storage::TENANT, Storage::CREATED_AT, Storage::UID, '_ten.ant'] as $column) {
+            try {
+                $database->increaseDocumentAttribute($collection, 'counter', $column);
+                $this->fail("Increasing {$column} must be refused");
+            } catch (NotFoundException) {
+            }
+
+            try {
+                $database->decreaseDocumentAttribute($collection, 'counter', $column);
+                $this->fail("Decreasing {$column} must be refused");
+            } catch (NotFoundException) {
+            }
+
+            if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+                try {
+                    $database->upsertDocuments($collection, [new Document(['$id' => 'counter', 'count' => 1])], increase: $column);
+                    $this->fail("An upsert increasing {$column} must be refused");
+                } catch (NotFoundException) {
+                }
+            }
+        }
+
+        $document = $database->getDocument($collection, 'counter');
+        $this->assertSame('counter', $document->getId(), 'The document must stay in the current tenant');
+        $this->assertSame($stored->getCreatedAt(), $document->getCreatedAt());
+        $this->assertEquals(1, $document->getAttribute('count'));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testIncreaseDecreasePreserveDates(): void
     {
         $document = $this->initIncreaseDecreaseFixture();

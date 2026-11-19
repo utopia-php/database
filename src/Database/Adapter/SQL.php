@@ -1492,7 +1492,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         int|float|string|null $max = null
     ): bool {
         $name = $this->filter($collection->getId());
-        $attribute = $this->filter($attribute);
+        $attribute = $this->writableColumn($attribute);
 
         $builder = $this->newBuilder($name);
         $builder->setRaw($attribute, 'COALESCE('.$this->quote($attribute).', 0) + ?', [$value]);
@@ -4007,7 +4007,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
         $skipColumns = [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::TENANT];
 
         if (! empty($attribute)) {
-            $updateColumns = [$this->filter($attribute), Storage::UPDATED_AT];
+            $updateColumns = [$this->writableColumn($attribute), Storage::UPDATED_AT];
         } else {
             $updateColumns = \array_values(\array_filter(
                 $allColumnNames,
@@ -4019,7 +4019,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
 
         // conflictSetRaw() takes the column names given to onConflict(); the expression methods quote their own.
         if (! empty($attribute)) {
-            $incrementColumn = $this->filter($attribute);
+            $incrementColumn = $this->writableColumn($attribute);
             if ($this->sharedTables) {
                 $builder->conflictSetRaw($incrementColumn, $this->getConflictTenantIncrementExpression($incrementColumn));
                 $builder->conflictSetRaw(Storage::UPDATED_AT, $this->getConflictTenantExpression(Storage::UPDATED_AT));

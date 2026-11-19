@@ -10,6 +10,7 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
@@ -294,6 +295,124 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertSame(['a__dot__b'], $this->fieldNames($this->calls['aggregate'][0] ?? []), 'count() must address the stored field name of a dotted attribute in every group and exists');
     }
 
+    public function testDollarNamesInExistsAndElemMatchAreMatchedAsFields(): void
+    {
+        $queries = [
+            Query::exists(['$comment', '$id']),
+            Query::elemMatch('$where', [Query::equal('n', [1])]),
+        ];
+
+        $adapter = $this->createAdapter();
+        $adapter->find(new Document(['$id' => self::COLLECTION]), $queries);
+        $adapter->count(new Document(['$id' => self::COLLECTION]), $queries);
+
+        foreach (['find' => $this->calls['find'][0] ?? [], 'count' => $this->calls['aggregate'][0] ?? []] as $method => $filter) {
+            $this->assertSame(
+                ['_comment', '_uid', '_where', 'n'],
+                $this->fieldNames($filter),
+                $method.'() must match a field named with a $, never run it as the query operator of that name',
+            );
+        }
+    }
+
+    public function testACursorComparesTheValuesOfItsEarlierOrdersAsValues(): void
+    {
+        $this->createAdapter()->find(
+            new Document(['$id' => self::COLLECTION]),
+            orderAttributes: ['name', '$sequence'],
+            orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
+            cursor: ['name' => ['$gt' => ''], '$sequence' => 'sequence'],
+        );
+
+        $this->assertSame(
+            [
+                ['$and' => [['name' => ['$gt' => ['$gt' => '']]]]],
+                ['$and' => [['name' => ['$eq' => ['$gt' => '']]], ['_id' => ['$gt' => 'sequence']]]],
+            ],
+            $this->calls['find'][0]['$or'] ?? null,
+            'A stored value shaped like an operator must be compared, not run as the operator',
+        );
+    }
+
+    public function testDollarNamesInOrdersCursorsAndSelectionsAreTheirStoredFields(): void
+    {
+        $this->createAdapter()->find(
+            new Document(['$id' => self::COLLECTION]),
+            [Query::select(['$rank', 'title'])],
+            orderAttributes: ['$rank', '$sequence'],
+            orderTypes: [OrderDirection::Desc, OrderDirection::Asc],
+            cursor: ['$rank' => 2, '$sequence' => 'sequence'],
+        );
+
+        $options = $this->calls['findOptions'][0] ?? [];
+
+        $this->assertSame(['_rank' => -1, '_id' => 1], $options['sort'] ?? null, 'A $-prefixed order must sort by the field it is stored as');
+        $this->assertSame(
+            [
+                ['$and' => [['_rank' => ['$lt' => 2]]]],
+                ['$and' => [['_rank' => ['$eq' => 2]], ['_id' => ['$gt' => 'sequence']]]],
+            ],
+            $this->calls['find'][0]['$or'] ?? null,
+            'A cursor must compare a $-prefixed order by the field it is stored as',
+        );
+        $projection = $options['projection'] ?? null;
+        $this->assertIsArray($projection);
+        $this->assertArrayHasKey('_rank', $projection, 'A $-prefixed selection must project the field it is stored as');
+        $this->assertArrayNotHasKey('$rank', $projection);
+        $this->assertArrayHasKey('title', $projection);
+    }
+
+    public function testABulkUpdateNeverSetsAStorageFieldByItsDollarName(): void
+    {
+        $this->createAdapter()->updateDocuments(
+            new Document(['$id' => self::COLLECTION]),
+            new Document(['$uid' => 'renamed', '_tenant' => 2, '$where' => 'kept', 'title' => 'updated']),
+            [new Document(['$sequence' => 'sequence'])],
+        );
+
+        $set = $this->calls['update'][0]['$set'] ?? null;
+        $this->assertIsArray($set);
+
+        $this->assertArrayNotHasKey('_uid', $set, 'A $uid update must not rename the documents');
+        $this->assertArrayNotHasKey('_tenant', $set);
+        $this->assertSame('kept', $set['_where'] ?? null, 'Any other $-prefixed field is still written');
+        $this->assertSame('updated', $set['title'] ?? null);
+    }
+
+    public function testAnIncreaseOfADollarNameChangesTheFieldItIsStoredAs(): void
+    {
+        $this->createAdapter()->increaseDocumentAttribute(
+            new Document(['$id' => self::COLLECTION]),
+            'record',
+            '$rank',
+            1,
+            '2000-01-01 00:00:00.000',
+        );
+
+        $updates = $this->calls['query'][0]['updates'] ?? null;
+        $this->assertIsArray($updates);
+        $this->assertIsArray($updates[0]);
+        $this->assertIsArray($updates[0]['u']);
+        $this->assertIsArray($updates[0]['u'][0]);
+        $set = $updates[0]['u'][0]['$set'] ?? null;
+        $this->assertIsArray($set);
+        $this->assertArrayHasKey('_rank', $set, 'A $-prefixed field must be increased where it is stored');
+        $this->assertArrayNotHasKey('rank', $set);
+    }
+
+    public function testAnIncreaseOfADollarAliasOfAStorageFieldIsRefused(): void
+    {
+        $this->expectException(NotFoundException::class);
+
+        $this->createAdapter()->increaseDocumentAttribute(
+            new Document(['$id' => self::COLLECTION]),
+            'record',
+            '$uid',
+            1,
+            '2000-01-01 00:00:00.000',
+        );
+    }
+
     public function testRandomOrderIsRejectedAsAQueryError(): void
     {
         $this->expectException(QueryException::class);
@@ -435,6 +554,7 @@ final class MongoQueryFilterTest extends TestCase
             public function find(string $collection, array $filters = [], array $options = []): stdClass
             {
                 ($this->record)('find', $filters);
+                ($this->record)('findOptions', $options);
 
                 return (object) ['cursor' => (object) ['firstBatch' => $this->rows, 'id' => 0]];
             }
@@ -504,6 +624,8 @@ final class MongoQueryFilterTest extends TestCase
             #[\Override]
             public function query(array $command, ?string $db = null): stdClass
             {
+                ($this->record)('query', $command);
+
                 return (object) ['cursor' => (object) ['firstBatch' => $this->created]];
             }
         };

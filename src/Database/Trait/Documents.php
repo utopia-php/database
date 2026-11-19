@@ -4224,7 +4224,7 @@ trait Documents
         }
 
         if (! $isAggregation && ! $distinct) {
-            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor), $selects);
+            [$orderAttributes, $orderTypes] = $this->addTieBreaks($collection, $orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor), $selects);
         }
 
         if (! empty($cursor)) {
@@ -5144,6 +5144,107 @@ trait Documents
     }
 
     /**
+     * The direction of the sequence tie break that lets an index serve the whole order.
+     *
+     * InnoDB ends every secondary index with the primary key in ascending order, so an index whose
+     * attributes are exactly the order attributes also orders by sequence: ascending when the order
+     * reads the index forward, descending when it reads it backward. `(x)` serves `x DESC, _id DESC`
+     * and `(x DESC)` serves `x DESC, _id ASC`; any other pairing filesorts every row in range. With no
+     * such index the tie break follows the leading direction, which is what an ascending index wants.
+     *
+     * The index may also hold attributes that a filter pins to a single value, before, between or after
+     * the order attributes: with `status = ?` and `type = ?`, `(status, x DESC, type)` reads in
+     * `x DESC, _id ASC` order just like `(x DESC)`.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<Query>  $filters
+     */
+    private function tieBreakDirection(Collection $collection, array $orderAttributes, array $orderTypes, array $filters): OrderDirection
+    {
+        $leading = $orderTypes[0] ?? OrderDirection::Asc;
+        if ($orderAttributes === []) {
+            return $leading;
+        }
+
+        $orderAttributes = \array_values($orderAttributes);
+        $orderTypes = \array_values($orderTypes);
+
+        // `= ?` with one value and `IS NULL` each pin a column to a single value, so the index rows that match
+        // are ordered by the columns after it. An `and()` group pins like top-level filters; an `or()` pins nothing.
+        $pinned = [];
+        $pending = \array_values($filters);
+        while ($pending !== []) {
+            $filter = \array_pop($pending);
+            if ($filter->getMethod() === Method::And) {
+                foreach ($filter->getValues() as $nested) {
+                    if ($nested instanceof Query) {
+                        $pending[] = $nested;
+                    }
+                }
+            } elseif ($filter->getMethod() === Method::IsNull
+                || ($filter->getMethod() === Method::Equal && \count($filter->getValues()) === 1)) {
+                $pinned[$filter->getAttribute()] = true;
+            }
+        }
+
+        $sizes = [];
+        foreach ($collection->attributes() as $attribute) {
+            $sizes[$attribute->key] = $attribute->size;
+        }
+
+        foreach ($collection->indexes() as $index) {
+            if (! \in_array($index->type, [IndexType::Key, IndexType::Unique], true)) {
+                continue;
+            }
+
+            // Pinned columns may sit before, between or after the order columns: every matching row holds the
+            // same value there, so they do not change the order. With them skipped, the index must be exactly
+            // the order columns, in order, so the primary key that InnoDB appends comes right after the last.
+            $forward = null;
+            $matched = 0;
+            foreach ($index->attributes as $position => $attribute) {
+                if ($matched < \count($orderAttributes) && $attribute === $orderAttributes[$matched]) {
+                    $requested = $orderTypes[$matched] ?? OrderDirection::Asc;
+                    if (! \in_array($requested, [OrderDirection::Asc, OrderDirection::Desc], true)) {
+                        continue 2;
+                    }
+
+                    // A prefix-length order column (`name(64)`) holds only the start of each value, so MySQL
+                    // cannot read the index in value order. A length that covers the whole column is a full-column
+                    // index and still counts. A prefix on a pinned column is fine: every matching row shares it.
+                    $length = $index->lengths[$position] ?? 0;
+                    $size = $sizes[$attribute] ?? null;
+                    if ($length > 0 && ($size === null || $length < $size)) {
+                        continue 2;
+                    }
+
+                    $same = $requested === ($index->orders[$position] ?? OrderDirection::Asc);
+                    if ($forward !== null && $forward !== $same) {
+                        continue 2;
+                    }
+                    $forward = $same;
+                    $matched++;
+
+                    continue;
+                }
+
+                if (! isset($pinned[$attribute])) {
+                    continue 2;
+                }
+            }
+
+            if ($matched !== \count($orderAttributes)) {
+                continue;
+            }
+
+            return $forward ? OrderDirection::Asc : OrderDirection::Desc;
+        }
+
+        return $leading;
+    }
+
+    /**
      * A vector index answers exactly one sort key, the distance: a tie break behind it makes the ordering unanswerable
      * from the index, so tie breaks are only added when a cursor needs a stable page boundary.
      *
@@ -5159,7 +5260,7 @@ trait Documents
      * @param  array<Query>  $selects
      * @return array{array<string>, array<OrderDirection>}
      */
-    private function addTieBreaks(array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged, array $selects): array
+    private function addTieBreaks(Collection $collection, array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged, array $selects): array
     {
         $uniqueOrderBy = \in_array(Document::ID, $orderAttributes, true) || \in_array(Document::SEQUENCE, $orderAttributes, true);
 
@@ -5176,13 +5277,8 @@ trait Documents
         }
 
         if (! $uniqueOrderBy) {
-            $leadingAttribute = $orderAttributes[0] ?? null;
-            $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
-
+            $orderTypes[] = $this->tieBreakDirection($collection, $orderAttributes, $orderTypes, $filters);
             $orderAttributes[] = Document::SEQUENCE;
-            $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
-                ? $leadingOrderType
-                : OrderDirection::Asc;
         }
 
         if ($joins === [] || (! $paged && ! $this->showsJoinedRows($selects, $joinedCollections))) {
@@ -5242,7 +5338,7 @@ trait Documents
             if ($distinct) {
                 $this->assertDistinctCursorOrder($selects, $orders);
             } else {
-                [$orders] = $this->addTieBreaks($orders, $orderTypes, $filters, $joins, $joinedCollections, true, $selects);
+                [$orders] = $this->addTieBreaks($collection, $orders, $orderTypes, $filters, $joins, $joinedCollections, true, $selects);
             }
 
             $this->assertCursorHasOrderValues($cursor, $orders);

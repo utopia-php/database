@@ -94,7 +94,7 @@ trait Cursors
         }
 
         if (! $parsed->distinct) {
-            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $parsed->filters, $joins, $joinedCollections, true, $parsed->selections);
+            [$orderAttributes, $orderTypes] = $this->addTieBreaks($definition, $orderAttributes, $orderTypes, $parsed->filters, $joins, $joinedCollections, true, $parsed->selections);
         }
 
         $joinedOrders = [];

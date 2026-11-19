@@ -398,6 +398,456 @@ class FindLogicTest extends TestCase
         ]);
     }
 
+    public function testDescendingOrderAppendsDescendingSequenceTieBreak(): void
+    {
+        $adapter = $this->mockAdapter();
+        $this->setupCollectionLookup('testCol', [
+            new Document(['$id' => 'age', 'key' => 'age', 'type' => 'integer', 'size' => 0, 'required' => false, 'array' => false]),
+        ]);
+        $adapter->expects($this->once())
+            ->method('find')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+            )
+            ->willReturn([]);
+
+        $this->database->find('testCol', [Query::orderDesc('age')]);
+    }
+
+    public function testDateOrdersFollowTheirIndexDirection(): void
+    {
+        $adapter = $this->mockAdapter();
+        $this->setupCollectionLookup('testCol', [], [
+            new Document(['$id' => 'updated_desc', 'key' => 'updated_desc', 'type' => 'key', 'attributes' => ['$updatedAt'], 'lengths' => [], 'orders' => ['DESC']]),
+        ]);
+
+        $sent = [];
+        $adapter->expects($this->exactly(3))->method('find')->willReturnCallback(function (...$arguments) use (&$sent): array {
+            $sent[] = [$arguments[4], $arguments[5]];
+
+            return [];
+        });
+
+        // The built-in _created_at index is ascending and not in the collection metadata, so a
+        // date order with no declared index keeps following its own direction, as it always has.
+        $this->database->find('testCol', [Query::orderDesc('$createdAt')]);
+        $this->database->find('testCol', [Query::orderAsc('$createdAt')]);
+        $this->database->find('testCol', [Query::orderDesc('$updatedAt')]);
+
+        $this->assertSame([
+            [['$createdAt', '$sequence'], [OrderDirection::Desc, OrderDirection::Desc]],
+            [['$createdAt', '$sequence'], [OrderDirection::Asc, OrderDirection::Asc]],
+            [['$updatedAt', '$sequence'], [OrderDirection::Desc, OrderDirection::Asc]],
+        ], $sent);
+    }
+
+    public function testDescendingIndexKeepsAscendingSequenceTieBreak(): void
+    {
+        $adapter = $this->mockAdapter();
+        $this->setupCollectionLookup('testCol', [
+            new Document(['$id' => 'age', 'key' => 'age', 'type' => 'integer', 'size' => 0, 'required' => false, 'array' => false]),
+        ], [
+            new Document(['$id' => 'age_desc', 'key' => 'age_desc', 'type' => 'key', 'attributes' => ['age'], 'lengths' => [], 'orders' => ['DESC']]),
+        ]);
+
+        $sent = [];
+        $adapter->expects($this->exactly(2))->method('find')->willReturnCallback(function (...$arguments) use (&$sent): array {
+            $sent[] = [$arguments[4], $arguments[5]];
+
+            return [];
+        });
+
+        $this->database->find('testCol', [Query::orderDesc('age')]);
+        $this->database->find('testCol', [Query::orderAsc('age')]);
+
+        // InnoDB appends the primary key ascending, so (age DESC) is read forward for
+        // `age DESC, _id ASC` and backward for `age ASC, _id DESC`.
+        $this->assertSame([
+            [['age', '$sequence'], [OrderDirection::Desc, OrderDirection::Asc]],
+            [['age', '$sequence'], [OrderDirection::Asc, OrderDirection::Desc]],
+        ], $sent);
+    }
+
+    /**
+     * Compound indexes whose leading columns are pinned by equality filters serve the order the same way an exact
+     * index does: with `status = ?`, InnoDB reads `(status, age DESC, _id)` in `age DESC, _id ASC` order.
+     *
+     * @return array<string, array{list<array{attributes: list<string>, orders: list<string>, lengths?: list<int>, type?: string}>, list<Query>, list<string>, list<OrderDirection>}>
+     */
+    public static function compoundIndexTieBreakProvider(): array
+    {
+        $statusAgeDesc = ['attributes' => ['status', 'age'], 'orders' => ['ASC', 'DESC']];
+        $statusAgeAsc = ['attributes' => ['status', 'age'], 'orders' => ['ASC', 'ASC']];
+        $statusTypeAgeDesc = ['attributes' => ['status', 'type', 'age'], 'orders' => ['ASC', 'ASC', 'DESC']];
+
+        return [
+            // (status, age DESC): the regression case. The old code sent _id ASC here and was served.
+            '(status, age DESC), status = ?, age DESC reads forward' => [
+                [$statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status = ?, age ASC reads backward' => [
+                [$statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderAsc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Desc],
+            ],
+
+            // (status, age): ascending compound index, served by following the leading direction.
+            '(status, age), status = ?, age DESC reads backward' => [
+                [$statusAgeAsc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, age), status = ?, age ASC reads forward' => [
+                [$statusAgeAsc],
+                [Query::equal('status', ['active']), Query::orderAsc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Asc],
+            ],
+
+            // Every leading column must be pinned by an equality filter for the index to serve the order.
+            '(status, type, age DESC), both pinned, age DESC reads forward' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, type, age DESC), only status pinned, falls back to leading direction' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // The leading column is not pinned to a single value, so the index cannot serve the order.
+            '(status, age DESC), no status filter, falls back to leading direction' => [
+                [$statusAgeDesc],
+                [Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, age DESC), status IN (a, b), falls back to leading direction' => [
+                [$statusAgeDesc],
+                [Query::equal('status', ['active', 'archived']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, age DESC), status range filter, falls back to leading direction' => [
+                [$statusAgeDesc],
+                [Query::greaterThan('status', 'a'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // An exact index and a pinned compound index that agree.
+            '(age DESC) and (status, age DESC), status = ?, age DESC reads forward' => [
+                [['attributes' => ['age'], 'orders' => ['DESC']], $statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+
+            // MySQL cannot read a prefix-length index in order, so it must not decide the direction.
+            '(name(64) DESC) prefix index, name DESC falls back to leading direction' => [
+                [['attributes' => ['name'], 'orders' => ['DESC'], 'lengths' => [64]]],
+                [Query::orderDesc('name')],
+                ['name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(name(128) DESC) length covers the column, name DESC reads forward' => [
+                [['attributes' => ['name'], 'orders' => ['DESC'], 'lengths' => [128]]],
+                [Query::orderDesc('name')],
+                ['name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            // Every row matching status = ? shares the indexed prefix, so the index still orders them by age.
+            '(status(8), age DESC) prefix on a pinned column, age DESC reads forward' => [
+                [['attributes' => ['status', 'age'], 'orders' => ['ASC', 'DESC'], 'lengths' => [8, 0]]],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status(8), name(16) DESC) prefix on the order column, falls back to leading direction' => [
+                [['attributes' => ['status', 'name'], 'orders' => ['ASC', 'DESC'], 'lengths' => [8, 16]]],
+                [Query::equal('status', ['active']), Query::orderDesc('name')],
+                ['name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // Several equality-filtered columns in front of the order column.
+            '(status, type, name, age DESC), all three pinned, age DESC reads forward' => [
+                [['attributes' => ['status', 'type', 'name', 'age'], 'orders' => ['ASC', 'ASC', 'ASC', 'DESC']]],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::equal('name', ['n']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, type, age DESC), filters in a different order than the index, still pinned' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('type', ['a']), Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), extra filters outside the index do not matter' => [
+                [$statusAgeDesc],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::greaterThan('name', 'm'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, type, age DESC), only the second column pinned, falls back' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('type', ['a']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, type, age DESC), status = ? and type range, falls back' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('status', ['active']), Query::greaterThan('type', 'a'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, type, age DESC), status = ? and type IN (a, b), falls back' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('status', ['active']), Query::equal('type', ['a', 'b']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // Columns after the order column must be pinned too: in (status, age DESC, type) _id follows type,
+            // which orders the rows unless type = ? holds it to one value.
+            '(status, age DESC, type), status = ?, type unpinned after the order column, falls back' => [
+                [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, age DESC, type), status = ? and type = ?, pinned after the order column, reads forward' => [
+                [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC, type), status = ? and type = ?, age ASC reads backward' => [
+                [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderAsc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Desc],
+            ],
+            '(status, age DESC, type), status = ? and type IS NULL, reads forward' => [
+                [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::isNull('type'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC, type, name), type pinned between two order columns, reads forward' => [
+                [['attributes' => ['status', 'age', 'type', 'name'], 'orders' => ['ASC', 'DESC', 'ASC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderDesc('age'), Query::orderAsc('name')],
+                ['age', 'name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc, OrderDirection::Asc],
+            ],
+            '(status, age DESC, type, name), type unpinned between two order columns, falls back' => [
+                [['attributes' => ['status', 'age', 'type', 'name'], 'orders' => ['ASC', 'DESC', 'ASC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('age'), Query::orderAsc('name')],
+                ['age', 'name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc, OrderDirection::Desc],
+            ],
+            '(age DESC, status), status = ? after the only order column, reads forward' => [
+                [['attributes' => ['age', 'status'], 'orders' => ['DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+
+            // A partly pinned index earlier in the list must not stop the search for a fully pinned one.
+            '(type, age) unpinned, then (status, age DESC) pinned, the pinned one decides' => [
+                [['attributes' => ['type', 'age'], 'orders' => ['ASC', 'ASC']], $statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, type, age) partly pinned, then (status, age DESC) pinned, the pinned one decides' => [
+                [['attributes' => ['status', 'type', 'age'], 'orders' => ['ASC', 'ASC', 'ASC']], $statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+
+            // Cursor pages must use the same tie break as the first page, or rows that tie on age are skipped or repeated.
+            '(status, age DESC), status = ?, age DESC, cursorAfter' => [
+                [$statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age'), Query::cursorAfter(new Document(['$id' => 'page', '$sequence' => 17, '$collection' => 'testCol', 'status' => 'active', 'age' => 30]))],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status = ?, age DESC, cursorBefore' => [
+                [$statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age'), Query::cursorBefore(new Document(['$id' => 'page', '$sequence' => 17, '$collection' => 'testCol', 'status' => 'active', 'age' => 30]))],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+
+            // Several order attributes: every direction must agree with the index, or every one must oppose it.
+            '(status, name DESC, age), status = ?, name DESC, age ASC reads forward' => [
+                [['attributes' => ['status', 'name', 'age'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('name'), Query::orderAsc('age')],
+                ['name', 'age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc, OrderDirection::Asc],
+            ],
+            '(status, name DESC, age), status = ?, name ASC, age DESC reads backward' => [
+                [['attributes' => ['status', 'name', 'age'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderAsc('name'), Query::orderDesc('age')],
+                ['name', 'age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, name DESC, age), status = ?, name DESC, age DESC mixes, falls back to leading direction' => [
+                [['attributes' => ['status', 'name', 'age'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('name'), Query::orderDesc('age')],
+                ['name', 'age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // Filters that do not pin the leading column to one value.
+            '(status, age DESC), status != ?, falls back to leading direction' => [
+                [$statusAgeDesc],
+                [Query::notEqual('status', 'archived'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            // IS NULL pins the column to a single value just like = ?; IS NOT NULL does not.
+            '(status, age DESC), status IS NULL, age DESC reads forward' => [
+                [$statusAgeDesc],
+                [Query::isNull('status'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status IS NULL, age ASC reads backward' => [
+                [$statusAgeDesc],
+                [Query::isNull('status'), Query::orderAsc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Desc],
+            ],
+            '(status, type, age DESC), status IS NULL and type = ?, reads forward' => [
+                [$statusTypeAgeDesc],
+                [Query::isNull('status'), Query::equal('type', ['a']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status IS NOT NULL, falls back to leading direction' => [
+                [$statusAgeDesc],
+                [Query::isNotNull('status'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            // An and() group pins its equalities like top-level filters, at any depth; an or() group pins nothing.
+            '(status, age DESC), status = ? nested in and(), reads forward' => [
+                [$statusAgeDesc],
+                [Query::and([Query::equal('status', ['active']), Query::greaterThan('age', 1)]), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, type, age DESC), equalities split across top level and nested and(and()), reads forward' => [
+                [$statusTypeAgeDesc],
+                [Query::equal('status', ['active']), Query::and([Query::greaterThan('age', 1), Query::and([Query::equal('type', ['a']), Query::lessThan('age', 99)])]), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status = ? inside or(), falls back' => [
+                [$statusAgeDesc],
+                [Query::or([Query::equal('status', ['active']), Query::greaterThan('age', 1)]), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, age DESC), and() inside or(), falls back' => [
+                [$statusAgeDesc],
+                [Query::or([Query::and([Query::equal('status', ['active']), Query::greaterThan('age', 1)]), Query::equal('status', ['archived'])]), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // Index types.
+            'unique (status, age DESC), status = ?, age DESC reads forward' => [
+                [['type' => 'unique'] + $statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            'fulltext (name) is ignored, name DESC falls back to leading direction' => [
+                [['type' => 'fulltext', 'attributes' => ['name'], 'orders' => []]],
+                [Query::orderDesc('name')],
+                ['name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+
+            // Two indexes that disagree: the first declared wins, and either one serves the order.
+            '(status, age) before (status, age DESC), first wins' => [
+                [$statusAgeAsc, $statusAgeDesc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Desc],
+            ],
+            '(status, age DESC) before (status, age), first wins' => [
+                [$statusAgeDesc, $statusAgeAsc],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<array{attributes: list<string>, orders: list<string>, lengths?: list<int>, type?: string}>  $indexes
+     * @param  list<Query>  $queries
+     * @param  list<string>  $expectedAttributes
+     * @param  list<OrderDirection>  $expectedTypes
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('compoundIndexTieBreakProvider')]
+    public function testCompoundIndexTieBreakDirection(array $indexes, array $queries, array $expectedAttributes, array $expectedTypes): void
+    {
+        $adapter = $this->mockAdapter();
+        $attribute = static fn (string $key, string $type, int $size): Document => new Document(['$id' => $key, 'key' => $key, 'type' => $type, 'size' => $size, 'required' => false, 'array' => false]);
+
+        $indexDocuments = [];
+        foreach ($indexes as $position => $index) {
+            $indexDocuments[] = new Document([
+                '$id' => 'index_'.$position,
+                'key' => 'index_'.$position,
+                'type' => $index['type'] ?? 'key',
+                'attributes' => $index['attributes'],
+                'lengths' => $index['lengths'] ?? [],
+                'orders' => $index['orders'],
+            ]);
+        }
+
+        $this->setupCollectionLookup('testCol', [
+            $attribute('status', 'string', 32),
+            $attribute('type', 'string', 32),
+            $attribute('name', 'string', 128),
+            $attribute('age', 'integer', 0),
+        ], $indexDocuments);
+
+        $sent = null;
+        $adapter->expects($this->once())->method('find')->willReturnCallback(function (...$arguments) use (&$sent): array {
+            $sent = [$arguments[4], $arguments[5]];
+
+            return [];
+        });
+
+        $this->database->find('testCol', $queries);
+
+        $this->assertSame([$expectedAttributes, $expectedTypes], $sent);
+    }
+
     public function testFindCursorValidationThrowsOnEmptyCursorAttribute(): void
     {
         $attributes = [

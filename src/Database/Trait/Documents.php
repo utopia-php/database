@@ -5144,22 +5144,6 @@ trait Documents
     }
 
     /**
-     * A vector index answers exactly one sort key, the distance: a tie break behind it makes the ordering unanswerable
-     * from the index, so tie breaks are only added when a cursor needs a stable page boundary.
-     *
-     * A joined `$id` behind the main `$sequence` costs MariaDB and MySQL a sort of the whole join instead of reading
-     * the main table in index order up to the limit, so it is added only where the rows show the join or a cursor
-     * pages them (see showsJoinedRows()).
-     *
-     * @param  array<string>  $orderAttributes
-     * @param  array<OrderDirection>  $orderTypes
-     * @param  array<Query>  $filters
-     * @param  array<Query>  $joins
-     * @param  array<string, Document>  $joinedCollections
-     * @param  array<Query>  $selects
-     * @return array{array<string>, array<OrderDirection>}
-     */
-    /**
      * The direction of the sequence tie break that lets an index serve the whole order.
      *
      * InnoDB ends every secondary index with the primary key in ascending order, so an index whose
@@ -5168,27 +5152,71 @@ trait Documents
      * and `(x DESC)` serves `x DESC, _id ASC`; any other pairing filesorts every row in range. With no
      * such index the tie break follows the leading direction, which is what an ascending index wants.
      *
+     * The index may also start with attributes that an equality filter pins to a single value:
+     * with `status = ?`, `(status, x DESC)` reads in `x DESC, _id ASC` order just like `(x DESC)`.
+     *
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
+     * @param  array<Query>  $filters
      */
-    private function tieBreakDirection(Collection $collection, array $orderAttributes, array $orderTypes): OrderDirection
+    private function tieBreakDirection(Collection $collection, array $orderAttributes, array $orderTypes, array $filters): OrderDirection
     {
         $leading = $orderTypes[0] ?? OrderDirection::Asc;
         if ($orderAttributes === []) {
             return $leading;
         }
 
+        $orderAttributes = \array_values($orderAttributes);
+        $orderTypes = \array_values($orderTypes);
+
+        // An `and()` group pins its equalities just like top-level filters; an `or()` group pins nothing.
+        $pinned = [];
+        $pending = \array_values($filters);
+        while ($pending !== []) {
+            $filter = \array_pop($pending);
+            if ($filter->getMethod() === Method::And) {
+                foreach ($filter->getValues() as $nested) {
+                    if ($nested instanceof Query) {
+                        $pending[] = $nested;
+                    }
+                }
+            } elseif ($filter->getMethod() === Method::Equal && \count($filter->getValues()) === 1) {
+                $pinned[$filter->getAttribute()] = true;
+            }
+        }
+
+        $sizes = [];
+        foreach ($collection->attributes() as $attribute) {
+            $sizes[$attribute->key] = $attribute->size;
+        }
+
         foreach ($collection->indexes() as $index) {
-            if (! \in_array($index->type, [IndexType::Key, IndexType::Unique], true)
-                || \count($index->attributes) !== \count($orderAttributes)) {
+            $prefix = \count($index->attributes) - \count($orderAttributes);
+            if (! \in_array($index->type, [IndexType::Key, IndexType::Unique], true) || $prefix < 0) {
                 continue;
+            }
+
+            // A prefix-length column (`name(64)`) holds only the start of each value, so MySQL cannot read the
+            // index in value order. A length that covers the whole column is a full-column index and still counts.
+            foreach ($index->attributes as $position => $attribute) {
+                $length = $index->lengths[$position] ?? 0;
+                $size = $sizes[$attribute] ?? null;
+                if ($length > 0 && ($size === null || $length < $size)) {
+                    continue 2;
+                }
+            }
+
+            for ($position = 0; $position < $prefix; $position++) {
+                if (! isset($pinned[$index->attributes[$position]])) {
+                    continue 2;
+                }
             }
 
             $forward = null;
             foreach ($orderAttributes as $position => $attribute) {
                 $requested = $orderTypes[$position] ?? OrderDirection::Asc;
-                $declared = $index->orders[$position] ?? OrderDirection::Asc;
-                if ($index->attributes[$position] !== $attribute
+                $declared = $index->orders[$prefix + $position] ?? OrderDirection::Asc;
+                if ($index->attributes[$prefix + $position] !== $attribute
                     || ! \in_array($requested, [OrderDirection::Asc, OrderDirection::Desc], true)) {
                     continue 2;
                 }
@@ -5206,6 +5234,22 @@ trait Documents
         return $leading;
     }
 
+    /**
+     * A vector index answers exactly one sort key, the distance: a tie break behind it makes the ordering unanswerable
+     * from the index, so tie breaks are only added when a cursor needs a stable page boundary.
+     *
+     * A joined `$id` behind the main `$sequence` costs MariaDB and MySQL a sort of the whole join instead of reading
+     * the main table in index order up to the limit, so it is added only where the rows show the join or a cursor
+     * pages them (see showsJoinedRows()).
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<Query>  $filters
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>  $joinedCollections
+     * @param  array<Query>  $selects
+     * @return array{array<string>, array<OrderDirection>}
+     */
     private function addTieBreaks(Collection $collection, array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged, array $selects): array
     {
         $uniqueOrderBy = \in_array(Document::ID, $orderAttributes, true) || \in_array(Document::SEQUENCE, $orderAttributes, true);
@@ -5223,7 +5267,7 @@ trait Documents
         }
 
         if (! $uniqueOrderBy) {
-            $orderTypes[] = $this->tieBreakDirection($collection, $orderAttributes, $orderTypes);
+            $orderTypes[] = $this->tieBreakDirection($collection, $orderAttributes, $orderTypes, $filters);
             $orderAttributes[] = Document::SEQUENCE;
         }
 

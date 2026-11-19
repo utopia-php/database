@@ -30,6 +30,7 @@ final class JoinMemory extends DatabaseMemory
         array $cursor = [],
         CursorDirection $cursorDirection = CursorDirection::After,
         PermissionType $forPermission = PermissionType::Read,
+        bool $forUpdate = false,
     ): array {
         if ($collection->getId() === 'parents') {
             $this->finds++;
@@ -55,6 +56,7 @@ final class JoinMemory extends DatabaseMemory
             $cursor,
             $cursorDirection,
             $forPermission,
+            $forUpdate,
         );
     }
 

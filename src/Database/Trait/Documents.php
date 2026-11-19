@@ -5196,10 +5196,12 @@ trait Documents
                 continue;
             }
 
-            // A prefix-length column (`name(64)`) holds only the start of each value, so MySQL cannot read the
-            // index in value order. A length that covers the whole column is a full-column index and still counts.
-            foreach ($index->attributes as $position => $attribute) {
-                $length = $index->lengths[$position] ?? 0;
+            // A prefix-length order column (`name(64)`) holds only the start of each value, so MySQL cannot read
+            // the index in value order. A length that covers the whole column is a full-column index and still
+            // counts. A prefix on an equality-pinned leading column is fine: every matching row shares that
+            // prefix, so the rest of the index still orders them (MySQL 8.4 skips the filesort for it).
+            foreach ($orderAttributes as $position => $attribute) {
+                $length = $index->lengths[$prefix + $position] ?? 0;
                 $size = $sizes[$attribute] ?? null;
                 if ($length > 0 && ($size === null || $length < $size)) {
                     continue 2;

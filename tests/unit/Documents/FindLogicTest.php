@@ -572,10 +572,17 @@ class FindLogicTest extends TestCase
                 ['name', '$sequence'],
                 [OrderDirection::Desc, OrderDirection::Asc],
             ],
-            '(status(8), age DESC) prefix on a pinned column, falls back to leading direction' => [
+            // Every row matching status = ? shares the indexed prefix, so the index still orders them by age.
+            '(status(8), age DESC) prefix on a pinned column, age DESC reads forward' => [
                 [['attributes' => ['status', 'age'], 'orders' => ['ASC', 'DESC'], 'lengths' => [8, 0]]],
                 [Query::equal('status', ['active']), Query::orderDesc('age')],
                 ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status(8), name(16) DESC) prefix on the order column, falls back to leading direction' => [
+                [['attributes' => ['status', 'name'], 'orders' => ['ASC', 'DESC'], 'lengths' => [8, 16]]],
+                [Query::equal('status', ['active']), Query::orderDesc('name')],
+                ['name', '$sequence'],
                 [OrderDirection::Desc, OrderDirection::Desc],
             ],
 

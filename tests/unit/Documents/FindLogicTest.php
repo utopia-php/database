@@ -693,9 +693,28 @@ class FindLogicTest extends TestCase
                 ['age', '$sequence'],
                 [OrderDirection::Desc, OrderDirection::Desc],
             ],
-            '(status, age DESC), status IS NULL, falls back to leading direction' => [
+            // IS NULL pins the column to a single value just like = ?; IS NOT NULL does not.
+            '(status, age DESC), status IS NULL, age DESC reads forward' => [
                 [$statusAgeDesc],
                 [Query::isNull('status'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status IS NULL, age ASC reads backward' => [
+                [$statusAgeDesc],
+                [Query::isNull('status'), Query::orderAsc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Desc],
+            ],
+            '(status, type, age DESC), status IS NULL and type = ?, reads forward' => [
+                [$statusTypeAgeDesc],
+                [Query::isNull('status'), Query::equal('type', ['a']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC), status IS NOT NULL, falls back to leading direction' => [
+                [$statusAgeDesc],
+                [Query::isNotNull('status'), Query::orderDesc('age')],
                 ['age', '$sequence'],
                 [OrderDirection::Desc, OrderDirection::Desc],
             ],

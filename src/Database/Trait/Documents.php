@@ -5169,7 +5169,8 @@ trait Documents
         $orderAttributes = \array_values($orderAttributes);
         $orderTypes = \array_values($orderTypes);
 
-        // An `and()` group pins its equalities just like top-level filters; an `or()` group pins nothing.
+        // `= ?` with one value and `IS NULL` each pin a column to a single value, so the index rows that match
+        // are ordered by the columns after it. An `and()` group pins like top-level filters; an `or()` pins nothing.
         $pinned = [];
         $pending = \array_values($filters);
         while ($pending !== []) {
@@ -5180,7 +5181,8 @@ trait Documents
                         $pending[] = $nested;
                     }
                 }
-            } elseif ($filter->getMethod() === Method::Equal && \count($filter->getValues()) === 1) {
+            } elseif ($filter->getMethod() === Method::IsNull
+                || ($filter->getMethod() === Method::Equal && \count($filter->getValues()) === 1)) {
                 $pinned[$filter->getAttribute()] = true;
             }
         }

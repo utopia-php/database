@@ -624,18 +624,49 @@ class FindLogicTest extends TestCase
                 [OrderDirection::Desc, OrderDirection::Desc],
             ],
 
-            // The order column must be the index's last column: in (status, age DESC, type) _id follows type, not age.
-            '(status, age DESC, type), status = ?, age DESC, order column not last, falls back' => [
+            // Columns after the order column must be pinned too: in (status, age DESC, type) _id follows type,
+            // which orders the rows unless type = ? holds it to one value.
+            '(status, age DESC, type), status = ?, type unpinned after the order column, falls back' => [
                 [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
                 [Query::equal('status', ['active']), Query::orderDesc('age')],
                 ['age', '$sequence'],
                 [OrderDirection::Desc, OrderDirection::Desc],
             ],
-            '(status, age DESC, type), status = ? and type = ?, order column not last, falls back' => [
+            '(status, age DESC, type), status = ? and type = ?, pinned after the order column, reads forward' => [
                 [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
                 [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderDesc('age')],
                 ['age', '$sequence'],
-                [OrderDirection::Desc, OrderDirection::Desc],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC, type), status = ? and type = ?, age ASC reads backward' => [
+                [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderAsc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Asc, OrderDirection::Desc],
+            ],
+            '(status, age DESC, type), status = ? and type IS NULL, reads forward' => [
+                [['attributes' => ['status', 'age', 'type'], 'orders' => ['ASC', 'DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::isNull('type'), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
+            ],
+            '(status, age DESC, type, name), type pinned between two order columns, reads forward' => [
+                [['attributes' => ['status', 'age', 'type', 'name'], 'orders' => ['ASC', 'DESC', 'ASC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::equal('type', ['a']), Query::orderDesc('age'), Query::orderAsc('name')],
+                ['age', 'name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc, OrderDirection::Asc],
+            ],
+            '(status, age DESC, type, name), type unpinned between two order columns, falls back' => [
+                [['attributes' => ['status', 'age', 'type', 'name'], 'orders' => ['ASC', 'DESC', 'ASC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('age'), Query::orderAsc('name')],
+                ['age', 'name', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc, OrderDirection::Desc],
+            ],
+            '(age DESC, status), status = ? after the only order column, reads forward' => [
+                [['attributes' => ['age', 'status'], 'orders' => ['DESC', 'ASC']]],
+                [Query::equal('status', ['active']), Query::orderDesc('age')],
+                ['age', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc],
             ],
 
             // A partly pinned index earlier in the list must not stop the search for a fully pinned one.

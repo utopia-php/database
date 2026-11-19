@@ -5152,8 +5152,9 @@ trait Documents
      * and `(x DESC)` serves `x DESC, _id ASC`; any other pairing filesorts every row in range. With no
      * such index the tie break follows the leading direction, which is what an ascending index wants.
      *
-     * The index may also start with attributes that an equality filter pins to a single value:
-     * with `status = ?`, `(status, x DESC)` reads in `x DESC, _id ASC` order just like `(x DESC)`.
+     * The index may also hold attributes that a filter pins to a single value, before, between or after
+     * the order attributes: with `status = ?` and `type = ?`, `(status, x DESC, type)` reads in
+     * `x DESC, _id ASC` order just like `(x DESC)`.
      *
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
@@ -5193,43 +5194,48 @@ trait Documents
         }
 
         foreach ($collection->indexes() as $index) {
-            $prefix = \count($index->attributes) - \count($orderAttributes);
-            if (! \in_array($index->type, [IndexType::Key, IndexType::Unique], true) || $prefix < 0) {
+            if (! \in_array($index->type, [IndexType::Key, IndexType::Unique], true)) {
                 continue;
             }
 
-            // A prefix-length order column (`name(64)`) holds only the start of each value, so MySQL cannot read
-            // the index in value order. A length that covers the whole column is a full-column index and still
-            // counts. A prefix on an equality-pinned leading column is fine: every matching row shares that
-            // prefix, so the rest of the index still orders them (MySQL 8.4 skips the filesort for it).
-            foreach ($orderAttributes as $position => $attribute) {
-                $length = $index->lengths[$prefix + $position] ?? 0;
-                $size = $sizes[$attribute] ?? null;
-                if ($length > 0 && ($size === null || $length < $size)) {
-                    continue 2;
-                }
-            }
-
-            for ($position = 0; $position < $prefix; $position++) {
-                if (! isset($pinned[$index->attributes[$position]])) {
-                    continue 2;
-                }
-            }
-
+            // Pinned columns may sit before, between or after the order columns: every matching row holds the
+            // same value there, so they do not change the order. With them skipped, the index must be exactly
+            // the order columns, in order, so the primary key that InnoDB appends comes right after the last.
             $forward = null;
-            foreach ($orderAttributes as $position => $attribute) {
-                $requested = $orderTypes[$position] ?? OrderDirection::Asc;
-                $declared = $index->orders[$prefix + $position] ?? OrderDirection::Asc;
-                if ($index->attributes[$prefix + $position] !== $attribute
-                    || ! \in_array($requested, [OrderDirection::Asc, OrderDirection::Desc], true)) {
-                    continue 2;
+            $matched = 0;
+            foreach ($index->attributes as $position => $attribute) {
+                if ($matched < \count($orderAttributes) && $attribute === $orderAttributes[$matched]) {
+                    $requested = $orderTypes[$matched] ?? OrderDirection::Asc;
+                    if (! \in_array($requested, [OrderDirection::Asc, OrderDirection::Desc], true)) {
+                        continue 2;
+                    }
+
+                    // A prefix-length order column (`name(64)`) holds only the start of each value, so MySQL
+                    // cannot read the index in value order. A length that covers the whole column is a full-column
+                    // index and still counts. A prefix on a pinned column is fine: every matching row shares it.
+                    $length = $index->lengths[$position] ?? 0;
+                    $size = $sizes[$attribute] ?? null;
+                    if ($length > 0 && ($size === null || $length < $size)) {
+                        continue 2;
+                    }
+
+                    $same = $requested === ($index->orders[$position] ?? OrderDirection::Asc);
+                    if ($forward !== null && $forward !== $same) {
+                        continue 2;
+                    }
+                    $forward = $same;
+                    $matched++;
+
+                    continue;
                 }
 
-                $same = $requested === $declared;
-                if ($forward !== null && $forward !== $same) {
+                if (! isset($pinned[$attribute])) {
                     continue 2;
                 }
-                $forward = $same;
+            }
+
+            if ($matched !== \count($orderAttributes)) {
+                continue;
             }
 
             return $forward ? OrderDirection::Asc : OrderDirection::Desc;

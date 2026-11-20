@@ -99,6 +99,16 @@ class SQLite extends SQL
      */
     private const int REGEXP_PATTERN_CACHE_LIMIT = 256;
 
+    private const int SQLITE_ERROR = 1;
+
+    private const int SQLITE_BUSY = 5;
+
+    private const int SQLITE_SCHEMA = 17;
+
+    private const int SQLITE_TOOBIG = 18;
+
+    private const int SQLITE_CONSTRAINT = 19;
+
     private const array MISSING_AGGREGATES = [
         Method::Stddev,
         Method::StddevPop,
@@ -1708,37 +1718,33 @@ class SQLite extends SQL
     #[\Override]
     protected function processException(PDOException $e): Exception
     {
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'already exists') !== false) {
+        if ($e->getCode() === 'HY000' && \in_array($e->errorInfo[1] ?? null, [self::SQLITE_ERROR, self::SQLITE_SCHEMA], true) && stripos($e->getMessage(), 'already exists') !== false) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);
         }
 
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such table') !== false) {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_ERROR && stripos($e->getMessage(), 'no such table') !== false) {
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such column') !== false) {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_ERROR && stripos($e->getMessage(), 'no such column') !== false) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'duplicate column name') !== false) {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_ERROR && stripos($e->getMessage(), 'duplicate column name') !== false) {
             return new DuplicateException('Attribute already exists', $e->getCode(), $e);
         }
 
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'integer overflow') !== false) {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_ERROR && stripos($e->getMessage(), 'integer overflow') !== false) {
             return new LimitException('Value out of range', $e->getCode(), $e);
         }
 
-        // Duplicate - SQLite uses various error codes for constraint violations:
-        // - Error code 19 is SQLITE_CONSTRAINT (includes UNIQUE violations)
-        // - Error code 1 is also used for some duplicate cases
-        // - SQL state '23000' is integrity constraint violation
         if (
-            ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1 || $e->errorInfo[1] === 19)) ||
+            ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === self::SQLITE_ERROR || $e->errorInfo[1] === self::SQLITE_CONSTRAINT)) ||
             $e->getCode() === '23000'
         ) {
             $message = $e->getMessage();
             if (
-                (isset($e->errorInfo[1]) && $e->errorInfo[1] === 19) ||
+                (isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_CONSTRAINT) ||
                 $e->getCode() === '23000' ||
                 stripos($message, 'unique') !== false ||
                 stripos($message, 'duplicate') !== false
@@ -1752,11 +1758,11 @@ class SQLite extends SQL
             }
         }
 
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 18) {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_TOOBIG) {
             return new LimitException('Value too large', $e->getCode(), $e);
         }
 
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 5) {
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === self::SQLITE_BUSY) {
             return new ContentionException('Database is locked', $e->getCode(), $e);
         }
 

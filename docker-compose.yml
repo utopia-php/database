@@ -115,7 +115,7 @@ services:
       retries: 3
 
   mongo:
-    image: mongo:8.0.14
+    image: mongo:8.3.17
     container_name: utopia-mongo
     profiles: [mongo]
     entrypoint: ["/entrypoint.sh"]
@@ -164,7 +164,7 @@ services:
       ME_CONFIG_BASICAUTH_PASSWORD: admin
 
   mysql:
-    image: mysql:8.0.43
+    image: mysql:8.4.13
     container_name: utopia-mysql
     profiles: [mysql]
     networks:
@@ -187,7 +187,7 @@ services:
       start_period: 30s
 
   mysql-mirror:
-    image: mysql:8.0.43
+    image: mysql:8.4.13
     container_name: utopia-mysql-mirror
     profiles: [mysql-mirror]
     networks:
@@ -210,7 +210,7 @@ services:
       start_period: 30s
 
   redis:
-    image: redis:8.2.1-alpine3.22
+    image: redis:8.4.8-alpine3.22
     container_name: utopia-redis
     restart: always
     ports:
@@ -225,7 +225,7 @@ services:
       start_period: 5s
 
   redis-mirror:
-    image: redis:8.2.1-alpine3.22
+    image: redis:8.4.8-alpine3.22
     container_name: utopia-redis-mirror
     profiles: [redis-mirror]
     restart: always

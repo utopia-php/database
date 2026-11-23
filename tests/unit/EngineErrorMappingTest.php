@@ -221,6 +221,39 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertMapped($map, $error, IndexException::class, 'Index key length exceeds the maximum');
     }
 
+    /**
+     * @return iterable<string, array{0: Closure(PDOException): Throwable, 1: PDOException, 2: string}>
+     */
+    public static function schemaLimitProvider(): iterable
+    {
+        $errors = [
+            'row size too large' => [self::engineError('42000', 1118, 'SQLSTATE[42000]: Syntax error or access violation: 1118 Row size too large. The maximum row size for the used table type, not counting BLOBs, is 8126. This includes storage overhead, check the manual. You have to change some columns to TEXT or BLOBs'), 'Row width limit reached'],
+            'too many columns' => [self::engineError('HY000', 1117, 'SQLSTATE[HY000]: General error: 1117 Too many columns'), 'Column limit reached'],
+            'too many keys' => [self::engineError('42000', 1069, 'SQLSTATE[42000]: Syntax error or access violation: 1069 Too many keys specified; max 64 keys allowed'), 'Index limit reached'],
+            'too many key parts' => [self::engineError('42000', 1070, 'SQLSTATE[42000]: Syntax error or access violation: 1070 Too many key parts specified; max 16 parts allowed'), 'Index attribute limit reached'],
+            'column length too big' => [self::engineError('42000', 1074, "SQLSTATE[42000]: Syntax error or access violation: 1074 Column length too big for column 'notes' (max = 16383); use BLOB or TEXT instead"), 'Attribute size limit reached'],
+        ];
+        foreach (self::mariaDBFamilyProvider() as $engine => [$map]) {
+            foreach ($errors as $name => [$error, $message]) {
+                yield "{$engine} {$name}" => [$map, $error, $message];
+            }
+        }
+        yield 'Postgres too many columns' => [
+            self::postgres(),
+            self::engineError('54011', 7, 'SQLSTATE[54011]: Too many columns: 7 ERROR:  tables can have at most 1600 columns'),
+            'Column limit reached',
+        ];
+    }
+
+    /**
+     * @param  Closure(PDOException): Throwable  $map
+     */
+    #[DataProvider('schemaLimitProvider')]
+    public function testTableDefinitionPastAnEngineLimitIsALimit(Closure $map, PDOException $error, string $message): void
+    {
+        $this->assertMapped($map, $error, LimitException::class, $message);
+    }
+
     public function testPostgresIndexRowTooLargeIsALimit(): void
     {
         $error = self::engineError('54000', 7, 'SQLSTATE[54000]: Program limit exceeded: 7 ERROR:  index row size 8016 exceeds btree version 4 maximum 2704 for index "engine_orders_by_note"');
@@ -230,7 +263,7 @@ final class EngineErrorMappingTest extends TestCase
 
     public function testPostgresProgramLimitOtherThanAnIndexRowStaysRaw(): void
     {
-        $error = self::engineError('54000', 7, 'SQLSTATE[54000]: Program limit exceeded: 7 ERROR:  tables can have at most 1600 columns');
+        $error = self::engineError('54000', 7, 'SQLSTATE[54000]: Program limit exceeded: 7 ERROR:  row is too big: size 8168, maximum size 8160');
 
         $this->assertSame($error, self::postgres()($error));
     }

@@ -1055,6 +1055,19 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
      */
     protected const array INVALID_REGEX_ERRORS = [1139];
 
+    /**
+     * ER_TOO_MANY_KEYS, ER_TOO_MANY_KEY_PARTS, ER_TOO_BIG_FIELDLENGTH, ER_TOO_MANY_FIELDS and ER_TOO_BIG_ROWSIZE: a
+     * table definition the engine refuses for exceeding one of its own limits. InnoDB's row size ceiling (8126
+     * bytes inline) sits below the 65535 bytes the width check counts against, so these reach the engine.
+     */
+    private const array SCHEMA_LIMIT_ERRORS = [
+        1069 => 'Index limit reached',
+        1070 => 'Index attribute limit reached',
+        1074 => 'Attribute size limit reached',
+        1117 => 'Column limit reached',
+        1118 => 'Row width limit reached',
+    ];
+
     /** The session timeout last set, in milliseconds. */
     private int $appliedTimeout = 0;
 
@@ -1588,6 +1601,11 @@ class MariaDB extends SQL implements Feature\Spatial, Feature\Timeouts
 
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1061) {
             return new DuplicateException('Index already exists', $e->getCode(), $e);
+        }
+
+        $limit = \is_int($e->errorInfo[1] ?? null) ? self::SCHEMA_LIMIT_ERRORS[$e->errorInfo[1]] ?? null : null;
+        if ($limit !== null) {
+            return new LimitException($limit, $e->getCode(), $e);
         }
 
         if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1071) {

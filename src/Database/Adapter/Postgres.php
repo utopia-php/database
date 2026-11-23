@@ -2014,6 +2014,10 @@ class Postgres extends SQL implements Feature\Spatial, Feature\Timeouts
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '54011' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Column limit reached', $e->getCode(), $e);
+        }
+
         if ($e->getCode() === '54000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7 && \str_contains($e->getMessage(), 'index row')) {
             return new LimitException('Index row size exceeds the maximum', $e->getCode(), $e);
         }

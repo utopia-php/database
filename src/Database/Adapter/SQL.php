@@ -2622,7 +2622,19 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
     #[\Override]
     public function getCountOfAttributes(Document $collection): int
     {
-        return \count(self::collectionAttributes($collection)) + $this->limits()->defaultAttributes;
+        return \count(self::collectionColumns($collection)) + $this->limits()->defaultAttributes;
+    }
+
+    /**
+     * @return list<Attribute>
+     */
+    private static function collectionColumns(Document $collection): array
+    {
+        return \array_values(\array_filter(
+            self::collectionAttributes($collection),
+            static fn (Attribute $attribute): bool => $attribute->relationship === null
+                || $attribute->relationship->hasColumn($attribute->side ?? RelationshipSide::Parent),
+        ));
     }
 
     #[\Override]
@@ -2653,7 +2665,7 @@ abstract class SQL extends Adapter implements Feature\Connection, Feature\RawQue
          */
         $total = 1067;
 
-        foreach (self::collectionAttributes($collection) as $attribute) {
+        foreach (self::collectionColumns($collection) as $attribute) {
             $attributeSize = $attribute->size ?? 0;
 
             /**

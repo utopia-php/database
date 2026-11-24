@@ -89,6 +89,16 @@ final readonly class Relationship
         return new self($collection, $this->type, $this->twoWay, $this->twoWayKey, $this->key, $this->onDelete);
     }
 
+    public function hasColumn(RelationshipSide $side): bool
+    {
+        return match ($this->type) {
+            RelationshipType::OneToOne => $side === RelationshipSide::Parent || $this->twoWay,
+            RelationshipType::OneToMany => $side === RelationshipSide::Child,
+            RelationshipType::ManyToOne => $side === RelationshipSide::Parent,
+            RelationshipType::ManyToMany => false,
+        };
+    }
+
     /**
      * @throws RelationshipException
      */

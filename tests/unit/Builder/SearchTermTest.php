@@ -52,7 +52,6 @@ final class SearchTermTest extends TestCase
             'underscore stays inside a word' => ['foo_bar', 'foo_bar*'],
             'mixed separators and spaces' => ['baz, foo/bar;  qux', 'baz foo bar qux*'],
             'non-operator punctuation is dropped' => ['!!!foo...###', 'foo*'],
-            'exact phrase keeps its quotes' => ['"foo/bar baz"', '"foo bar baz"'],
         ];
     }
 
@@ -89,6 +88,20 @@ final class SearchTermTest extends TestCase
     {
         $this->assertSame([$bound], $this->bindings(new MariaDB(), Query::search('title', $term)));
         $this->assertSame([$bound], $this->bindings(new MariaDB(), Query::notSearch('title', $term)));
+    }
+
+    /**
+     * utopia-php/query 0.8 no longer hands MySQL a quoted phrase, which InnoDB can only match with
+     * phrase positions in the index. It requires every word and checks their order with a pattern.
+     */
+    public function testMySQLAndMariaDBMatchAnExactPhraseByItsWordsInOrder(): void
+    {
+        $bound = ['+foo +bar +baz', '(^|[^[:alnum:]_])foo[^[:alnum:]_]+bar[^[:alnum:]_]+baz([^[:alnum:]_]|$)'];
+
+        foreach ([new MySQL(), new MariaDB()] as $builder) {
+            $this->assertSame($bound, $this->bindings($builder, Query::search('title', '"foo/bar baz"')), $builder::class);
+            $this->assertSame($bound, $this->bindings($builder, Query::notSearch('title', '"foo/bar baz"')), $builder::class);
+        }
     }
 
     #[DataProvider('termsWithoutWords')]

@@ -5,6 +5,7 @@ namespace Tests\Unit\Validator;
 use Closure;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Support\Profiles;
 use Utopia\Cache\Adapter\None as NoCache;
@@ -191,6 +192,7 @@ final class QueryValidationTest extends TestCase
         $this->assertInvalidQuery($message, fn (): mixed => $this->database->getDocument('owners', 'ann', $queries), 'getDocument()');
     }
 
+    #[IgnoreDeprecations]
     public function testAJoinOnListRunsItsPlainFilters(): void
     {
         foreach ([

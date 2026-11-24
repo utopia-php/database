@@ -116,6 +116,15 @@ RUN EXT_DIR=$(php-config --extension-dir) \
 RUN echo extension=redis.so >> /usr/local/etc/php/conf.d/redis.ini
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 RUN echo extension=pcov.so >> /usr/local/etc/php/conf.d/pcov.ini
+
+# The utopia extension: the Rust implementation of utopia-php/query that Appwrite runs. Installed
+# but not loaded. The extension lane in .github/workflows/tests.yml loads it by adding
+# /usr/local/etc/php/utopia to PHP_INI_SCAN_DIR. utopia.libraries limits it to the query classes;
+# without it the extension would also replace utopia-php/validators.
+COPY --from=appwrite/utopia-extension:main@sha256:75394352dcfdd67e5665e0ad732fb6619f2bde3d968a24b6da96b2492bfb56b0 /utopia.so /usr/local/lib/php/utopia.so
+RUN apk add --no-cache libheif libstdc++ \
+  && mkdir /usr/local/etc/php/utopia \
+  && printf 'extension=/usr/local/lib/php/utopia.so\nutopia.libraries=query\n' > /usr/local/etc/php/utopia/utopia.ini
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini

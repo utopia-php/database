@@ -3,6 +3,7 @@
 namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -91,6 +92,7 @@ final class FilterMalformedValuesTest extends TestCase
         $this->assertSame('Vector queries can only be used on vector attributes', $validator->getDescription());
     }
 
+    #[IgnoreDeprecations]
     public function testListValuesAreStillValid(): void
     {
         $validator = $this->validator();

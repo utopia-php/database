@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use Closure;
 use MongoDB\BSON\Regex;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use stdClass;
@@ -22,6 +23,7 @@ final class MongoContainsFilterTest extends TestCase
      */
     private array $filters = [];
 
+    #[IgnoreDeprecations]
     public function testContainsOnAnArrayMatchesAnyValue(): void
     {
         $contains = Query::contains('genres', ['comics', 'kids']);
@@ -55,6 +57,7 @@ final class MongoContainsFilterTest extends TestCase
     }
 
     #[RequiresPhpExtension('mongodb')]
+    #[IgnoreDeprecations]
     public function testContainsOnAStringMatchesAnyOfSeveralSubstrings(): void
     {
         foreach ([Query::contains('name', ['Captain', 'Work']), Query::containsAny('name', ['Captain', 'Work'])] as $query) {

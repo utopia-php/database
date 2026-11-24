@@ -40,9 +40,18 @@ jobs:
           path: /tmp/${{ env.IMAGE }}.tar
 
   unit_test:
-    name: Unit Test
+    name: "Unit Test${{ matrix.query }}"
     runs-on: ubuntu-latest
     needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - query: ""
+            env: ""
+          # utopia-php/query from the utopia extension, as Appwrite runs it.
+          - query: " (query extension)"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
 
     steps:
       - name: checkout
@@ -61,10 +70,10 @@ jobs:
           docker compose up -d --wait
 
       - name: Run Unit Tests
-        run: docker compose exec -e XDEBUG_MODE=off tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/unit
+        run: docker compose exec -e XDEBUG_MODE=off ${{ matrix.env }} tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/unit
 
   adapter_test:
-    name: "Adapter Tests (${{ matrix.adapter }})"
+    name: "Adapter Tests (${{ matrix.adapter }}${{ matrix.query }})"
     runs-on: ubuntu-latest
     needs: setup
     strategy:
@@ -103,6 +112,40 @@ jobs:
             profiles: ""
           - adapter: Schemaless/MongoDB
             profiles: "--profile mongo"
+          # The SQL adapters again with utopia-php/query from the utopia extension, as Appwrite
+          # runs it. The other adapters build no SQL.
+          - adapter: MariaDB
+            profiles: "--profile mariadb"
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: MySQL
+            profiles: "--profile mysql"
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: Postgres
+            profiles: "--profile postgres"
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: SQLite
+            profiles: ""
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: SharedTables/MariaDB
+            profiles: "--profile mariadb"
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: SharedTables/MySQL
+            profiles: "--profile mysql"
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: SharedTables/Postgres
+            profiles: "--profile postgres"
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
+          - adapter: SharedTables/SQLite
+            profiles: ""
+            query: ", query extension"
+            env: "-e PHP_INI_SCAN_DIR=:/usr/local/etc/php/utopia"
 
     steps:
       - name: checkout
@@ -121,4 +164,4 @@ jobs:
           docker compose ${{ matrix.profiles }} up -d --wait
 
       - name: Run Tests
-        run: docker compose exec -T -e XDEBUG_MODE=off tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php
+        run: docker compose exec -T -e XDEBUG_MODE=off ${{ matrix.env }} tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php

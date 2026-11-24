@@ -4,6 +4,7 @@ namespace Tests\Unit\Adapter;
 
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -52,6 +53,7 @@ final class SQLArrayWritesTest extends TestCase
         ));
     }
 
+    #[IgnoreDeprecations]
     public function testCreatedDocumentsKeepTheirArrays(): void
     {
         $this->database->createDocuments('items', [

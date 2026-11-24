@@ -50,7 +50,10 @@ class SQLite extends Base implements Filtering, Scoping
     #[\Override]
     protected function compileLike(string $attribute, array $values, string $prefix, string $suffix, bool $not, ?string $column = null): string
     {
-        return parent::compileLike($attribute, $values, $prefix, $suffix, $not, $column).self::ESCAPE;
+        $like = parent::compileLike($attribute, $values, $prefix, $suffix, $not, $column);
+
+        // utopia-php/query is about to declare this clause itself, and SQLite refuses it twice.
+        return \str_ends_with($like, self::ESCAPE) ? $like : $like.self::ESCAPE;
     }
 
     /**

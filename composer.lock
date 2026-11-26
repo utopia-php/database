@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "121989fd6e347225ad343753e56ee860",
+    "content-hash": "b171b6109cafaeb5236b1c7ad07960a6",
     "packages": [
         {
             "name": "brick/math",
@@ -3066,7 +3066,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-04-29T13:31:09+00:00"
+            "time": "2026-04-29T13:31:09+00:00",
+            "published-time": "2026-04-29T13:31:23+00:00"
         },
         {
             "name": "phpstan/phpstan-phpunit",

@@ -87,6 +87,7 @@ final class ObservedMemory extends DatabaseMemory
         array $cursor = [],
         CursorDirection $cursorDirection = CursorDirection::After,
         PermissionType $forPermission = PermissionType::Read,
+        bool $forUpdate = false,
     ): array {
         if ($collection->getId() === $this->findCollection) {
             $this->finds++;
@@ -102,6 +103,7 @@ final class ObservedMemory extends DatabaseMemory
             $cursor,
             $cursorDirection,
             $forPermission,
+            $forUpdate,
         );
     }
 }

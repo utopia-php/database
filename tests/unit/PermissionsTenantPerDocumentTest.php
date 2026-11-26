@@ -74,18 +74,18 @@ final class PermissionsTenantPerDocumentTest extends TestCase
             }
 
             #[\Override]
-            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
             {
                 $tenants = ($this->spannedTenants)();
                 if ($tenants === [] || $collection->getId() === Database::METADATA) {
-                    return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+                    return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission, $forUpdate);
                 }
 
                 $documents = [];
                 foreach ($tenants as $tenant) {
                     \array_push($documents, ...$this->withTenant(
                         $tenant,
-                        fn (): array => parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission),
+                        fn (): array => parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission, $forUpdate),
                     ));
                 }
 

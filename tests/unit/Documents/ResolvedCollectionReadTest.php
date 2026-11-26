@@ -241,7 +241,7 @@ final class ResolvedCollectionReadTest extends TestCase
             public array $pages = [];
 
             #[\Override]
-            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read, bool $forUpdate = false): array
             {
                 if ($collection->getId() === self::PAGED && $forPermission !== PermissionType::Read) {
                     $this->pages[] = \array_map(
@@ -250,7 +250,7 @@ final class ResolvedCollectionReadTest extends TestCase
                     );
                 }
 
-                return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+                return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission, $forUpdate);
             }
         };
         [$database, , , $cache] = $this->createDatabase($adapter);

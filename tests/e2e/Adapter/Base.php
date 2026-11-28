@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\E2E\Adapter\Scopes\AggregationTests;
 use Tests\E2E\Adapter\Scopes\AttributeTests;
 use Tests\E2E\Adapter\Scopes\CollectionTests;
+use Tests\E2E\Adapter\Scopes\ColumnPermissionTests;
 use Tests\E2E\Adapter\Scopes\CursorTests;
 use Tests\E2E\Adapter\Scopes\CustomDocumentTypeTests;
 use Tests\E2E\Adapter\Scopes\DatabaseTests;
@@ -53,6 +54,7 @@ abstract class Base extends TestCase
     use AttributeTests;
     use CollectionTests;
     use CursorTests;
+    use ColumnPermissionTests;
     use CustomDocumentTypeTests;
     use DatabaseTests;
     use DocumentTests;

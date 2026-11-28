@@ -23,6 +23,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Contention as ContentionException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -378,6 +379,20 @@ final class EngineErrorMappingTest extends TestCase
     public function testSQLiteDoesNotTreatTheMySQLTimeoutCodeAsATimeout(): void
     {
         $error = self::engineError('HY000', 3024, 'SQLSTATE[HY000]: General error: 3024 Query execution was interrupted');
+
+        $this->assertSame($error, self::sqlite()($error));
+    }
+
+    public function testSQLiteCreateRacedIntoASchemaChangeIsADuplicateCollection(): void
+    {
+        $error = self::engineError('HY000', 17, 'SQLSTATE[HY000]: General error: 17 table `shared_changelog_tombstones` already exists');
+
+        $this->assertMapped(self::sqlite(), $error, DuplicateException::class, 'Collection already exists');
+    }
+
+    public function testSQLiteSchemaChangeWithoutAnExistingTableStaysRaw(): void
+    {
+        $error = self::engineError('HY000', 17, 'SQLSTATE[HY000]: General error: 17 database schema has changed');
 
         $this->assertSame($error, self::sqlite()($error));
     }
